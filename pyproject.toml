@@ -1,0 +1,27 @@
+[project]
+name = "comfyui-visual-suite"
+version = "1.0.0"
+description = "Six visual nodes for ComfyUI: prompt composer, series lab, filename manager, latent size picker, node bag and image crop."
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+dependencies = []
+keywords = [
+    "prompt",
+    "filename",
+    "crop",
+    "latent",
+    "resolution",
+    "lora",
+    "workflow",
+    "ui",
+    "editorial",
+]
+
+[project.urls]
+Repository = "https://github.com/StudioLeiel/comfyui-visual-suite"
+"Bug Tracker" = "https://github.com/StudioLeiel/comfyui-visual-suite/issues"
+
+[tool.comfy]
+PublisherId = "studioleiel"
+DisplayName = "Visual Suite (Studio Leiel)"
+Icon = ""
