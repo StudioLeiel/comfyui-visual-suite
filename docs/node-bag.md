@@ -21,7 +21,7 @@ This is the other option: put them away where they are. The nodes stay exactly
 where they were in the graph — same links, same ids, same execution — and stop
 taking up the room.
 
-![It never touches the graph](images/node-bag/06-nothing-changed.png)
+![It never touches the graph](images/node-bag/02-overview.png)
 
 That last point is the whole design. A bag holds a list of node ids, sets their
 collapsed flag, and lays them out inside its own rectangle. It does not group,
@@ -65,7 +65,7 @@ Each shelf has a caret that folds it down to just its title, a dot that cycles
 its colour, `UNPACK` to take out only that row, and a cross to remove it. A
 folded shelf's nodes stay in the graph untouched; they are simply not painted.
 
-![A bag with shelves](images/node-bag/02-overview.png)
+![A bag with shelves](images/node-bag/06-nothing-changed.png)
 
 `SORT` reorders the chips on each shelf by following the wiring between them, so
 a node lands next to the one that feeds it. `UNPACK ALL` empties the bag below
