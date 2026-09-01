@@ -24,4 +24,4 @@ Repository = "https://github.com/StudioLeiel/comfyui-visual-suite"
 [tool.comfy]
 PublisherId = "studioleiel"
 DisplayName = "Visual Suite (Studio Leiel)"
-Icon = ""
+Icon = "https://raw.githubusercontent.com/StudioLeiel/comfyui-visual-suite/main/docs/images/icon.png"
