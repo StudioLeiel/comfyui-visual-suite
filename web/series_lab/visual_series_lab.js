@@ -200,6 +200,12 @@ const CSS = `
 .vsl-btn.wide{flex:1 1 0;min-width:0;padding:3px 6px;font-size:11px;
   letter-spacing:1px;font-weight:600;}
 .vsl-btn.wide.big{flex:2 1 0;font-size:12px;font-weight:700;letter-spacing:2px;}
+/* the mark and the word sit on one line, the mark holding its size while the
+   word takes whatever room is left */
+.vsl-btn.wide.run{display:flex;align-items:center;justify-content:center;gap:6px;}
+.vsl-btn.wide.run svg{display:block;flex:0 0 auto;fill:currentColor;}
+.vsl-btn.wide.run span{min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;}
 .vsl-btn.wide.run.paused{background:#6a5a2d;border-color:#d4b26f;color:#fff;}
 /* the two actions read differently at a glance: one starts a run, the other
    only adds to the list */
@@ -341,7 +347,11 @@ const CSS = `
   display:flex;align-items:center;gap:8px;padding:2px 2px 0;}
 .vsl-sub .hint{font-weight:400;letter-spacing:0;opacity:.75;font-size:9px;}
 .vsl-sub.box{color:#e0763f;opacity:.95;}
-.vsl-list.bench{flex:1 1 auto;min-height:44px;}
+/* Same spacing as the queue box below. The bench was on the base gap of 3px
+   while the box had been given 8, so two lists of the same rows, read one
+   after the other, breathed differently - and the bench is the longer of the
+   two and the one being dragged around. */
+.vsl-list.bench{flex:1 1 auto;min-height:44px;gap:8px;}
 /* the box the renders happen in: thicker, warmer, and lit from inside */
 /* Burnt orange, not the yellow the recipes wear: the box has to read as a
    different kind of thing from the bundles sitting inside it, and warmer
@@ -1074,6 +1084,16 @@ app.registerExtension({
       const elTrig = $(".trig"), elTPos = $(".tpos");
       const elTHint = $(".trighint");
       const elRunAll = $(".runall");
+      /* A triangle to start, two bars to hold - the same pair ComfyUI uses on
+         its own queue button, so the gesture is already known. currentColor
+         so they follow the button through its running and paused states. */
+      const ICON_PLAY =
+        '<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">' +
+        '<path d="M3 1.6 L10 6 L3 10.4 Z"/></svg>';
+      const ICON_PAUSE =
+        '<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">' +
+        '<rect x="2.5" y="1.8" width="2.8" height="8.4" rx="0.7"/>' +
+        '<rect x="6.7" y="1.8" width="2.8" height="8.4" rx="0.7"/></svg>';
 
       /* ---- thumbnails ---- */
       const loadThumbs = async () => {
@@ -2453,6 +2473,11 @@ app.registerExtension({
                 paint();
               },
             });
+            /* The queue is the box that stays open. The shelf and the recipe
+               have shown a preview on hover since they were built, and this
+               one - the one actually being read all day - was the only place
+               a LoRA was just a name. */
+            attachHoverPreview(qchip, l.name);
             makeSortable(qchip, row.loras, l);
             body.appendChild(qchip);
           }
@@ -2606,9 +2631,15 @@ app.registerExtension({
         elFill.style.width = live.total
           ? Math.round(((live.index + 1) / live.total) * 100) + "%" : "0";
         const left = runRemaining();
-        elRunAll.textContent = state.running
+        /* The mark says which of the three it is before the word does, the way
+           the queue button above the canvas does. Pause is the only one that
+           is not a triangle, which is the whole point of drawing it. */
+        const label = state.running
           ? (state.paused ? "RESUME (" + left + ")" : "PAUSE (" + left + ")")
           : (left ? "RUN ALL (" + left + ")" : "RUN ALL");
+        elRunAll.innerHTML =
+          (state.running && !state.paused ? ICON_PAUSE : ICON_PLAY) +
+          "<span>" + label + "</span>";
         elRunAll.classList.toggle("paused", state.running && state.paused);
 
         elHeroes.innerHTML = "";

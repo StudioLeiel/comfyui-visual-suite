@@ -33,6 +33,285 @@ const TR_LANGS = [["en", "English"], ["ko", "Korean"], ["ja", "Japanese"],
    punctuation lands on the wrong end of every line. */
 const TR_RTL = new Set(["ar", "he", "fa", "ur"]);
 const HEADER_H = 22;
+/* The reading strip sits above the box and is dragged to size like the box
+   itself. The picture is the point, so it starts big. */
+const IMG_H = 210;
+const IMG_MIN = 96;
+const IMG_GRIP = 6;
+
+/* The custom question box is a strip of its own, not a slice taken out of the
+   picture: choosing "Custom..." used to halve the photograph. Its height is
+   added to the strip rather than shared with it, so the picture stays the size
+   it was measured to. */
+const IMG_CUSTOM_H = 34;
+const IMG_CUSTOM_GAP = 5;
+
+function customExtra(sec) {
+  const chosen = sec.q || questionFor(sec.title);
+  return chosen === "custom" ? IMG_CUSTOM_H + IMG_CUSTOM_GAP : 0;
+}
+
+/* The height of the strip itself: what the picture was measured to need, plus
+   the custom box when it is showing. */
+function stripHeight(sec) {
+  return Math.max(IMG_MIN, sec.imgH || IMG_H) + customExtra(sec);
+}
+
+/* Side by side.
+
+   A portrait picture in a full-width strip is stranded between two wide bands
+   of empty background, and the taller you drag the strip the worse it gets.
+   Beside the text it uses that room instead. Landscape is the other way round:
+   above the text it spans the whole node, beside it there is nothing left for
+   the writing. So the shape of the picture decides, and the button overrides. */
+const IMG_SIDE_W = 210;
+/* wide enough for the control row - below this the buttons had nowhere to go */
+const IMG_SIDE_MIN = 200;
+const IMG_SIDE_MAX = 720;
+/* padding and the control row, measured across and down */
+const SIDE_PAD_X = 12;
+const SIDE_CHROME_Y = 33;
+
+function imgSideWidth(sec) {
+  return Math.max(IMG_SIDE_MIN,
+                  Math.min(IMG_SIDE_MAX, Math.round(sec.imgW || IMG_SIDE_W)));
+}
+
+/* The width a picture of this shape wants when the body is this tall, so
+   switching sides keeps the picture whole instead of letterboxing it. */
+function sideWidthFor(sec, bodyH) {
+  const ar = sec.imgAR > 0 ? sec.imgAR : 1;
+  const stage = Math.max(40, bodyH - SIDE_CHROME_Y - customExtra(sec));
+  return Math.max(IMG_SIDE_MIN,
+                  Math.min(IMG_SIDE_MAX, Math.round(stage * ar) + SIDE_PAD_X));
+}
+
+/* How much room a section gives up to its reading strip. Beside the text the
+   picture costs no height at all - it shares the body with the box. */
+function imgBlock(sec) {
+  return sec.imgOpen && !sec.imgSide ? stripHeight(sec) + IMG_GRIP : 0;
+}
+
+/* Filled once from the backend. Everything the reader needs to draw itself
+   before a model has ever been loaded. */
+const VLM = {
+  ready: false, problem: null, models: [], quants: ["none"],
+  questions: {}, hints: [], defaultModel: "", defaultTokens: 220,
+  loaded: null, loadedQuant: null,
+  /* What the card can actually afford. The backend reads the total memory and
+     picks from a table; this is only the starting point, and a setting the
+     user has chosen is never overridden by it. */
+  suggested: null,
+};
+
+async function vlmState() {
+  try {
+    const r = await api.fetchApi("/leiel_vpc/vlm/state");
+    const d = await r.json();
+    VLM.problem = d.problem || null;
+    VLM.models = d.models || [];
+    VLM.quants = d.quants || ["none"];
+    VLM.questions = d.questions || {};
+    VLM.hints = d.hints || [];
+    VLM.defaultModel = d.default_model || (d.models || [])[0] || "";
+    VLM.defaultTokens = d.default_max_tokens || 220;
+    VLM.suggested = d.suggested || null;
+    /* what the card is holding right now - the panel says so, because memory
+       in use is the thing worth knowing at a glance */
+    VLM.loaded = d.loaded || null;
+    VLM.loadedQuant = d.loaded_quant || null;
+    VLM.ready = true;
+  } catch (e) {
+    VLM.problem = "The reader could not be reached. Is the pack installed?";
+    VLM.ready = true;
+  }
+  return VLM;
+}
+
+function imgUrl(ref) {
+  if (!ref || !ref.filename) return "";
+  const p = new URLSearchParams({
+    filename: ref.filename,
+    subfolder: ref.subfolder || "",
+    type: ref.type || "input",
+  });
+  /* cache-buster: replacing a picture with one of the same name would
+     otherwise keep showing the old thumbnail */
+  p.set("t", String(ref.stamp || 0));
+  return `/view?${p.toString()}`;
+}
+
+/* Reuses ComfyUI's own upload endpoint, so the picture lands in the input
+   folder like any other and the workflow only has to remember its name. */
+async function uploadImage(file) {
+  const body = new FormData();
+  body.append("image", file, file.name);
+  body.append("subfolder", "prompt_composer");
+  body.append("overwrite", "false");
+  const r = await api.fetchApi("/upload/image", { method: "POST", body });
+  if (!r.ok) throw new Error("The image could not be uploaded.");
+  const d = await r.json();
+  return {
+    filename: d.name,
+    subfolder: d.subfolder || "prompt_composer",
+    type: d.type || "input",
+    stamp: Date.now(),
+  };
+}
+
+/* A landscape picture wants a short wide strip and a portrait one a tall
+   narrow strip. Measuring it once on arrival saves dragging the grip every
+   time. */
+/* The canvas draws this widget through a CSS transform, so a pointer that has
+   travelled 100 screen pixels has travelled 100/zoom pixels inside the node.
+   Dragging by the raw screen delta therefore moved the edge by the zoom
+   factor - at 2x the picture column ran twice as far as the hand did. The rest
+   of the file already divides measured rects by this; the drags did not. */
+function uiScale(el) {
+  const host = (el && el.closest && el.closest(".lvp-wrap")) || el;
+  const css = host && host.offsetWidth;
+  if (!css) return 1;
+  return host.getBoundingClientRect().width / css || 1;
+}
+
+function measureImage(url, boxWidth) {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => {
+      const ar = (probe.naturalWidth / probe.naturalHeight) || 1;
+      const w = Math.max(120, boxWidth - 16);
+      const shown = Math.round(w / ar);
+      resolve({ ar, h: Math.max(IMG_MIN, Math.min(560, shown + 34)) });
+    };
+    probe.onerror = () => resolve({ ar: 1, h: IMG_H });
+    probe.src = url;
+  });
+}
+
+async function readImage(ref, question, settings) {
+  const r = await api.fetchApi("/leiel_vpc/vlm/analyse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image: ref,
+      question,
+      model: settings.model,
+      quantization: settings.quant,
+      max_tokens: settings.tokens,
+      /* sent on every reading, so the clock restarts from the last thing the
+         user actually did rather than from when the panel was last opened */
+      idle_minutes: settings.idle,
+    }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "The reader failed.");
+  /* A reading that came back means the model is on the card. Recorded here
+     rather than waiting for the panel to be opened, because the unload that
+     runs when a render is queued reads this to decide whether there is
+     anything to unload - and a stale "nothing loaded" would skip it. */
+  VLM.loaded = settings.model;
+  VLM.loadedQuant = settings.quant;
+  return d.text || "";
+}
+
+/* A section called "Camera Anchor" opens on the camera question. */
+/* Four layers exist and this reading takes one of them. That is the whole
+   idea of the node, and words were carrying it badly: a label naming one layer
+   never shows that there are three others being left behind.
+
+   So it is drawn. Four stacked bars, one lit - the stack says how many there
+   are, the lit one says which, and the three dim ones are the answer to the
+   question nobody thought to ask. Top to bottom in anchor order, the same
+   order the sections are in, so position becomes the name once you have seen
+   it twice. */
+const LAYER_ORDER = ["quality", "subject", "scene", "camera"];
+
+function layerGlyph(key) {
+  const rows = LAYER_ORDER.map((layer, i) => {
+    const on = key === "all" || layer === key;
+    return `<rect x="1" y="${1 + i * 4}" width="12" height="3" rx="1"`
+         + ` fill="currentColor" opacity="${on ? 1 : 0.22}"/>`;
+  }).join("");
+  return `<svg viewBox="0 0 14 17" width="11" height="13" aria-hidden="true">`
+       + rows + `</svg>`;
+}
+
+function layerTitle(sec) {
+  const key = sec.q || questionFor(sec.title);
+  const names = { quality: "Quality", subject: "Subject",
+                  scene: "Scene", camera: "Camera" };
+  if (key === "custom") return "Your own question - the four layers do not apply";
+  if (key === "all") return "All four layers: quality, subject, scene, camera";
+  return `Four layers - reading ${names[key] || key} only, `
+       + `leaving ${LAYER_ORDER.filter(x => x !== key)
+            .map(x => names[x]).join(", ")} to their own sections`;
+}
+
+function questionFor(title) {
+  const t = (title || "").toLowerCase();
+  for (const [word, key] of VLM.hints) if (t.includes(word)) return key;
+  return "all";
+}
+/* Two bars lying down, two bars standing up: the arrangement itself, drawn.
+   A word had to be read and then translated into a picture of the layout;
+   this is the picture. Both are always on show with the current one lit, so
+   there is nothing to work out from a label that names the other state. */
+const ICON_ROW =
+  `<svg viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">` +
+  `<rect x="1" y="1.5" width="12" height="4.5" rx="1"/>` +
+  `<rect x="1" y="8" width="12" height="4.5" rx="1"/></svg>`;
+const ICON_SIDE =
+  `<svg viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">` +
+  `<rect x="1.5" y="1" width="4.5" height="12" rx="1"/>` +
+  `<rect x="8" y="1" width="4.5" height="12" rx="1"/></svg>`;
+
+/* The header marks. The duplicate one was the character U+29C9, which is two
+   squares joined at a corner and reads as a diagram rather than as a button;
+   drawn properly it is one sheet lying over another. The other two are new. */
+const ICON_DUP =
+  `<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">` +
+  `<rect x="1.2" y="1.2" width="6.6" height="6.6" rx="1.4"` +
+  ` fill="none" stroke="currentColor" stroke-width="1.2"/>` +
+  `<rect x="4.2" y="4.2" width="6.6" height="6.6" rx="1.4"` +
+  ` fill="var(--sec-bg,#1a1a1a)" stroke="currentColor" stroke-width="1.2"/></svg>`;
+/* The backspace key: a wedge pointing at what it removes, with a cross in it.
+   The first try was an eraser lying on its side, which at ten pixels was a
+   tilted rectangle above a line and read as nothing in particular. This one
+   says erase because it is already the erase key, and its outline is legible
+   even when the cross inside is barely two pixels across. */
+const ICON_CLEAR =
+  `<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">` +
+  `<path d="M4.3 2.2 H10 a1 1 0 0 1 1 1 v5.6 a1 1 0 0 1 -1 1 H4.3 L1 6 Z"` +
+  ` fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>` +
+  `<path d="M5.8 4.6 L8.6 7.4 M8.6 4.6 L5.8 7.4" stroke="currentColor"` +
+  ` stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>`;
+/* two edges closing on the text between them */
+const ICON_FIT =
+  `<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">` +
+  `<path d="M1.4 1.5 h9.2 M1.4 10.5 h9.2" stroke="currentColor"` +
+  ` stroke-width="1.2" stroke-linecap="round" fill="none"/>` +
+  `<path d="M6 3.2 v1.9 M4.4 4.4 L6 5.6 L7.6 4.4" stroke="currentColor"` +
+  ` stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` +
+  `<path d="M6 8.8 v-1.9 M4.4 7.6 L6 6.4 L7.6 7.6" stroke="currentColor"` +
+  ` stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+
+/* The move and delete marks, redrawn as outlines at the same 1.2 weight as
+   the three above. They were solid glyphs from the font - a filled triangle
+   and a bold letter - which put three drawn outlines and three typeset shapes
+   in one row, at different weights and on different baselines. */
+const ICON_UP =
+  `<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">` +
+  `<path d="M6 2.6 L10.2 9 H1.8 Z" fill="none" stroke="currentColor"` +
+  ` stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+const ICON_DOWN =
+  `<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">` +
+  `<path d="M6 9.4 L1.8 3 H10.2 Z" fill="none" stroke="currentColor"` +
+  ` stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+const ICON_DEL =
+  `<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">` +
+  `<path d="M2.6 2.6 L9.4 9.4 M9.4 2.6 L2.6 9.4" fill="none"` +
+  ` stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+
 const GAP = 6;
 
 const DEFAULT_SECTIONS = [
@@ -45,6 +324,140 @@ const DEFAULT_SECTIONS = [
    a section can show what it is actually being fed. */
 const EXT_CACHE = {};          // nodeId -> { "1": "text from the wire", ... }
 const VPC_NODES = new Map();   // nodeId -> redraw
+
+/* Reading during a render fills the card and stops everything.
+
+   ComfyUI announces what it is doing on two events: "status" carries how many
+   prompts are left in the queue, and "executing" carries the node currently
+   running, or null when the run has finished. Between them they cover both
+   ends - the queue growing and the last node finishing - so the button knows
+   to grey itself out and knows when to come back without anyone polling. */
+const BUSY = { on: false, queued: 0, running: false, listeners: new Set() };
+
+/* The two signals are kept apart deliberately. Between one queued prompt and
+   the next, ComfyUI reports the run finished before it reports the queue
+   still has work; folding both into a single flag let the button flicker back
+   on in that gap, which is precisely the moment it must not. Busy means either
+   is true. */
+function recomputeBusy() {
+  const on = BUSY.running || BUSY.queued > 0;
+  if (BUSY.on === on) return;
+  BUSY.on = on;
+  /* The reader gets off the card the moment a render is queued, whatever the
+     idle timer had left to run. The two never need the memory at the same
+     time, and the idle clock was set for a pause between readings, not for
+     this - waiting three more minutes with four gigabytes held is exactly the
+     wrong thing to do while an image model is trying to load.
+
+     Only our own model is unloaded. ComfyUI's stays entirely its own business:
+     reaching into that from outside is what corrupted its patcher and killed
+     renders for a day. */
+  if (on) dropReaderForRender();
+  for (const fn of BUSY.listeners) {
+    try { fn(BUSY.on); } catch (e) { /* one bad listener is not the others' problem */ }
+  }
+}
+
+/* Where a pasted screenshot goes.
+
+   A paste arrives at the document, not at any one strip, so with six sections
+   open something has to say which one is meant. Two answers, in order: the
+   strip the pointer is over, and failing that the strip last clicked. Both are
+   things the hand was already doing, so neither asks for an extra step, and
+   between them a paste almost always has somewhere obvious to land. When it
+   has neither, nothing happens - guessing at one of six is worse than doing
+   nothing. */
+const PASTE = { hover: null, last: null };
+
+function isEditable(el) {
+  if (!el || !el.closest) return false;
+  return !!el.closest("input, textarea, [contenteditable=\"true\"]");
+}
+
+function pasteTarget() {
+  /* Every render throws the strips away and builds new ones, so a remembered
+     one has to be checked against the page before it is used. */
+  if (PASTE.hover && !PASTE.hover.el.isConnected) PASTE.hover = null;
+  if (PASTE.last && !PASTE.last.el.isConnected) PASTE.last = null;
+  return PASTE.hover || PASTE.last;
+}
+
+/* Queued and running both raise the flag, and the flag can be raised again
+   before the answer to the first request comes back, so this must not stack. */
+let dropping = false;
+async function dropReaderForRender() {
+  if (dropping || !VLM.loaded) return;
+  dropping = true;
+  try {
+    await api.fetchApi("/leiel_vpc/vlm/unload", { method: "POST" });
+    VLM.loaded = null;
+    VLM.loadedQuant = null;
+  } catch (err) {
+    /* nothing loaded, or the route is gone - either way the render carries on */
+  } finally {
+    dropping = false;
+  }
+}
+
+/* One listener for the whole page rather than one per strip: the event only
+   ever arrives once, at the document, whatever is focused. */
+/* Capture phase, and the event is stopped once it is ours.
+
+   ComfyUI listens for the same paste and answers a picture on the clipboard by
+   building a Load Image node. Both of us were right and both of us acted, so
+   one paste put the picture in the strip and dropped a Load Image node on the
+   canvas as well. preventDefault only tells the browser not to do its default
+   thing; it does nothing about another listener on the same event. Running
+   first and stopping the event is what keeps a paste aimed at a strip from
+   also being a paste aimed at the graph.
+
+   When there is no strip to paste into, the event is left entirely alone -
+   pasting a picture onto the canvas should still make a Load Image node. */
+document.addEventListener("paste", (e) => {
+  /* Typing somewhere means the paste is meant for what you are typing in.
+     Without this, pasting a picture while the cursor sat in a text box would
+     put it in whichever strip the pointer happened to be over. */
+  if (isEditable(e.target)) return;
+  const target = pasteTarget();
+  if (!target) return;
+
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  let file = null;
+  for (const item of items) {
+    if (item.kind === "file" && /^image\//.test(item.type || "")) {
+      file = item.getAsFile();
+      if (file) break;
+    }
+  }
+  /* Copying a file in the file manager puts a path on the clipboard, not the
+     picture, and a browser is not allowed to open that path. Nothing to do but
+     say so - dragging the file in still works. */
+  if (!file) {
+    if (items.length) {
+      target.say("that clipboard holds no image - drag the file in instead", "err");
+    }
+    return;
+  }
+
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+  /* Which strip took it, shown for a moment: a paste that lands in the wrong
+     section is otherwise silent. */
+  target.drop.classList.add("over");
+  setTimeout(() => target.drop.classList.remove("over"), 400);
+  target.take(file);
+}, true);
+
+api.addEventListener("status", (e) => {
+  const left = e?.detail?.exec_info?.queue_remaining;
+  if (typeof left === "number") { BUSY.queued = left; recomputeBusy(); }
+});
+api.addEventListener("executing", (e) => {
+  /* a node id means running; null means this run is over */
+  BUSY.running = e?.detail?.node != null;
+  recomputeBusy();
+});
 
 try {
   api.addEventListener("leiel.vpc.ext", (e) => {
@@ -488,26 +901,50 @@ function textToHtml(text) { return escapeHtml(text || ""); }
 
 /* ---------- styles ---------- */
 const CSS = `
+/* One control face for the whole node.
+
+   Every button used to carry its own fill, its own border colour and its own
+   height, so a row of five was five unrelated objects and a header of three
+   was three coloured blocks shouting at a photograph. They are one object now:
+   a dark chip of the same height with a hairline border and white lettering.
+   Colour is what happens when the pointer arrives - each control answers in
+   its own hue - and what marks the one currently in force.
+
+   The chip keeps its own dark ground rather than sitting on whatever is
+   behind it. On a node the user has coloured, transparent controls let the
+   node colour wash straight through the labels; these do not. */
+/* declared on all three roots, not just the node: the reader panel and the
+   help panel are attached to the page rather than to the node, so tokens set
+   only on the node would leave the buttons inside them with no face at all */
+.lvp-wrap,.lvr-panel,.lvp-help{
+  --ctl-h:18px;--ctl-bg:#1c1c1c;--ctl-bd:#4a4a4a;--ctl-ink:#e2e2e2;
+  --hue:#d9b26a;--hue-soft:#d9b26a24;}
+.lvp-tog,.lvp-imgb,.lvp-trb,.lvr-lay,.lvr-read,.lvr-x,.lvr-q,.lvp-btn{
+  height:var(--ctl-h);box-sizing:border-box;flex:0 0 auto;
+  background:var(--ctl-bg);border:1px solid var(--ctl-bd);border-radius:4px;
+  color:var(--ctl-ink);font-family:inherit;font-size:9px;font-weight:600;
+  letter-spacing:.3px;line-height:1;cursor:pointer;padding:0 6px;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:color .1s linear,border-color .1s linear,background-color .1s linear;}
+.lvp-tog:hover,.lvp-imgb:hover,.lvp-trb:hover,.lvr-lay:hover,.lvr-read:hover,
+.lvr-x:hover,.lvr-q:hover,.lvp-btn:hover{border-color:var(--hue);color:var(--hue);}
+/* in force: the same hue, held rather than passing */
+.lvp-tog.on,.lvp-imgb.on,.lvp-trb.on,.lvr-lay.on,.lvp-btn.on{
+  background:var(--hue-soft);border-color:var(--hue);color:var(--hue);}
 .lvp-wrap{display:flex;flex-direction:column;gap:5px;font-family:system-ui,sans-serif;
   font-size:11px;color:var(--fg-color,#ddd);height:100%;box-sizing:border-box;
   padding:4px;position:relative;}
 .lvp-bar{display:flex;gap:3px;align-items:center;flex:0 0 auto;
   flex-wrap:wrap;row-gap:3px;}
-/* One button face across the whole node, the same one the Series Lab uses:
-   small, spaced, semi-bold. Letter spacing is what makes a short uppercase
-   label read as a control rather than as a word. */
-.lvp-btn{background:#2b2b2b;border:1px solid #555;border-radius:4px;color:#ddd;
-  padding:3px 8px;cursor:pointer;font-size:10px;font-family:inherit;
-  font-weight:600;letter-spacing:1px;white-space:nowrap;flex:0 0 auto;}
-.lvp-btn:hover{background:#3a3a3a;color:#fff;}
-.lvp-btn.on{border-color:#7ab8ff;background:#22344a;color:#cfe6ff;}
-.lvp-btn:disabled{opacity:.35;cursor:default;}
-.lvp-btn:disabled:hover{background:#2b2b2b;}
-/* the size buttons and the text button do unrelated things, so they are
-   labelled and separated - COLOR next to EVEN reads like another layout tool */
-.lvp-sep{width:1px;height:14px;background:#4a4a4a;margin:0 2px;flex:0 0 auto;}
-.lvp-grp{font-size:8px;opacity:.4;letter-spacing:.6px;text-transform:uppercase;
-  flex:0 0 auto;}
+/* the toolbar wears the shared face; sentence case, no tracked-out capitals */
+.lvp-btn{--hue:#d9b26a;--hue-soft:#d9b26a24;--ctl-bd:#e8e8e8;
+  font-size:10px;font-weight:500;letter-spacing:.2px;padding:0 8px;}
+.lvp-btn:disabled{color:#4a4a4a;border-color:#333;cursor:default;}
+.lvp-btn:disabled:hover{color:#4a4a4a;border-color:#333;}
+/* The rule is the grouping. There used to be a tracked-out ALIGN and STEP
+   label as well, which says the same thing twice and adds two more raised
+   voices to a bar that already had eleven. */
+.lvp-sep{width:1px;height:12px;background:#333;margin:0 5px;flex:0 0 auto;}
 .lvp-list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:6px;padding-right:2px;
   align-content:flex-start;}
@@ -560,8 +997,12 @@ const CSS = `
 .lvp-badge.m-replace{border-color:#5a8fd0;color:#9dc0e8;}
 .lvp-badge.m-append{border-color:#5aa87a;color:#9ad8b6;}
 .lvp-badge.m-prepend{border-color:#c9923c;color:#e8c48a;}
-.lvp-tog.byp{background:#a363a3;border-color:#c79ac7;}
-.lvp-cnt{font-size:9px;opacity:.4;flex:0 0 auto;font-family:ui-monospace,monospace;}
+.lvp-tog.byp{--hue:#c79ac7;--hue-soft:#c79ac724;
+  background:var(--hue-soft);border-color:var(--hue);color:var(--hue);}
+/* the same face as PRESET at the other end of the row, so the two ends of the
+   header are set in one voice rather than one typeset and one monospaced */
+.lvp-cnt{font-size:9px;font-weight:600;letter-spacing:1px;opacity:.4;
+  flex:0 0 auto;font-family:inherit;}
 .lvp-sec.collapsed .lvp-grip,.lvp-sec.collapsed textarea,
 .lvp-sec.collapsed .lvp-note{display:none;}
 /* was a 9px grey triangle - nobody could tell it was a control */
@@ -585,12 +1026,16 @@ const CSS = `
   letter-spacing:.3px;}
 .lvp-head input.t:hover{border-color:#444;}
 .lvp-head input.t:focus{outline:none;border-color:#7ab8ff;background:#111;}
-.lvp-tog{width:14px;height:14px;border-radius:3px;border:1px solid #666;flex:0 0 auto;
-  cursor:pointer;background:#111;font-size:9px;font-weight:700;line-height:12px;
-  text-align:center;color:#0d0d0d;}
-.lvp-tog.on{background:#4a8a4a;border-color:#6ab86a;}
+.lvp-tog{--hue:#e8a860;--hue-soft:#e8a86024;width:18px;padding:0;}
+/* Lettered marks and drawn ones sat on different baselines: a glyph is placed
+   by the font's line box, an svg by its own height, so the triangles, the X
+   and the three icons all landed a pixel or two apart. Giving every mark the
+   same box and centring in it puts them on one line whatever is inside. */
 .lvp-mini{cursor:pointer;opacity:.5;font-size:11px;font-weight:700;padding:0 3px;
-  flex:0 0 auto;letter-spacing:.3px;}
+  flex:0 0 auto;letter-spacing:.3px;height:14px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;}
+.lvp-mini.ico{padding:0 2px;}
+.lvp-mini.ico svg{display:block;}
 .lvp-tiny{background:#2b2b2b;border:1px solid #555;border-radius:3px;color:#ccc;
   font-size:9px;font-weight:600;letter-spacing:1px;padding:1px 6px;cursor:pointer;
   flex:0 0 auto;line-height:1.3;font-family:inherit;}
@@ -627,8 +1072,8 @@ const CSS = `
 .lvp-tr-note{font-size:8px;letter-spacing:.4px;text-transform:uppercase;
   color:var(--tr-fg);opacity:.5;flex:1;min-width:0;overflow:hidden;white-space:nowrap;}
 .lvp-tr-lang,.lvp-tr-unit{background:var(--tr-hd);border:1px solid #ffffff30;
-  border-radius:3px;color:var(--tr-fg);font-size:9px;font-family:inherit;
-  padding:0 2px;cursor:pointer;flex:0 0 auto;height:14px;}
+  border-radius:3px;color:var(--tr-fg);font-size:11.5px;font-family:inherit;
+  padding:0 3px;cursor:pointer;flex:0 0 auto;height:16px;}
 .lvp-tr-lang:focus,.lvp-tr-unit:focus{outline:none;border-color:var(--tr-fg);}
 .lvp-tr-body{position:absolute;inset:0;padding:21px 6px 4px;overflow-y:auto;
   font-size:10px;line-height:1.55;white-space:pre-wrap;word-break:break-word;
@@ -641,6 +1086,127 @@ const CSS = `
    translation of the previous text, and the new one is on its way */
 .lvp-tr-body.stale{opacity:.4;font-style:italic;}
 .lvp-tr-body.err{color:#e6a0a0;font-style:italic;opacity:.9;}
+/* the reading strip */
+/* One field, one tone.
+
+   The strip used to be a warm panel with a darker rectangle inside it and a
+   dashed line drawn round that - three surfaces where there is only one
+   subject. The dashes and the inner rectangle are gone; the picture now sits
+   directly on a single dark ground, and the only edge is the one that
+   separates the strip from the writing. */
+.lvr-img{flex:0 0 auto;display:flex;flex-direction:column;gap:5px;
+  box-sizing:border-box;padding:5px 6px;background:#17140c;
+  border-bottom:1px solid #2e2612;}
+.lvr-grip{height:6px;background:#1d190f;cursor:ns-resize;flex:0 0 auto;
+  border-bottom:1px solid #2a2a2a;}
+.lvr-grip:hover{background:#4a3c16;}
+/* one thin row of controls under the section title, never a column of
+   black space beside the picture */
+.lvr-bar{flex:0 0 auto;display:flex;gap:5px;align-items:center;height:18px;
+  min-width:0;}
+.lvr-stage{flex:1 1 auto;min-height:0;display:flex;}
+/* Sits on the picture, bottom left, dark enough to stay legible over anything
+   and quiet enough not to compete with it. Never intercepts a click - the
+   whole area is still the drop target. */
+.lvr-badge{position:absolute;left:6px;bottom:6px;display:flex;align-items:center;
+  gap:5px;padding:3px 7px 3px 5px;border-radius:4px;background:#0b0b0bcc;
+  color:#e6c476;pointer-events:none;line-height:1;}
+.lvr-badge svg{display:block;flex:0 0 auto;}
+.lvr-badge b{font-size:9px;font-weight:600;letter-spacing:.9px;
+  text-transform:uppercase;}
+/* the four bars in the control row, an indicator rather than a control */
+.lvr-layers{flex:0 0 auto;display:inline-flex;align-items:center;
+  justify-content:center;height:var(--ctl-h);padding:0 3px;color:#d9b26a;
+  cursor:help;}
+.lvr-layers svg{display:block;}
+/* no border and no ground of its own - it is the same field as the strip,
+   and only says so while something is being dragged over it */
+.lvr-drop{flex:1 1 auto;min-width:0;border:1px solid transparent;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  color:#7c7261;font-size:9px;line-height:1.35;padding:3px;cursor:pointer;
+  overflow:hidden;position:relative;background:transparent;}
+/* one tone still, but a hairline while the pointer is over it: without a
+   border there was no way to see where the target began and ended */
+.lvr-drop:hover{color:#e6c476;border-color:#4a4132;}
+.lvr-drop.over{border-color:#e6c476;background:#e6c47614;}
+/* contain, never cover: a landscape picture is not cropped to a square */
+.lvr-drop img{max-width:100%;max-height:100%;width:auto;height:auto;
+  object-fit:contain;border-radius:3px;display:block;}
+/* The strip and the text panes together: a column in ROW mode, a row in SIDE
+   mode. Same markup either way, so nothing below has to know which it is. */
+.lvp-body{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;}
+.lvp-body.side{flex-direction:row;}
+.lvp-panes{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;}
+/* beside the text the strip is sized across, not down, and the rule that
+   separated it from the box moves round with it */
+.lvp-body.side>.lvr-img{height:auto;border-bottom:none;border-right:1px solid #2e2612;}
+.lvp-body.side>.lvr-grip{width:6px;height:auto;cursor:ew-resize;
+  border-bottom:none;border-right:1px solid #2a2a2a;}
+.lvr-lay{--hue:#e6c476;--hue-soft:#e6c47624;width:22px;padding:0;}
+/* the bars take the chip's colour, so they whiten, warm and light with it */
+.lvr-lay svg{fill:currentColor;display:block;}
+/* The row has to hold together when the picture column is dragged narrow.
+   The select was a fixed 128px and refused to give any of it back, so READ,
+   the arrangement buttons and the remove button were pushed off the end and
+   simply disappeared. It gives way first now, and the buttons keep their
+   place. */
+/* Chrome and Firefox take the row height in the open list from the option,
+   not from the select, so both are set. */
+.lvp-wrap option,.lvr-panel option{font-size:11.5px;line-height:1.7;
+  background:#1c1c1c;color:#e2e2e2;}
+/* the heading that carries "only" for everything under it */
+.lvp-wrap optgroup{font-size:10.5px;font-style:normal;font-weight:600;
+  letter-spacing:.6px;background:#141414;color:#d9b26a;}
+/* A native select draws its open list at the select's own font size, so this
+   is what made every dropdown unreadable - not the list, the control. */
+.lvr-q{--hue:#e6c476;flex:1 1 auto;min-width:46px;font-size:11.5px;font-weight:500;
+  letter-spacing:0;padding:0 3px;}
+.lvr-q:focus{outline:none;border-color:var(--hue);}
+.lvr-read{--hue:#e6c476;font-size:10px;letter-spacing:.2px;padding:0 9px;}
+.lvr-read:disabled{color:#4a4a4a;border-color:#333;cursor:default;}
+/* disabled because something else is using the card, not because there is
+   nothing to read - worth telling apart */
+.lvr-read.waiting:disabled{color:#7a6a4a;border-color:#4a3f2a;cursor:not-allowed;}
+.lvr-read:disabled:hover{color:#4a4a4a;border-color:#333;}
+.lvr-x{--hue:#e08a7a;width:20px;padding:0;font-size:10px;}
+.lvr-note{font-size:9px;color:#7c7261;line-height:1.4;flex:1 1 0;min-width:0;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.lvr-note.busy{color:#d9b26a;}
+.lvr-note.err{color:#e6a0a0;}
+/* a fixed strip, never a competitor to the picture for the leftover space */
+.lvr-custom{width:100%;box-sizing:border-box;background:#232323;border:1px solid #4a4a4a;
+  border-radius:4px;color:#ddd;font:10px/1.4 monospace;padding:4px 6px;resize:none;
+  flex:0 0 34px;height:34px;}
+.lvr-custom:focus{outline:none;border-color:#8fb8ff;}
+/* Reader was given its own amber face back when the accent lived only on the
+   strip. The whole toolbar carries that amber now for whatever is live, so a
+   second, permanently-lit version of it just put a box back in the row. */
+/* amber on the way in, matching the strip it opens */
+.lvp-imgb{--hue:#e6c476;--hue-soft:#e6c47624;font-size:8px;letter-spacing:0;}
+.lvr-panel{position:fixed;z-index:9999;width:420px;background:#1b1b1b;
+  border:1px solid #555;border-radius:8px;padding:10px;color:#ccc;font-size:11px;
+  box-shadow:0 10px 30px #000a;}
+.lvr-panel h4{margin:0 0 8px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:#d9b26a;}
+.lvr-panel label{display:block;margin:6px 0 2px;font-size:9px;color:#8a8a8a;
+  letter-spacing:.06em;text-transform:uppercase;}
+/* Memory is the thing that stops the work, so the line about what is held is
+   the one line in the panel allowed to be loud. */
+.lvr-panel p.vram{margin:9px 0 0;font-size:12.5px;font-weight:600;
+  line-height:1.4;letter-spacing:.2px;}
+.lvr-panel p.vram.held{color:#f0a860;}
+.lvr-panel p.vram.idle{color:#7e9e86;}
+/* a remark about the card, not a reading of it */
+.lvr-panel p.vram.advice{font-size:10.5px;font-weight:400;color:#8a8a8a;
+  letter-spacing:0;margin-top:8px;}
+.lvr-panel label.chk{display:flex;align-items:center;gap:6px;cursor:pointer;
+  margin-top:9px;}
+.lvr-panel label.chk input{width:auto;flex:0 0 auto;margin:0;}
+.lvr-panel select,.lvr-panel input{width:100%;box-sizing:border-box;background:#2b2b2b;
+  border:1px solid #555;border-radius:4px;color:#ddd;font-size:12px;padding:4px 5px;}
+.lvr-panel .foot{display:flex;gap:6px;margin-top:10px;}
+.lvr-panel .foot button{flex:1 1 0;}
+.lvr-warn{color:#e6a0a0;font-size:10px;line-height:1.5;margin:4px 0 0;}
 /* the English-side highlight: bars drawn over the text, never in it */
 .lvp-hl{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0;}
 .lvp-hl i{position:absolute;background:#3a6ea5;opacity:.34;border-radius:2px;}
@@ -655,26 +1221,20 @@ const CSS = `
    glyph riding high in the button */
 /* stretch, not a matching padding: the row centres its items, so only taking
    the full line height keeps the button exactly as tall as STYLE */
-.lvp-btn.brush{display:inline-flex;align-items:center;justify-content:center;
-  align-self:stretch;padding:0 9px;background:#2b1f42;border-color:#7b5ce0;
-  color:#d8b4fe;}
+.lvp-btn.brush{--hue:#ffffff;--hue-soft:#ffffff1c;width:24px;padding:0;}
 .lvp-btn.brush svg{display:block;width:13px;height:13px;}
-.lvp-btn.brush:hover{background:#3a2a58;border-color:#a78bfa;color:#e9d5ff;}
-.lvp-btn.brush.on{background:#402e63;border-color:#a78bfa;color:#f0e2ff;}
-.lvp-btn.brush.loaded{background:#4b3578;border-color:#c4b5fd;color:#fff;}
+/* armed and loaded are told apart by how full the dropper is, which the svg
+   already draws, rather than by two shades of one colour */
+.lvp-btn.brush.loaded{background:#ffffff2e;border-color:#fff;color:#fff;}
 /* the loaded state fills the dropper, so pick and apply are not two identical
    purple buttons */
 .lvp-btn.brush svg .drop{display:none;}
 .lvp-btn.brush.loaded svg .drop{display:block;}
 /* TR sits next to the bypass square and is built the same way, so the two
    read as a pair of switches rather than a switch and a label */
-.lvp-trb{width:16px;height:14px;border-radius:3px;border:1px solid #7a6431;
-  flex:0 0 auto;cursor:pointer;background:#111;font-size:8px;font-weight:700;
-  line-height:12px;text-align:center;letter-spacing:0;color:#d9b26a;}
-.lvp-trb:hover{border-color:#e6c476;color:#f4dda6;}
-.lvp-trb.on{background:#8a6a1e;border-color:#e6c476;color:#fff8e6;}
-.lvp-trb.no{opacity:.22;cursor:default;}
-.lvp-trb.no:hover{border-color:#7a6431;color:#d9b26a;}
+.lvp-trb{--hue:#7ec9a0;--hue-soft:#7ec9a024;font-size:8px;letter-spacing:0;}
+.lvp-trb.no{opacity:.25;cursor:default;}
+.lvp-trb.no:hover{border-color:var(--ctl-bd);color:var(--ctl-ink);}
 .lvp-ta{position:absolute;inset:0;box-sizing:border-box;margin:0;border:none;z-index:1;
   padding:4px 6px;font-family:ui-monospace,Consolas,monospace;font-size:10px;
   line-height:1.45;white-space:pre-wrap;word-break:break-word;
@@ -732,8 +1292,8 @@ const CSS = `
 .lvp-foot{flex:0 0 auto;font-size:10px;padding:0 2px;display:flex;
   align-items:center;gap:6px;}
 .lvp-foot-txt{opacity:.5;}
-.lvp-btn.help{width:22px;padding:2px 0;font-size:12px;font-weight:700;
-  border-radius:11px;line-height:1;letter-spacing:0;text-align:center;}
+.lvp-btn.help{width:18px;padding:0;font-size:10px;border-radius:9px;
+  letter-spacing:0;}
 .lvp-help{position:absolute;z-index:40;background:#161616;
   border:1px solid #5b7fa6;border-radius:6px;padding:12px 14px;width:470px;
   max-height:70vh;overflow-y:auto;box-shadow:0 6px 24px #000c;
@@ -761,7 +1321,7 @@ const CSS = `
 .lvp-fr input[type=text]{flex:1 1 auto;min-width:60px;background:#0d0d0d;
   border:1px solid #444;border-radius:4px;color:#ddd;font-size:11px;padding:3px 6px;}
 .lvp-fr select{background:#0d0d0d;border:1px solid #444;border-radius:4px;
-  color:#ddd;font-size:10px;padding:2px;max-width:120px;}
+  color:#ddd;font-size:11.5px;padding:2px 3px;max-width:132px;}
 /* The count now sits between the field and the buttons, so it is given a
    floor width - otherwise every keystroke that changes "11 found" to "none"
    would slide the whole button row sideways. */
@@ -823,6 +1383,63 @@ const CSS = `
 .lvp-fr-marks .sep{width:1px;height:12px;background:#4a4a4a;margin:0 3px;}
 `;
 
+/* This pack is a copy of the Prompt Composer and kept its class names, which
+   means both stylesheets define .lvp-tog, .lvp-trb and the rest. Installed
+   side by side, whichever loaded last won - which is why recolouring the
+   header switches here had no effect while the Suite was installed.
+
+   Every rule is therefore scoped to the node's own root class on the way into
+   the page. The extra class raises specificity, so this pack's rules win
+   inside this pack's nodes, and stops them reaching the Suite's nodes at all.
+   Both directions, one pass, no renaming. */
+const ROOT_CLASS = "lvc-root";
+
+/* Not everything this node draws lives inside the node. The reader panel and
+   the help panel hang off document.body so the canvas cannot clip them, which
+   means they are not descendants of the root and a descendant-scoped rule
+   never reaches them. They carry the scope class themselves instead, and the
+   rules that target them are joined to it rather than nested under it. */
+const ROOT_LEVEL = [".lvp-wrap", ".lvr-panel", ".lvp-help"];
+
+function scopeCss(css, scope) {
+  let out = "", sel = "", depth = 0, i = 0;
+  while (i < css.length) {
+    if (css.startsWith("/*", i)) {
+      const end = css.indexOf("*/", i + 2);
+      const stop = end === -1 ? css.length : end + 2;
+      /* Comments are passed straight through and never join the pending
+         selector: the prose in them contains commas, and the split below
+         would tear a rule in half on one. */
+      out += css.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    const ch = css[i];
+    if (depth === 0 && ch === "{") {
+      out += sel.replace(/(^|,)([^,{]+)/g, (m, lead, one) => {
+        const t = one.trim();
+        if (!t || t.startsWith("@")) return m;
+        /* an element that carries the scope class itself is not a descendant
+           of it: .lvr-panel becomes .lvc-root.lvr-panel, everything else
+           becomes .lvc-root <selector> */
+        const atRoot = ROOT_LEVEL.some(r => t === r || t.startsWith(r + " ")
+                                         || t.startsWith(r + ":") || t.startsWith(r + "."));
+        return lead + "." + scope + (atRoot ? "" : " ") + t;
+      });
+      out += ch; depth = 1; i++; continue;
+    }
+    if (depth > 0) {
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      out += ch; i++;
+      if (depth === 0) sel = "";
+      continue;
+    }
+    sel += ch; i++;
+  }
+  return out + sel;
+}
+
 app.registerExtension({
   name: "leiel.prompt.composer",
 
@@ -830,7 +1447,7 @@ app.registerExtension({
     if (!document.getElementById("leiel-vpc-css")) {
       const st = document.createElement("style");
       st.id = "leiel-vpc-css";
-      st.textContent = CSS;
+      st.textContent = scopeCss(CSS, ROOT_CLASS);
       document.head.appendChild(st);
     }
   },
@@ -859,7 +1476,8 @@ app.registerExtension({
       let gripDragging = false;
       /* Whether effects are drawn at all. Marks live in the sections either
          way; this only decides whether they are shown. */
-      const state = { sections: [], fx: true, trTo: "ko", trUnit: "sent" };
+      const state = { sections: [], fx: true, trTo: "en", trUnit: "sent",
+                      reader: null };
       node._leielPrompt = state;
 
       let ready = false;        // nothing saves before the stored layout loads
@@ -867,25 +1485,36 @@ app.registerExtension({
       const touch = () => { userTouched = true; };
 
       /* ---------- DOM ---------- */
+      /* ComfyUI pastes copied nodes when a paste reaches the canvas, and it
+         only steps aside for inputs and textareas. The section box is a
+         contenteditable div, so it was not recognised as somewhere text could
+         be going: the words landed in the box and the nodes copied an hour ago
+         landed on the graph beside it.
+
+         One listener on the node's root catches every field inside it - the
+         boxes, the title, find and replace, the reader panel - and stops the
+         event there. The listeners deeper in have already run by then, and the
+         browser still performs the paste, because stopping propagation is not
+         the same as preventing what the event was for. */
       const root = document.createElement("div");
-      root.className = "lvp-wrap";
+      root.className = "lvp-wrap " + ROOT_CLASS;
+      root.addEventListener("paste", e => e.stopPropagation());
       root.innerHTML = `
         <div class="lvp-bar">
-          <button class="lvp-btn fxb" title="Show every mark, and colour the structure. Press again to read the plain text - nothing is lost either way">STYLE</button>
+          <button class="lvp-btn reader" title="Which model reads your images, and how">Reader</button>
+          <button class="lvp-btn fxb" title="Show every mark, and colour the structure. Press again to read the plain text - nothing is lost either way">Style</button>
           <button class="lvp-btn brush" title="Format brush - click styled text to pick its formatting up, then drag over other text to apply it. Escape puts it down"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.6 1.9a2.2 2.2 0 0 1 3.1 3.1l-1.4 1.4 .7 .7-1.1 1.1-.7-.7-4.6 4.6-2.9 .8 .8-2.9 4.6-4.6-.7-.7 1.1-1.1 .7 .7z" fill="currentColor"/><circle class="drop" cx="3.2" cy="12.8" r="1.6" fill="currentColor"/></svg></button>
           <span class="lvp-sep"></span>
           <button class="lvp-btn add" title="Add a section">+</button>
-          <button class="lvp-btn find" title="Search, replace, and style every hit">SEARCH</button>
-          <button class="lvp-btn save" title="Layout snapshots - save and restore">SAVE</button>
+          <button class="lvp-btn find" title="Search, replace, and style every hit">Search</button>
+          <button class="lvp-btn save" title="Layout snapshots - save and restore">Save</button>
           <span class="lvp-sep"></span>
-          <span class="lvp-grp">ALIGN</span>
-          <button class="lvp-btn even" title="Give every section the same height">EVEN</button>
-          <button class="lvp-btn fit" title="Size every section to the text it holds - no scrollbar, no empty space">FIT</button>
-          <button class="lvp-btn compact" title="Shrink every section - press again to restore">MIN</button>
+          <button class="lvp-btn even" title="Give every section the same height">Even</button>
+          <button class="lvp-btn fit" title="Size every section to the text it holds - no scrollbar, no empty space">Fit</button>
+          <button class="lvp-btn compact" title="Shrink every section - press again to restore">Min</button>
           <span class="lvp-sep"></span>
-          <span class="lvp-grp">STEP</span>
-          <button class="lvp-btn hundo" title="Undo the last change in this node (Ctrl+Z)">UNDO</button>
-          <button class="lvp-btn hredo" title="Redo (Ctrl+Shift+Z)">REDO</button>
+          <button class="lvp-btn hundo" title="Undo the last change in this node (Ctrl+Z)">Undo</button>
+          <button class="lvp-btn hredo" title="Redo (Ctrl+Shift+Z)">Redo</button>
           <span style="flex:1"></span>
         </div>
         <div class="lvp-list"></div>
@@ -981,7 +1610,7 @@ app.registerExtension({
                                 .replace(/<span class="">([^<]*)<\/span>/g, "$1") }
           : x);
         w.value = JSON.stringify({ sections: clean, fx: state.fx, trTo: state.trTo,
-                                   trUnit: state.trUnit });
+                                   trUnit: state.trUnit, reader: state.reader });
         snapPush(clean, "auto");
       };
 
@@ -989,6 +1618,7 @@ app.registerExtension({
         if (!p) return false;
         if ("fx" in p) state.fx = p.fx !== false;
         if (typeof p.trTo === "string") state.trTo = p.trTo;
+        if (p.reader && typeof p.reader === "object") state.reader = p.reader;
         if (TR_UNITS.some(u => u[0] === p.trUnit)) state.trUnit = p.trUnit;
         state.sections = (p.sections || []).map(s => ({
           id: s.id ?? nextId(),
@@ -1006,6 +1636,19 @@ app.registerExtension({
              never does - it is remade on demand */
           tr: !!s.tr,
           trH: Math.max(TR_MIN, s.trH || 60),
+          /* the picture and which question to ask of it are part of the
+             document; the answer is not - it lands in the box as text */
+          imgOpen: !!s.imgOpen,
+          imgH: Math.max(IMG_MIN, s.imgH || IMG_H),
+          /* which side the picture is on, how wide it is there, and its shape
+             so the width can be worked out again after a mode change */
+          imgSide: !!s.imgSide,
+          imgLayLock: !!s.imgLayLock,
+          imgW: Math.max(IMG_SIDE_MIN, s.imgW || IMG_SIDE_W),
+          imgAR: Number(s.imgAR) > 0 ? Number(s.imgAR) : 0,
+          img: s.img || null,
+          q: s.q || "",
+          qText: s.qText || "",
         }));
         assignSlots();
         ready = true;
@@ -1108,6 +1751,9 @@ app.registerExtension({
          a text widget - that updates as you type, with no run needed. Values
          that only exist while the graph runs fall back to what the node
          reported after the last run. */
+      /* Which node feeds this input, and which of its outputs the wire left
+         from. The output matters: a node with eight of them is not telling you
+         the same thing on each one. */
       function upstreamOf(slot) {
         try {
           const inp = (node.inputs || []).find(x => x.name === `ext_${slot}`);
@@ -1122,19 +1768,52 @@ app.registerExtension({
               link = app.graph.links[up.inputs[0].link];   // hop through reroutes
               continue;
             }
-            return up;
+            return { node: up, out: link.origin_slot };
           }
         } catch (e) { /* ignore */ }
         return null;
       }
 
+      /* Another Prompt Composer upstream keeps every section in one
+         layout_json widget, so the section this wire actually came from has to
+         be picked out of it. Outputs run [all prompt, labeled prompt, out_1
+         ... out_N], so the slot number is the output index less one. */
+      function layoutSectionOf(up, out) {
+        try {
+          if (out === null || out === undefined || out < 2) return null;
+          const lw = (up.widgets || []).find(x => x.name === "layout_json");
+          const raw = lw && lw.value;
+          if (typeof raw !== "string" || !raw.trim()) return null;
+          const secs = JSON.parse(raw)?.sections;
+          if (!Array.isArray(secs)) return null;
+          const hit = secs.find(x => String(x?.slot) === String(out - 1));
+          if (!hit) return null;
+          return typeof hit.text === "string" ? hit.text : "";
+        } catch (e) { return null; }
+      }
+
       function liveExtText(slot) {
-        const up = upstreamOf(slot);
-        if (!up) return null;
+        const hop = upstreamOf(slot);
+        if (!hop) return null;
+        const up = hop.node;
         if (up.mode === 2 || up.mode === 4) return null;      // bypassed
-        /* prefer a long multiline widget, else the first plain string */
+
+        /* One of ours: read the one section, never the whole layout. This is
+           what was wrong - the rule below simply took the longest string
+           widget on the upstream node, and on a Composer the longest string by
+           a mile is layout_json, so wiring a single anchor across dropped the
+           entire serialised layout into the section. */
+        const one = layoutSectionOf(up, hop.out);
+        if (one !== null) return one;
+
+        /* A plain text node: one output, one string, and reading the widget
+           means it updates as you type with no run needed. That guess is only
+           safe when there is nothing else the output could be, so anything
+           with several outputs waits for the node to report after a run. */
+        if ((up.outputs || []).length > 1) return null;
         let best = null;
         for (const w of (up.widgets || [])) {
+          if (w?.name === "layout_json") continue;   // state, not prose
           const v = w?.value;
           if (typeof v !== "string" || !v.trim()) continue;
           if (!best || v.length > best.length) best = v;
@@ -2022,6 +2701,10 @@ app.registerExtension({
           if (!live.has(k)) trCache.delete(k);
         }
         hideMarkBar();
+        /* the previous pass's buttons are about to be thrown away; their
+           listeners would otherwise pile up on every render */
+        (node._lvaBusyOff || []).forEach(off => off());
+        node._lvaBusyOff = [];
         list.innerHTML = "";
         state.sections.forEach((s, i) => {
           const linked = extLinked(s);
@@ -2070,6 +2753,69 @@ app.registerExtension({
               <div class="lvp-tr-body"></div>
             </div>`;
 
+          const imgBox = () => {
+            const chosen = s.q || questionFor(s.title);
+            /* "Read only" is said once, above the four, instead of once inside
+               each of them. The heading carries the restriction for everything
+               under it, and what does not belong under it - the whole picture,
+               a question of your own - sits outside the group and is visibly
+               a different kind of thing. */
+            const opt = (k, v) =>
+              `<option value="${k}"${k === chosen ? " selected" : ""}>${escapeHtml(v.label)}</option>`;
+            const inGroup = LAYER_ORDER.filter(k => VLM.questions[k]);
+            const rest = Object.keys(VLM.questions).filter(k => !inGroup.includes(k));
+            const opts =
+              (inGroup.length
+                ? `<optgroup label="Read only">`
+                  + inGroup.map(k => opt(k, VLM.questions[k])).join("")
+                  + `</optgroup>`
+                : "")
+              + rest.map(k => opt(k, VLM.questions[k])).join("")
+              + `<option value="custom"${chosen === "custom" ? " selected" : ""}>Custom…</option>`;
+            /* And once more on the picture. The eye is on the photograph, not
+               on the control row above it, so the scope is stated where the
+               looking actually happens - the way a contact sheet is annotated
+               rather than the way a form is labelled. */
+            const scopeKey = s.q || questionFor(s.title);
+            const scopeName = { quality: "quality", subject: "subject",
+                                scene: "scene", camera: "camera",
+                                all: "whole picture" }[scopeKey];
+            const badge = s.img && scopeName
+              ? `<span class="lvr-badge">${layerGlyph(scopeKey)}`
+                + `<b>${escapeHtml(scopeName)}</b></span>`
+              : "";
+            const thumb = s.img
+              ? `<img src="${imgUrl(s.img)}" alt="">${badge}`
+              : `drop or paste an image here<br>or click to choose`;
+            /* one axis is fixed and the other follows the section: down the
+               page in ROW mode, across it in SIDE mode */
+            const geom = s.imgSide
+              ? `width:${imgSideWidth(s)}px`
+              : `height:${stripHeight(s)}px`;
+            return `
+            <div class="lvr-img" style="${geom}">
+              <div class="lvr-bar">
+                <span class="lvr-layers" title="${escapeHtml(layerTitle(s))}"
+                  >${layerGlyph(s.q || questionFor(s.title))}</span>
+                <select class="lvr-q" title="Reads only this layer of the picture and ignores the rest - the section's name picks it, and you can change it here">${opts}</select>
+                <button class="lvr-read"${s.img ? "" : " disabled"}>Read</button>
+                <button class="lvr-lay${s.imgSide ? "" : " on"}" data-side="0"
+                  title="Picture above the text">${ICON_ROW}</button>
+                <button class="lvr-lay${s.imgSide ? " on" : ""}" data-side="1"
+                  title="Picture beside the text">${ICON_SIDE}</button>
+                ${s.img ? `<button class="lvr-x" title="Take the image out">&#10005;</button>` : ""}
+                <span class="lvr-note"></span>
+              </div>
+              ${chosen === "custom"
+                ? `<textarea class="lvr-custom" spellcheck="false" placeholder="What should it describe?">${escapeHtml(s.qText || "")}</textarea>`
+                : ""}
+              <div class="lvr-stage">
+                <div class="lvr-drop" title="${s.img ? "Click to replace" : "Click to choose an image"}">${thumb}</div>
+              </div>
+            </div>
+            <div class="lvr-grip" title="Drag to resize the picture"></div>`;
+          };
+
           const split = paneSplit(s, linked);
           let extPane;
           if (linked && s.extMode === "replace") {
@@ -2081,6 +2827,13 @@ app.registerExtension({
           } else {
             extPane = editBox(split.edit) + (s.tr ? trBox(split.tr) : "");
           }
+          /* above the box: the picture is what you are reading from, and the
+             text it produces belongs underneath it */
+          if (s.imgOpen) {
+            extPane = `<div class="lvp-body${s.imgSide ? " side" : ""}">`
+                    + imgBox()
+                    + `<div class="lvp-panes">${extPane}</div></div>`;
+          }
 
           const el = document.createElement("div");
           el.className = "lvp-sec" + (s.on ? "" : " off") +
@@ -2089,7 +2842,7 @@ app.registerExtension({
                          (s.on && linked ? " ext-" + s.extMode : "");
           el.style.height = s.collapsed
             ? `${HEADER_H}px`
-            : `${HEADER_H + s.h + 6 + (note ? 15 : 0)}px`;
+            : `${HEADER_H + s.h + 6 + (note ? 15 : 0) + imgBlock(s)}px`;
           el.style.flex = "0 0 auto";
 
           el.innerHTML = `
@@ -2097,6 +2850,9 @@ app.registerExtension({
               <div class="lvp-tog ${s.on ? "on" : "byp"}"
                    title="${s.on ? "Click to bypass this section" : "Bypassed - click to enable"}"
                    >B</div>
+              <div class="lvp-imgb imgb${s.imgOpen ? " on" : ""}"
+                   title="Read a reference image into this section"
+                   >IMG</div>
               <div class="lvp-trb trb${s.tr ? " on" : ""}${linked ? " no" : ""}"
                    title="${linked
                      ? "not available while an input is wired into this section"
@@ -2108,15 +2864,20 @@ app.registerExtension({
               <input class="t" value="${escapeHtml(s.title)}" spellcheck="false"
                      ${s.on ? "" : "disabled"}>
               <span style="flex:1"></span>
-              <span class="lvp-cnt">${(s.text || "").length}</span>
               ${!s.on ? `<span class="lvp-badge" style="border-color:#a363a3;color:#c79ac7">BYPASSED</span>` : ""}
               ${s.on && linked ? `<span class="lvp-badge m-${s.extMode}"
                  title="Click to change how the connected input combines with this box"
                  >ext: ${s.extMode}</span>` : ""}
-              <span class="lvp-mini up" title="Move up">&#9650;</span>
-              <span class="lvp-mini down" title="Move down">&#9660;</span>
-              <span class="lvp-mini dup" title="Duplicate section">&#10697;</span>
-              <span class="lvp-mini del" title="Delete section">X</span>
+              <span class="lvp-cnt">${(s.text || "").length}</span>
+              <span class="lvp-mini ico fit1" title="Fit this section to its text"
+                    >${ICON_FIT}</span>
+              <span class="lvp-mini ico clr" title="Clear this section's text"
+                    >${ICON_CLEAR}</span>
+              <span class="lvp-mini ico dup" title="Duplicate section"
+                    >${ICON_DUP}</span>
+              <span class="lvp-mini ico up" title="Move up">${ICON_UP}</span>
+              <span class="lvp-mini ico down" title="Move down">${ICON_DOWN}</span>
+              <span class="lvp-mini ico del" title="Delete section">${ICON_DEL}</span>
               <span class="lvp-bar-sep"></span>
               <button class="lvp-tiny pre" title="Preset library for this section">PRESET</button>
             </div>
@@ -2238,6 +2999,207 @@ app.registerExtension({
             touch(); render(); save();
           });
 
+          const imgb = el.querySelector(".imgb");
+          if (imgb) {
+            imgb.addEventListener("click", () => {
+              s.imgOpen = !s.imgOpen;
+              if (s.imgOpen && !s.q) s.q = questionFor(s.title);
+              touch(); render(); save();
+            });
+          }
+
+          if (s.imgOpen) {
+            const drop = el.querySelector(".lvr-drop");
+            const qSel = el.querySelector(".lvr-q");
+            const readBtn = el.querySelector(".lvr-read");
+            const noteEl = el.querySelector(".lvr-note");
+            const custom = el.querySelector(".lvr-custom");
+            const xBtn = el.querySelector(".lvr-x");
+
+            const say = (msg, kind) => {
+              if (!noteEl) return;
+              noteEl.className = "lvr-note" + (kind ? " " + kind : "");
+              noteEl.textContent = msg;
+            };
+            if (noteEl && VLM.problem) say(VLM.problem, "err");
+
+            const take = async (file) => {
+              if (!file || !/^image\//.test(file.type)) return;
+              try {
+                say("uploading…", "busy");
+                s.img = await uploadImage(file);
+                const m = await measureImage(imgUrl(s.img), list.clientWidth || 400);
+                s.imgAR = m.ar;
+                s.imgH = m.h;
+                /* Portrait goes beside the text, landscape above it - but only
+                   until the button is pressed, after which the section keeps
+                   what was asked for no matter what is dropped on it next. */
+                if (!s.imgLayLock) s.imgSide = m.ar < 0.9;
+                if (s.imgSide) s.imgW = sideWidthFor(s, s.h + 6);
+                touch(); render(); save();
+              } catch (err) {
+                say(String(err.message || err), "err");
+              }
+            };
+
+            drop.addEventListener("click", () => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "image/*";
+              input.addEventListener("change", () => take(input.files[0]));
+              input.click();
+            });
+            /* A screenshot in the clipboard is the same thing as a dropped
+               file once it is out of the clipboard, so it goes down the same
+               path - upload, measure, choose an arrangement. */
+            const claim = () => { PASTE.last = { el: drop, take, say, drop }; };
+            drop.addEventListener("pointerenter", () => {
+              PASTE.hover = { el: drop, take, say, drop };
+            });
+            drop.addEventListener("pointerleave", () => {
+              if (PASTE.hover && PASTE.hover.el === drop) PASTE.hover = null;
+            });
+            drop.addEventListener("pointerdown", claim);
+
+            ["dragenter", "dragover"].forEach(k =>
+              drop.addEventListener(k, (e) => {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.add("over");
+              }));
+            ["dragleave", "dragend"].forEach(k =>
+              drop.addEventListener(k, () => drop.classList.remove("over")));
+            drop.addEventListener("drop", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              drop.classList.remove("over");
+              take(e.dataTransfer && e.dataTransfer.files[0]);
+            });
+
+            if (xBtn) xBtn.addEventListener("click", () => {
+              /* The strip was measured for a particular picture - a tall
+                 portrait can push it to 560px. Taking the picture out used to
+                 leave that height behind, so an empty strip sat there at the
+                 size of something that is no longer in it and crushed the
+                 writing box underneath. Back to the default until there is
+                 another picture to measure. */
+              s.img = null;
+              s.imgH = IMG_H;
+              s.imgAR = 0;
+              s.imgW = IMG_SIDE_W;
+              touch(); render(); save();
+            });
+
+            el.querySelectorAll(".lvr-lay").forEach((layBtn) => {
+              layBtn.addEventListener("pointerdown", e => e.stopPropagation());
+              layBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                const wantSide = layBtn.dataset.side === "1";
+                if (wantSide === !!s.imgSide) return;      // already there
+                s.imgSide = wantSide;
+                /* an explicit choice, so dropping another picture in must not
+                   quietly move it back */
+                s.imgLayLock = true;
+                if (s.imgSide) {
+                  /* the strip's own height becomes the body's height, so the
+                     picture comes out of the move about the size it went in */
+                  s.h = Math.max(s.h, stripHeight(s) - 6);
+                  s.imgW = sideWidthFor(s, s.h + 6);
+                }
+                touch(); render(); save();
+              });
+            });
+
+            qSel.addEventListener("change", () => {
+              s.q = qSel.value; touch(); render(); save();
+            });
+            qSel.addEventListener("pointerdown", e => e.stopPropagation());
+
+            if (custom) {
+              custom.addEventListener("input", () => { s.qText = custom.value; save(); });
+              ["keydown", "keyup", "keypress", "pointerdown"].forEach(k =>
+                custom.addEventListener(k, e => e.stopPropagation()));
+            }
+
+            const igrip = el.querySelector(".lvr-grip");
+            if (igrip) igrip.addEventListener("pointerdown", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              /* the grip is under the picture in ROW mode and beside it in
+                 SIDE mode, so it drags down the page or across it */
+              const side = !!s.imgSide;
+              const startY = side ? e.clientX : e.clientY;
+              const startH = side ? imgSideWidth(s)
+                                  : Math.max(IMG_MIN, s.imgH || IMG_H);
+              const zoom = uiScale(igrip);
+              gripDragging = true;
+              igrip.setPointerCapture(e.pointerId);
+              const move = (ev) => {
+                const moved = ((side ? ev.clientX : ev.clientY) - startY) / zoom;
+                if (side) s.imgW = Math.max(IMG_SIDE_MIN,
+                                            Math.min(IMG_SIDE_MAX, startH + moved));
+                else s.imgH = Math.max(IMG_MIN, startH + moved);
+                renderHeights();
+                fitNodeToContent();
+              };
+              const up = () => {
+                gripDragging = false;
+                igrip.releasePointerCapture(e.pointerId);
+                igrip.removeEventListener("pointermove", move);
+                igrip.removeEventListener("pointerup", up);
+                fitNodeToContent(); touch(); save();
+              };
+              igrip.addEventListener("pointermove", move);
+              igrip.addEventListener("pointerup", up);
+            });
+
+            /* Greyed out while ComfyUI is working, and back on its own the
+               moment the queue empties - nobody should have to remember to
+               come back and re-enable it. The "reading" flag keeps the two
+               reasons for being disabled from undoing each other. */
+            let reading = false;
+            const setReadState = () => {
+              if (!readBtn) return;
+              const blocked = BUSY.on && !reading;
+              readBtn.disabled = reading || BUSY.on || !s.img;
+              readBtn.classList.toggle("waiting", blocked);
+              readBtn.title = blocked
+                ? "ComfyUI is rendering - reading now would run the card out of "
+                  + "memory. This comes back when the queue is done."
+                : "";
+              if (blocked) say("waiting for the render to finish", "busy");
+              else if (noteEl && noteEl.textContent
+                       === "waiting for the render to finish") say("");
+            };
+            setReadState();
+            BUSY.listeners.add(setReadState);
+            /* the listener outlives the button unless it is taken off the set */
+            (node._lvaBusyOff || (node._lvaBusyOff = [])).push(
+              () => BUSY.listeners.delete(setReadState));
+
+            readBtn.addEventListener("click", async () => {
+              if (!s.img || BUSY.on) return;
+              const key = s.q || questionFor(s.title);
+              const question = key === "custom"
+                ? (s.qText || "").trim()
+                : ((VLM.questions[key] || {}).question || "");
+              if (!question) { say("There is no question to ask.", "err"); return; }
+
+              reading = true;
+              setReadState();
+              say("reading…", "busy");
+              try {
+                const text = await readImage(s.img, question, readerSettings());
+                if (!text) { say("The reader returned nothing.", "err"); return; }
+                s.text = normalizeText(text);
+                s.html = escapeHtml(s.text);
+                touch(); render(); save(); updateFoot();
+              } catch (err) {
+                say(String(err.message || err), "err");
+              } finally {
+                reading = false;
+                setReadState();
+              }
+            });
+          }
+
           const trb = el.querySelector(".trb");
           if (trb && !linked) {
             trb.addEventListener("click", () => {
@@ -2342,12 +3304,13 @@ app.registerExtension({
               e.preventDefault(); e.stopPropagation();
               const startY = e.clientY;
               const startTr = paneSplit(s, false).tr;
+              const zoom = uiScale(trDiv);
               gripDragging = true;
               trDiv.setPointerCapture(e.pointerId);
               /* this divider only moves the line inside the section - the
                  section keeps its height, so the node never moves */
               const move = (ev) => {
-                const want = startTr - (ev.clientY - startY);
+                const want = startTr - (ev.clientY - startY) / zoom;
                 s.trH = Math.round(Math.min(Math.max(TR_MIN, want),
                                              s.h - 4 - trEditFloor(s.h)));
                 renderHeights();
@@ -2367,6 +3330,29 @@ app.registerExtension({
           el.querySelector(".lvp-caret").addEventListener("click", () => {
             s.collapsed = !s.collapsed; touch(); render(); save();
           });
+          /* Empty this box and nothing else. The picture, the colour, the
+             title and the height all stay - it is the writing that is being
+             thrown away, and usually to write something else in its place. */
+          el.querySelector(".clr").addEventListener("click", () => {
+            if (!(s.text || "").length && !(s.html || "").length) return;
+            s.text = "";
+            s.html = "";
+            touch(); render(); save();
+          });
+
+          /* The toolbar's Fit, aimed at one section. Useful because the
+             toolbar one moves every section at once, and most of the time only
+             the one just written into is the wrong height. */
+          el.querySelector(".fit1").addEventListener("click", () => {
+            if (s.collapsed) return;
+            s.h = fitNeed(s, el);
+            delete s.prevH;
+            touch();
+            fitNodeToContent();
+            render();
+            save();
+          });
+
           el.querySelector(".dup").addEventListener("click", () => {
             if (state.sections.length >= MAX_SLOTS) return;
             const copy = JSON.parse(JSON.stringify(s));
@@ -2401,7 +3387,22 @@ app.registerExtension({
           grip.addEventListener("pointerdown", (e) => {
             e.preventDefault(); e.stopPropagation();
             const startY = e.clientY, startH = s.h;
+            const zoom = uiScale(grip);
             const paired = e.shiftKey;
+            /* Which pane the new height belongs to.
+
+               paneSplit gives the translation whatever trH says and the box
+               the rest, so dragging the section taller made the box taller and
+               left the translation exactly as cramped as it was - the reason
+               to have dragged in the first place. Every drag then had to be
+               done twice, once on the section and once on the divider.
+
+               With a translation open the section grip now moves trH by the
+               same amount, so the box keeps its size and the room goes where
+               it was wanted. Without one there is nothing to decide. */
+            const growsTr = !paired && !!s.tr && !extLinked(s);
+            const startTrH = Math.max(TR_MIN, Math.round(s.trH
+              || Math.round(Math.max(MIN_H + TR_MIN + 4, s.h) * 0.4)));
             const open = state.sections.filter(x => !x.collapsed);
             const at = open.indexOf(s);
             const mate = paired ? (open[at + 1] || open[at - 1] || null) : null;
@@ -2412,7 +3413,7 @@ app.registerExtension({
             grip.setPointerCapture(e.pointerId);
 
             const move = (ev) => {
-              const dy = ev.clientY - startY;
+              const dy = (ev.clientY - startY) / zoom;
               if (mate) {
                 /* whatever this box gains, the neighbour gives up */
                 const room = startH + mateH - MIN_H;
@@ -2422,6 +3423,11 @@ app.registerExtension({
                 renderHeights();
               } else {
                 s.h = Math.max(MIN_H, startH + dy);
+                if (growsTr) {
+                  /* the box keeps startH - startTrH - 4; the rest is the
+                     translation's, floored so it cannot be dragged away */
+                  s.trH = Math.max(TR_MIN, startTrH + (s.h - startH));
+                }
                 renderHeights();
                 fitNodeToContent();
               }
@@ -2455,8 +3461,23 @@ app.registerExtension({
         });
         updateFoot();
         refreshToolbar();
-        if (lastCount && state.sections.length < lastCount) refit = true;
-        lastCount = state.sections.length;
+        /* Deliberate shrinking has to take the node's height back, not hand
+           it round the sections.
+
+           snapNode's "node is taller than its contents" branch exists for a
+           node the user has dragged bigger: the spare room goes to the boxes
+           rather than snapping away under the hand. But closing a translation
+           pane shrinks the contents by exactly that much, so it hit the same
+           branch and dealt the height out to every section - press TR twice
+           and the whole node had grown. Deleting a section had the same shape,
+           which is what the count test was patching.
+
+           Measuring the content instead catches all of them: closing a
+           translation, closing a picture, moving one beside the text,
+           collapsing, deleting. */
+        const contentNow = contentHeight();
+        if (lastContent && contentNow < lastContent - 1) refit = true;
+        lastContent = contentNow;
         node.setDirtyCanvas(true, true);
         snapNode();
         requestAnimationFrame(snapNode);
@@ -2484,7 +3505,7 @@ app.registerExtension({
           if (s.collapsed) return n + HEADER_H + GAP;
           const linked = extLinked(s);
           const noteH = (!s.on || linked) ? 15 : 0;
-          return n + HEADER_H + s.h + 6 + noteH + GAP;
+          return n + HEADER_H + s.h + 6 + noteH + GAP + imgBlock(s);
         }, 0);
         return 34 + secs + 18;
       }
@@ -2516,7 +3537,7 @@ app.registerExtension({
          its neighbours, the node never came back down, and duplicate-then-
          delete inflated every remaining box a little more each time.
          Counting sections is enough to separate the two cases. */
-      let lastCount = 0;
+      let lastContent = 0;
       let refit = false;
 
       function onDragMove(e) {
@@ -2544,7 +3565,8 @@ app.registerExtension({
 
         const fixed = state.sections.reduce((n, x) => n + (x.collapsed
           ? HEADER_H + GAP
-          : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)), 0);
+          : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)
+            + imgBlock(x)), 0);
         const space = target - fixed - 52;          // toolbar + footer + padding
         const totalBase = open.reduce((n, [x, i]) => n + drag.base[i], 0) || 1;
 
@@ -2576,19 +3598,30 @@ app.registerExtension({
 
       /* Turn the node's current height into section heights. Used when a drag
          ends, and as a safety net if a resize slipped past the move handler. */
+      /* Returns whether it actually took the height up.
+
+         It used to return nothing, so a caller could not tell "I spread the
+         extra room over the boxes" from "there was nowhere to put it". On the
+         second one snapNode did nothing at all and the node kept its slack
+         for good, which is why the node could grow but never come back. */
       function adoptNodeHeight() {
         try {
           const chrome = node.computeSize()[1] - contentHeight();
+          /* the chrome is slots and padding: a small positive number. Negative
+             means the reported height is not the content height and every sum
+             below would be built on it */
+          if (chrome < 0) return false;
           const target = node.size[1] - chrome;
-          if (target < 60) return;
+          if (target < 60) return false;
           const open = [];
           state.sections.forEach((x, i) => { if (!x.collapsed) open.push(x); });
-          if (!open.length) return;
+          if (!open.length) return false;
           const fixed = state.sections.reduce((n, x) => n + (x.collapsed
             ? HEADER_H + GAP
-            : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)), 0);
+            : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)
+            + imgBlock(x)), 0);
           const space = target - fixed - 52;
-          if (space < open.length * MIN_H) return;
+          if (space < open.length * MIN_H) return false;
           const total = open.reduce((n, x) => n + x.h, 0) || 1;
           let left = space;
           open.forEach((x, k) => {
@@ -2596,7 +3629,8 @@ app.registerExtension({
             x.h = Math.max(MIN_H, want);
             left -= x.h;
           });
-        } catch (e) { /* ignore */ }
+          return true;
+        } catch (e) { return false; }
       }
 
       /* move stays in the capture phase so the sections shrink before
@@ -2645,7 +3679,21 @@ app.registerExtension({
           if (!el) return;
           if (s.collapsed) { el.style.height = `${HEADER_H}px`; return; }
           const noteH = el.querySelector(".lvp-note") ? 15 : 0;
-          el.style.height = `${HEADER_H + s.h + 6 + noteH}px`;
+          /* the strip is part of the section's height: leaving it out is what
+             made the picture vanish the moment a section was resized */
+          el.style.height = `${HEADER_H + s.h + 6 + noteH + imgBlock(s)}px`;
+          const img = el.querySelector(".lvr-img");
+          if (img) {
+            /* clear the other axis, or a strip that has been both ways keeps
+               the size it had in the mode it is no longer in */
+            if (s.imgSide) {
+              img.style.height = "";
+              img.style.width = `${imgSideWidth(s)}px`;
+            } else {
+              img.style.width = "";
+              img.style.height = `${stripHeight(s)}px`;
+            }
+          }
           /* the inner panes have to follow, or the extra height just shows up
              as a black gap below the box */
           const split = paneSplit(s, !!el.querySelector(".lvp-ext"));
@@ -3442,10 +4490,44 @@ app.registerExtension({
         return h;
       }
 
-      /* A ceiling, so one very long section cannot swallow the screen. The
-         widget itself is capped at 2400px total, and a section past this is
-         better left scrolling than made into a node nobody can see around. */
+      /* A ceiling per section, so one very long piece of text cannot swallow
+         the screen: past this it is better left scrolling than made into a
+         node nobody can see around. */
       const FIT_MAX = 600;
+      /* And a ceiling on what one press of Fit may produce in total. This used
+         to be phrased as the widget's own cap - the widget has none any more,
+         because that cap was what made the node run away. It is a limit on
+         what this button does, nothing more, and it steps aside when the
+         pictures already account for the room. */
+      const FIT_TOTAL_MAX = 2400;
+
+      /* The height one section wants for the text it is holding.
+         Split out so the button in a section header and the one in the toolbar
+         cannot drift apart - the same measurement, applied to one or to all. */
+      function fitNeed(s, el) {
+        const ed = paneNeed(el.querySelector(".lvp-ta"));
+        const ex = paneNeed(el.querySelector(".lvp-ext-body"));
+        const tr = paneNeed(el.querySelector(".lvp-tr-body"));
+        let need;
+        if (ex !== null && ed !== null) {
+          /* both panes are on screen: paneSplit gives the wired text 40% and
+             the box the rest less a 4px divider, so invert that and take
+             whichever pane demands the taller section */
+          need = Math.max((ed + 4) / 0.6, ex / 0.4);
+        } else if (ed === null) {
+          need = ex;                                     // wired text replaces it
+        } else if (tr !== null) {
+          /* box plus translation: the divider between them is a fixed 4px,
+             so each pane simply gets what it asks for */
+          const th = Math.min(Math.round(FIT_MAX * 0.6), Math.max(TR_MIN, tr));
+          s.trH = th;
+          need = Math.max(MIN_H, ed) + th + 4;
+        } else {
+          need = ed;                                     // plain box
+        }
+        if (!need) need = s.h;                             // nothing to measure
+        return Math.min(FIT_MAX, Math.max(MIN_H, Math.ceil(need)));
+      }
 
       root.querySelector(".fit").addEventListener("click", () => {
         const els = list.children;
@@ -3456,38 +4538,18 @@ app.registerExtension({
         if (!open.length) return;
 
         const want = new Map();
-        for (const [s, el] of open) {
-          const ed = paneNeed(el.querySelector(".lvp-ta"));
-          const ex = paneNeed(el.querySelector(".lvp-ext-body"));
-          const tr = paneNeed(el.querySelector(".lvp-tr-body"));
-          let need;
-          if (ex !== null && ed !== null) {
-            /* both panes are on screen: paneSplit gives the wired text 40% and
-               the box the rest less a 4px divider, so invert that and take
-               whichever pane demands the taller section */
-            need = Math.max((ed + 4) / 0.6, ex / 0.4);
-          } else if (ed === null) {
-            need = ex;                                   // wired text replaces it
-          } else if (tr !== null) {
-            /* box plus translation: the divider between them is a fixed 4px,
-               so each pane simply gets what it asks for */
-            const th = Math.min(Math.round(FIT_MAX * 0.6), Math.max(TR_MIN, tr));
-            s.trH = th;
-            need = Math.max(MIN_H, ed) + th + 4;
-          } else {
-            need = ed;                                   // plain box
-          }
-          if (!need) need = s.h;                           // nothing to measure
-          want.set(s, Math.min(FIT_MAX, Math.max(MIN_H, Math.ceil(need))));
-        }
+        for (const [s, el] of open) want.set(s, fitNeed(s, el));
 
-        /* If the fitted total would run past the widget's own 2400px ceiling
-           the surplus is simply clipped, so scale back proportionally instead
-           - every section still keeps its share of the room. */
+        /* If the fitted total would run past that ceiling, scale back
+           proportionally rather than letting one press produce a node the
+           length of a page - every section still keeps its share of the room.
+           When the pictures alone have used the budget there is nothing left
+           to scale, and the guard below leaves the fitted heights alone. */
         const fixed = state.sections.reduce((n, x) => n + (x.collapsed
           ? HEADER_H + GAP
-          : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)), 0);
-        const budget = 2400 - 34 - 18 - fixed;
+          : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)
+            + imgBlock(x)), 0);
+        const budget = FIT_TOTAL_MAX - 34 - 18 - fixed;
         let total = 0;
         for (const h of want.values()) total += h;
         if (total > budget && budget >= open.length * MIN_H) {
@@ -3507,9 +4569,34 @@ app.registerExtension({
       /* Shrink everything down to get the node out of the way, remembering the
          heights so the same button puts them back. */
       const COMPACT_H = 46;
+      /* How small this particular section may go.
+
+         Above the text the strip carries its own height, so MIN never touched
+         the picture and a landscape reference came through the shrink intact.
+         Beside the text there is no separate height to carry: the picture and
+         the box share the section's, so squeezing the section to 46px squeezed
+         the picture out of existence. Same button, opposite outcome, purely
+         because of which way the strip was facing.
+
+         The floor is therefore worked out per section: with a picture beside
+         the text, the section may only come down to what that picture needs at
+         its current width. Both arrangements now keep their reference and give
+         up the writing space, which is what MIN was for. */
+      function compactHeightFor(sec) {
+        if (!sec.imgOpen || !sec.imgSide || !sec.img) return COMPACT_H;
+        const ar = sec.imgAR > 0 ? sec.imgAR : 1;
+        const stage = Math.max(40,
+          Math.round((imgSideWidth(sec) - SIDE_PAD_X) / ar));
+        return Math.max(COMPACT_H,
+                        stage + SIDE_CHROME_Y + customExtra(sec) - 6);
+      }
+      /* Measured against each section's own floor, or a section holding a tall
+         picture would never count as shrunk and the button would stay lit with
+         no way to press it back. */
       function isCompact() {
         const open = state.sections.filter(x => !x.collapsed);
-        return open.length > 0 && open.every(x => x.h <= COMPACT_H + 2);
+        return open.length > 0
+          && open.every(x => x.h <= compactHeightFor(x) + 2);
       }
       root.querySelector(".compact").addEventListener("click", () => {
         const open = state.sections.filter(x => !x.collapsed);
@@ -3520,7 +4607,7 @@ app.registerExtension({
           }
         } else {
           for (const x of state.sections) {
-            if (!x.collapsed) { x.prevH = x.h; x.h = COMPACT_H; }
+            if (!x.collapsed) { x.prevH = x.h; x.h = compactHeightFor(x); }
           }
         }
         /* The node has to come down BEFORE the redraw. render() runs the size
@@ -3619,7 +4706,7 @@ app.registerExtension({
         hit <code>Escape</code>, so one pick can be applied all over. It carries
         bold, italic, underline, key, highlight, colour and size - not the
         paragraph dot, and not search hits.</p>
-        <p><b>TR</b>, the yellow switch beside the bypass square, opens a
+        <p><b>TR</b>, the green switch beside the bypass square, opens a
         translation of that box
         underneath it. It is a reading aid only: it is never saved with the
         layout and never reaches the model. Hovering a piece of text on either side lights
@@ -3656,6 +4743,29 @@ app.registerExtension({
         <code>[X]</code>, <code>(X)</code>, <code>&#12304;X&#12305;</code>, or a
         line in capitals. Inside a sentence the same brackets stay prompt
         syntax.</p>
+
+        <h5>IMG &mdash; reading a picture</h5>
+        <p><b>IMG</b> in a section header opens a strip for the picture. Drop a
+        reference image on the square - or copy a screenshot and paste it, with
+        the pointer over the strip you mean - then choose which part of it to
+        read and press <b>Read</b>. The answer replaces the text in that
+        section.</p>
+        <p>A landscape picture opens above the box and a portrait one beside
+        it, which is where each has room. The two small squares in the strip
+        &mdash; bars lying down, bars standing up &mdash; move it the other way, and once you have pressed it that section keeps
+        what you chose whatever you drop on it next. The grip resizes the
+        picture in either arrangement &mdash; downwards above the box, sideways
+        beside it.</p>
+        <p>The question is chosen for you from the section's name &mdash; a
+        section called <i>Camera Anchor</i> opens on the camera question, which
+        describes angle, distance, depth of field and light and leaves the
+        subject and the setting alone. Pick a different one, or
+        <b>Custom&hellip;</b> to write your own. Four images in four sections,
+        each read for one layer, is what this node is for.</p>
+        <p><b>READER</b> in the toolbar chooses the model, the quantization and
+        how long an answer may run, and unloads the model when you want the
+        memory back. Reading needs <code>transformers</code> installed in the
+        environment ComfyUI runs in; the button says so if it is missing.</p>
 
         <h5>SEARCH</h5>
         <p>Typing searches as you go. <b>FIND</b> and the arrows walk the hits
@@ -3697,6 +4807,186 @@ app.registerExtension({
         and says which is in force.</p>`;
 
       let helpBox = null;
+      function readerSettings() {
+        const r = state.reader || {};
+        const sug = VLM.suggested || {};
+        /* Only the blanks are filled in. Once a value is in state.reader it is
+           the user's, and stays theirs however much memory the card has. */
+        return {
+          model: r.model || sug.model || VLM.defaultModel,
+          quant: r.quant || sug.quant || "none",
+          tokens: Number(r.tokens) || VLM.defaultTokens,
+          idle: r.idle === undefined || r.idle === null
+            ? (sug.idle_minutes === undefined ? 2 : sug.idle_minutes)
+            : Number(r.idle),
+        };
+      }
+
+      /* What the card is holding, drawn on its own so it can be redrawn.
+         It used to be built once with the panel and then never touched, so it
+         still said "No model in memory" while the model was plainly loaded and
+         the reading was running. */
+      function memoryLines() {
+        /* Two lines that were saying different kinds of thing in the same
+           voice. The suggestion is a one-off remark about the card; what is in
+           memory changes minute by minute and is the reason anyone opens this
+           panel. They are no longer the same weight.
+
+           And the suggestion only appears where it has something to add. It
+           used to sit there reading "unload after 3 min" while the box above
+           said 2, in the same colour, which reads as the setting not having
+           taken rather than as advice being declined. Now silence means the
+           settings match the advice, and the line appearing means they do
+           not - which is the only time it is worth a word. */
+        const sug = VLM.suggested;
+        const cur = readerSettings();
+        const differs = [];
+        if (sug) {
+          if (sug.quant && sug.quant !== cur.quant) differs.push(sug.quant);
+          if (sug.idle_minutes !== undefined
+              && Number(sug.idle_minutes) !== Number(cur.idle)) {
+            differs.push(`unloading after ${sug.idle_minutes} min`);
+          }
+        }
+        const advice = differs.length
+          ? `<p class="vram advice">${escapeHtml(
+              `${sug.note} - ${differs.join(" and ")} suggested`)}</p>`
+          : "";
+        const held = VLM.loaded
+          ? `<p class="vram held">Holding ${escapeHtml(String(VLM.loaded).split("/").pop())}`
+            + `${VLM.loadedQuant ? ` at ${escapeHtml(VLM.loadedQuant)}` : ""}`
+            + ` in memory now</p>`
+          : `<p class="vram idle">No model in memory</p>`;
+        return advice + held;
+      }
+
+      let readerBox = null;
+      function closeReader() {
+        if (!readerBox) return;
+        if (readerBox.__place) window.removeEventListener("resize", readerBox.__place);
+        if (readerBox.__raf) cancelAnimationFrame(readerBox.__raf);
+        if (readerBox.__away)
+          document.removeEventListener("pointerdown", readerBox.__away, true);
+        if (readerBox.__poll) clearInterval(readerBox.__poll);
+        readerBox.remove();
+        readerBox = null;
+      }
+      root.querySelector(".reader").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (readerBox) { closeReader(); return; }
+        const cur = readerSettings();
+        const box = document.createElement("div");
+        box.className = "lvr-panel " + ROOT_CLASS;
+        box.innerHTML = `
+          <h4>Image reader</h4>
+          ${VLM.problem ? `<p class="lvr-warn">${escapeHtml(VLM.problem)}</p>` : ""}
+          <label>Model</label>
+          <select class="m">${VLM.models.map(m =>
+            `<option value="${m}"${m === cur.model ? " selected" : ""}>${m.split("/").pop()}</option>`
+          ).join("")}</select>
+          <label>Quantization</label>
+          <select class="q">${VLM.quants.map(q =>
+            `<option value="${q}"${q === cur.quant ? " selected" : ""}>${q}</option>`
+          ).join("")}</select>
+          <label>Longest answer (tokens)</label>
+          <input class="t" type="number" min="32" max="1024" step="10" value="${cur.tokens}">
+          <label>Unload after idle (minutes, 0 = never)</label>
+          <input class="i" type="number" min="0" max="120" step="1" value="${cur.idle}">
+          <div class="mem">${memoryLines()}</div>
+          <div class="foot">
+            <button class="lvp-btn drop">Unload model</button>
+            <button class="lvp-btn done">Close</button>
+          </div>`;
+        document.body.appendChild(box);
+        const btn = root.querySelector(".reader");
+        const place = () => {
+          const r = btn.getBoundingClientRect();
+          const w = box.offsetWidth || 420;
+          const h = box.offsetHeight || 220;
+          /* under the button, and only pushed back when the window would
+             otherwise cut it off */
+          box.style.left = Math.round(Math.max(
+            8, Math.min(r.left, window.innerWidth - w - 8))) + "px";
+          box.style.top = Math.round(r.bottom + 6 + h < window.innerHeight
+            ? r.bottom + 6
+            : Math.max(8, r.top - h - 6)) + "px";
+        };
+        place();
+        window.addEventListener("resize", place);
+        box.__place = place;
+
+        /* The panel lives on the page, the button lives on a canvas that pans
+           and zooms underneath it. Nothing fires an event when the graph is
+           dragged, so the anchor is watched instead and the panel is moved
+           only when it has actually shifted. When the button is no longer
+           laid out at all - node collapsed, scrolled away, deleted - there is
+           nothing left to anchor to and the panel closes rather than parking
+           itself in the top corner. */
+        let mark = "";
+        const follow = () => {
+          if (!readerBox) return;
+          const r = btn.getBoundingClientRect();
+          if (!r.width || !btn.isConnected) { closeReader(); return; }
+          const key = Math.round(r.left) + "," + Math.round(r.bottom);
+          if (key !== mark) { mark = key; place(); }
+          box.__raf = requestAnimationFrame(follow);
+        };
+        box.__raf = requestAnimationFrame(follow);
+
+        /* click anywhere else and it goes away, like every other popover on
+           the canvas */
+        const away = (ev) => {
+          if (box.contains(ev.target) || btn.contains(ev.target)) return;
+          closeReader();
+        };
+        document.addEventListener("pointerdown", away, true);
+        box.__away = away;
+
+        /* The model comes and goes while the panel is open - a reading loads
+           it, the idle timer drops it - so the panel asks rather than
+           remembering. Only while it is open, and it stops with it. */
+        const drawMemory = () => {
+          const mem = readerBox && readerBox.querySelector(".mem");
+          if (mem) mem.innerHTML = memoryLines();
+        };
+        const refreshMemory = async () => {
+          const before = `${VLM.loaded}|${VLM.loadedQuant}`;
+          try { await vlmState(); } catch (e) { return; }
+          if (!readerBox) return;
+          if (`${VLM.loaded}|${VLM.loadedQuant}` === before) return;
+          drawMemory();
+        };
+        box.__poll = setInterval(refreshMemory, 1500);
+        refreshMemory();
+
+        readerBox = box;
+
+        const keep = () => {
+          const idleRaw = box.querySelector(".i").value;
+          state.reader = {
+            model: box.querySelector(".m").value,
+            quant: box.querySelector(".q").value,
+            tokens: Number(box.querySelector(".t").value) || VLM.defaultTokens,
+            /* 0 is a real choice here - never unload - so an empty box falls
+               back to the suggestion while a typed 0 is kept */
+            idle: idleRaw === "" ? null : Math.max(0, Math.min(120, Number(idleRaw) || 0)),
+          };
+          save();
+        };
+        box.querySelectorAll("select,input").forEach(el =>
+          el.addEventListener("change", () => { keep(); drawMemory(); }));
+        box.querySelector(".drop").addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          try { await api.fetchApi("/leiel_vpc/vlm/unload", { method: "POST" }); }
+          catch (err) { /* nothing loaded is not a problem */ }
+        });
+        box.querySelector(".done").addEventListener("click", (ev) => {
+          ev.stopPropagation(); keep(); closeReader();
+        });
+        ["keydown", "keyup", "keypress", "pointerdown", "wheel"].forEach(k =>
+          box.addEventListener(k, ev => ev.stopPropagation()));
+      });
+
       function closeHelp() {
         if (helpBox) { helpBox.remove(); helpBox = null; }
       }
@@ -3704,7 +4994,7 @@ app.registerExtension({
         e.stopPropagation();
         if (helpBox) { closeHelp(); return; }
         const box = document.createElement("div");
-        box.className = "lvp-help";
+        box.className = "lvp-help " + ROOT_CLASS;
         box.innerHTML = HELP +
           '<div class="close"><button class="lvp-btn hclose">Close</button></div>';
         /* The button sits at the bottom of the node, so the panel opens above
@@ -3776,8 +5066,24 @@ app.registerExtension({
          and the node is then snapped to that total - which is the only way to
          guarantee no dead space under the last box. Depends on nothing but
          the section heights. */
+      /* No ceiling.
+
+         There used to be a Math.min(2400) here, and it was the cause of the
+         runaway. Everything that sizes this node is derived from the gap
+         between what this reports and what the sections actually need:
+         adoptNodeHeight works out the chrome as computeSize - contentHeight.
+         While the content stayed under the cap that gap was a small positive
+         constant. Four pictures put the content at roughly 2700, the reported
+         height stuck at 2400, and the gap went negative - so the node was told
+         it had 300px more room than it had, handed that room to the boxes,
+         grew the content further, and came back 200ms later to do it again.
+         The cap could never be reached, so it never stopped.
+
+         Four full-height references genuinely are a very tall node. Saying so
+         is the honest answer; MIN and collapse are there for when it is too
+         tall to work in. */
       w.computeSize = function (width) {
-        return [width, Math.min(2400, Math.max(120, contentHeight()))];
+        return [width, Math.max(120, contentHeight())];
       };
 
       /* Keep the node exactly as tall as its contents.
@@ -3811,9 +5117,14 @@ app.registerExtension({
             node.setDirtyCanvas(true, true);
           } else if (diff > 8) {
             /* taller than its contents - give the extra to the sections
-               instead of shrinking the node back under the user */
-            adoptNodeHeight();
-            renderHeights();
+               instead of shrinking the node back under the user. When there is
+               nowhere to put it, snap the node down instead of leaving dead
+               space under the last box for ever. */
+            if (adoptNodeHeight()) renderHeights();
+            else {
+              node.setSize([Math.max(node.size[0], 420), want]);
+              node.setDirtyCanvas(true, true);
+            }
           } else if (Math.abs(diff) > 1) {
             node.setSize([Math.max(node.size[0], 420), node.computeSize()[1]]);
             node.setDirtyCanvas(true, true);
@@ -3858,6 +5169,9 @@ app.registerExtension({
           ready = true;
         }
         render();
+        /* The question list and the model names come from the backend; the
+           panel and the per-section dropdowns are redrawn once they land. */
+        (VLM.ready ? Promise.resolve(VLM) : vlmState()).then(() => render());
       }, 60);
 
       const origSerialize = node.onSerialize;
@@ -3884,6 +5198,9 @@ app.registerExtension({
         if (!node.graph) {
           clearInterval(iv);
           VPC_NODES.delete(String(node.id));
+          /* a panel anchored to a node that no longer exists has nothing to
+             sit under */
+          try { closeReader(); closeHelp(); } catch (e) { /* ignore */ }
           try { node._lvpDragCleanup?.(); } catch (e) { /* ignore */ }
           return;
         }

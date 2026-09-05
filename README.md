@@ -8,18 +8,22 @@ same chips, the same `?` button that opens a manual on the node itself.
 
 ### [Visual Prompt Composer](docs/prompt-composer.md)
 
-Turns a prompt from a wall of text into a set of parts you can see, switch off,
-rearrange and reuse.
+Reads a reference image into one layer of a prompt — quality, subject, scene or
+camera — and leaves the other three to their own references. Four pictures, four
+layers, one prompt.
 
-A long prompt is a record of many decisions that all look alike once it is
-saved. Styling gives it landmarks: you find the part you are changing instead of
-rereading everything, you can see which sentences are doing the work, and you
-can leave notes to yourself that are still there next week. None of it reaches
-the model — the styling is metadata, the output is plain text — so it costs
-nothing to annotate as much as you like.
+A prompt usually arrives as one long string with nothing in it to hold on to, so
+it gets pasted in and run, and when the result is wrong it gets replaced rather
+than examined. Here it has parts. Each part can be read out of its own
+reference, marked up while you read it, and checked against a translation
+beside it, so you can say which line is observation and which is the model's
+invention, and rewrite the second.
 
-Copy formatting between sections with the brush, save any part as a preset, and
-read any of it back in 26 languages.
+Styling costs nothing at generation time — it is metadata, the output is plain
+text — so annotate as freely as you like. Copy formatting between sections with
+the brush, save any part as a preset, and read any of it back in 26 languages.
+
+Reading a reference image needs `transformers`; everything else here does not.
 
 ![Visual Prompt Composer](docs/images/prompt-composer/01-overview.png)
 
@@ -93,7 +97,21 @@ cd ComfyUI/custom_nodes
 git clone https://github.com/StudioLeiel/comfyui-visual-suite
 ```
 
-Restart ComfyUI. No dependencies beyond what ComfyUI already ships.
+Restart ComfyUI. Nothing is installed beyond what ComfyUI already ships, and
+there is no `requirements.txt` on purpose - the pack stays as light to install
+as it has always been.
+
+One optional feature asks for more. Reading a reference image in the Prompt
+Composer needs `transformers`, which is a large install and is therefore left to
+you:
+
+```bash
+pip install transformers accelerate
+```
+
+Run that in the environment ComfyUI runs in if you want it. Every other node,
+and every other part of the composer, works without it; the Read button says so
+plainly rather than failing quietly.
 
 ## How the pack is put together
 
@@ -133,6 +151,12 @@ it. The ids are invisible unless you read the workflow JSON.
 Visual Crop and Visual Filename Manager were published separately first, as
 `comfyui_visual_crop` and `comfyui-visual-filename-manager`. Both are folded
 into this pack; the old repositories are archived and point here.
+
+The image reader in the Prompt Composer was tried out the same way, as
+`comfyui-visual-atelier`, so that a multi-gigabyte dependency could be lived
+with for a while before being asked of anyone else. It is now part of the
+composer and that repository is archived too. The node id, the routes and the
+stored presets are unchanged, so workflows made with either carry on working.
 
 ## Licence
 

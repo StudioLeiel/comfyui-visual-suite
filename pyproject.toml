@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-visual-suite"
-version = "1.0.1"
-description = "Six visual nodes for ComfyUI: prompt composer, series lab, filename manager, latent size picker, node bag and image crop."
+version = "1.1.0"
+description = "Six visual nodes for ComfyUI: prompt composer with image reading, series lab, filename manager, latent size picker, node bag and image crop."
 license = { file = "LICENSE" }
 requires-python = ">=3.8"
 dependencies = []

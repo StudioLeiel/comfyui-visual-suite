@@ -1462,12 +1462,32 @@ app.registerExtension({
         });
       }
 
+      /* What the graph is made of, cheaply.
+
+         The palette is a reading of the workflow, so it goes stale the moment
+         a node is added or taken away - and nothing was watching for that. The
+         timer below only looked at the style names and the enabled LoRAs, both
+         of which can be unchanged while the graph around them has grown a
+         sampler. ReScan existed to paper over exactly this.
+
+         Counting ids and types is cheap enough to do twice a second on a large
+         workflow, where re-reading every widget is not. */
+      let lastGraphSig = null;
+
+      function graphSignature() {
+        const list = node.graph?._nodes || [];
+        let sig = list.length + "|";
+        for (const n of list) sig += n.id + ":" + (n.comfyClass || n.type || "") + ",";
+        return sig;
+      }
+
       function refresh() {
         syncTextInputs();
         labelInputs();
         catalog = scanGraph(node);
         renderPalette();
         renderZones();
+        lastGraphSig = graphSignature();
       }
 
       root.querySelector(".leiel-tag").addEventListener("click", () => {
@@ -1981,6 +2001,16 @@ app.registerExtension({
       const iv = setInterval(() => {
         if (!node.graph) { clearInterval(iv); STUDIO_NODES.delete(String(node.id)); return; }
         if (editing || !ready) return;
+        /* a node added or removed anywhere in the workflow - checked first,
+           because it changes what every other reading below is made of */
+        const gsig = graphSignature();
+        if (gsig !== lastGraphSig) {
+          lastGraphSig = gsig;
+          catalog = scanGraph(node);
+          renderPalette();
+          renderZones();
+          return;
+        }
         const st = namesOnly();
         if (st !== lastStyle) { lastStyle = st; renderZones(); return; }
         /* rebuild the palette when the enabled LoRAs change */
