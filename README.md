@@ -8,22 +8,20 @@ same chips, the same `?` button that opens a manual on the node itself.
 
 ### [Visual Prompt Composer](docs/prompt-composer.md)
 
-Reads a reference image into one layer of a prompt — quality, subject, scene or
-camera — and leaves the other three to their own references. Four pictures, four
-layers, one prompt.
+A prompt editor: named sections you can switch off, reorder, mark up and reuse.
 
 A prompt usually arrives as one long string with nothing in it to hold on to, so
-it gets pasted in and run, and when the result is wrong it gets replaced rather
-than examined. Here it has parts. Each part can be read out of its own
-reference, marked up while you read it, and checked against a translation
-beside it, so you can say which line is observation and which is the model's
-invention, and rewrite the second.
+it gets pasted in and run, and when the result is wrong the whole thing is
+replaced rather than examined. Here it has parts. Bypass one section to find out
+what it was contributing without deleting it. Colour a clause you are unsure
+about and it is still coloured next week. Save the part that worked and load it
+into the next workflow. Read any of it back in 26 languages to check it says
+what you meant. None of the styling reaches the model — it is metadata, the
+output is plain text — so annotate as freely as you like.
 
-Styling costs nothing at generation time — it is metadata, the output is plain
-text — so annotate as freely as you like. Copy formatting between sections with
-the brush, save any part as a preset, and read any of it back in 26 languages.
-
-Reading a reference image needs `transformers`; everything else here does not.
+And when you want it, a reader fills a section from a reference image, one layer
+at a time: quality from one picture, subject from another, scene from a third,
+camera from a fourth. That part needs `transformers`; nothing else here does.
 
 ![Visual Prompt Composer](docs/images/prompt-composer/01-overview.png)
 
