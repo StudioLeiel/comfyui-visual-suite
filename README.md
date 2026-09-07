@@ -158,4 +158,12 @@ stored presets are unchanged, so workflows made with either carry on working.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+You may use, modify and redistribute this pack, including commercially. If you
+redistribute it, keep the copyright and licence notices, state what you changed,
+and pass on the NOTICE file. Contributors grant a patent licence for their own
+contributions, which is the main thing Apache 2.0 adds over a shorter permissive
+licence.
+
+Using the nodes needs nothing from you at all: install and work.
