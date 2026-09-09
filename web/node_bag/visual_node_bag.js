@@ -1960,10 +1960,19 @@ function installListeners() {
                 } else {
                     // A name can be clicked to rename or dragged to reorder;
                     // which one it is only becomes clear on the next move.
+                    // The bag's own name is a rename and nothing else. It
+                    // used to arrive here with rename false, because only a
+                    // shelf name set that flag, so clicking the title started
+                    // a reorder of a shelf that did not exist and the name
+                    // could never be typed. The grey placeholder was the same
+                    // fact from the other side: nothing was ever written, so
+                    // properties.name stayed empty and the header kept drawing
+                    // its prompt instead of a name in yellow.
                     shelfPending = {
                         bag,
                         index: ui.index,
-                        rename: ui.kind === "shelf-name",
+                        rename: ui.kind === "shelf-name" || ui.kind === "bagName",
+                        bagName: ui.kind === "bagName",
                         rect: ui.rect,
                         client: [event.clientX, event.clientY],
                     };
@@ -2020,8 +2029,15 @@ function installListeners() {
                 const dx = event.clientX - shelfPending.client[0];
                 const dy = event.clientY - shelfPending.client[1];
                 if (dx * dx + dy * dy > DRAG_SLOP * DRAG_SLOP) {
-                    shelfDrag = shelfPending;
-                    shelfPending = null;
+                    if (shelfPending.bagName) {
+                        // The header is one line; there is nothing to reorder
+                        // it among. A wobble while clicking should not turn
+                        // into a drag of a shelf that does not exist.
+                        shelfPending = null;
+                    } else {
+                        shelfDrag = shelfPending;
+                        shelfPending = null;
+                    }
                 }
             }
             if (shelfDrag) {
@@ -2070,9 +2086,15 @@ function installListeners() {
             return;
         }
         if (shelfPending) {
-            const { bag, index, rename, rect } = shelfPending;
+            const { bag, index, rename, rect, bagName } = shelfPending;
             shelfPending = null;
-            if (rename) {
+            if (rename && bagName) {
+                // Empty is allowed here: the header has its own prompt to fall
+                // back to, where a shelf would be left with no label at all.
+                editInPlace(bag, rect, bag.properties.name || "", (value) => {
+                    bag.properties.name = value.trim();
+                });
+            } else if (rename) {
                 const shelves = shelfNames(bag);
                 editInPlace(bag, rect, shelves[index] || "", (value) => {
                     shelves[index] = value.trim() || `shelf ${index + 1}`;

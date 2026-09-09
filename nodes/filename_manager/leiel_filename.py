@@ -45,6 +45,8 @@ class _AnyType(str):
 
 ANY = _AnyType("*")
 
+MAX_TEXT_INPUTS = 10
+
 # ----------------------------------------------------------------------
 # Execution start time
 # ----------------------------------------------------------------------
@@ -659,6 +661,25 @@ def _resolve_zone(chips, idx, prompt, missing, sep, snap=None,
 # ======================================================================
 # NODE 4 : Visual Filename Manager - the drag and drop UI
 # ======================================================================
+def _as_text(value):
+    """Render a wired value as filename text, or return None to ignore it.
+
+    Only scalars are accepted. A tensor, a model or a list would stringify into
+    something enormous and meaningless, so those are dropped rather than pasted
+    into a filename.
+    """
+    if value is None or isinstance(value, bool):
+        return None if value is None else ("true" if value else "false")
+    if isinstance(value, float):
+        text = ("%.6f" % value).rstrip("0")
+        return text + "0" if text.endswith(".") else text
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    return None
+
+
 class LeielFilenameStudio:
     @classmethod
     def INPUT_TYPES(cls):
@@ -682,10 +703,16 @@ class LeielFilenameStudio:
                 # chosen size, a computed label - cannot be read off the canvas:
                 # the widget showing them is drawn after execution, so anything
                 # reading the canvas is always one run behind. Wire them in.
-                "text_1": ("STRING", {"forceInput": True}),
-                "text_2": ("STRING", {"forceInput": True}),
-                "text_3": ("STRING", {"forceInput": True}),
-                "text_4": ("STRING", {"forceInput": True}),
+                "text_1": (ANY, {"forceInput": True}),
+                "text_2": (ANY, {"forceInput": True}),
+                "text_3": (ANY, {"forceInput": True}),
+                "text_4": (ANY, {"forceInput": True}),
+                "text_5": (ANY, {"forceInput": True}),
+                "text_6": (ANY, {"forceInput": True}),
+                "text_7": (ANY, {"forceInput": True}),
+                "text_8": (ANY, {"forceInput": True}),
+                "text_9": (ANY, {"forceInput": True}),
+                "text_10": (ANY, {"forceInput": True}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO",
                        "unique_id": "UNIQUE_ID"},
@@ -717,10 +744,10 @@ class LeielFilenameStudio:
                 missing.append("layout_json parse failed - rebuild it in the UI")
 
             ext_texts = {}
-            for i in range(1, 5):
-                v = wired.get(f"text_{i}")
-                if v is not None and str(v).strip():
-                    ext_texts[str(i)] = str(v).strip()
+            for i in range(1, MAX_TEXT_INPUTS + 1):
+                v = _as_text(wired.get(f"text_{i}"))
+                if v is not None and v.strip():
+                    ext_texts[str(i)] = v.strip()
 
             ext_loras = _parse_lora_text(lora_text) if lora_text else None
 

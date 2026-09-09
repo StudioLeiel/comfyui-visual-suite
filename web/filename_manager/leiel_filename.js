@@ -82,6 +82,13 @@ const PRIORITY = [
 
 const SKIP_WIDGET_TYPES = ["button", "converted-widget", "hidden", "leiel-hidden"];
 
+/* No class is filtered out of the shelf. Every node in the workflow is offered,
+   and the only node left out is this one, which is excluded by identity where
+   the scan runs. A startsWith("Leiel") test used to stand here to hide this
+   pack's own nodes; it also swallowed every other pack sharing the prefix, and
+   hiding a node from the shelf was never the intent anyway. If something needs
+   hiding again, exclude it by identity at the scan, not by class name. */
+
 /* ---------- chip categories ----------
    Colour is assigned by kind, so related values read as a group at a glance. */
 const CAT_MODEL   = new Set(["ckpt_name", "unet_name", "model_name", "clip_name",
@@ -391,7 +398,6 @@ function scanGraph(selfNode) {
   for (const n of nodes) {
     if (n === selfNode) continue;
     const cls = n.comfyClass || n.type || "?";
-    if (String(cls).startsWith("Leiel")) continue;
     const title = n.title || cls;
     const muted = n.mode === 2 || n.mode === 4;
 
@@ -401,7 +407,9 @@ function scanGraph(selfNode) {
       const v = w.value;
       if (v === null || v === undefined || typeof v === "object") continue;
       const sv = String(v);
-      if (sv.length > 120 || sv.trim() === "") continue;
+      /* Long values are offered, not dropped: the chip truncates on screen and
+         the filename preview already warns when the result gets too long. */
+      if (sv.length > 400 || sv.trim() === "") continue;
 
       const pi = PRIORITY.indexOf(w.name);
       const isNum = (typeof v === "number") ||
@@ -443,7 +451,7 @@ function scanGraph(selfNode) {
      time, so it is right even when it did not exist when the queue was sent -
      a randomly picked size, for instance. */
   const wired = [];
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 10; i++) {
     const inp = (selfNode?.inputs || []).find(x => x.name === `text_${i}`);
     if (!inp || inp.link === null || inp.link === undefined) continue;
     const cached = (TEXT_CACHE[String(selfNode.id)] || {})[String(i)];
@@ -487,7 +495,6 @@ function rebindChip(chip) {
 
   const nodes = (app.graph?._nodes || [])
     .filter(n => n.mode !== 2 && n.mode !== 4)
-    .filter(n => !String(n.comfyClass || n.type || "").startsWith("Leiel"))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const has = n => (n.widgets || []).some(w => w.name === chip.widget);
 
@@ -847,10 +854,16 @@ app.registerExtension({
       const SLOT_LABELS = {
         run_after: "run_after (for elapsed)",
         lora_text: "lora_text (for Visual Series Lab)",
-        text_1: "text_1 (any text -> chip)",
-        text_2: "text_2 (any text -> chip)",
-        text_3: "text_3 (any text -> chip)",
-        text_4: "text_4 (any text -> chip)",
+        text_1: "text_1 (any value -> chip)",
+        text_2: "text_2 (any value -> chip)",
+        text_3: "text_3 (any value -> chip)",
+        text_4: "text_4 (any value -> chip)",
+        text_5: "text_5 (any value -> chip)",
+        text_6: "text_6 (any value -> chip)",
+        text_7: "text_7 (any value -> chip)",
+        text_8: "text_8 (any value -> chip)",
+        text_9: "text_9 (any value -> chip)",
+        text_10: "text_10 (any value -> chip)",
       };
       function labelInputs() {
         for (const inp of (node.inputs || [])) {
@@ -859,13 +872,13 @@ app.registerExtension({
         }
       }
 
-      /* Four empty text sockets on a node that mostly needs none is four rows
-         of nothing to read past. One is shown, and the next appears as soon as
-         that one is used - the same way the Series Lab opens its prompt
-         sockets. The Python side still declares all four as optional, so a
+      /* Ten empty text sockets on a node that mostly needs none would be ten
+         rows of nothing to read past. One is shown, and the next appears as
+         soon as that one is used - the same way the Series Lab opens its
+         prompt sockets. The Python side declares all ten as optional, so a
          socket that is not on screen is simply one the server never receives.
          Removing an unlinked one can never lose a connection. */
-      const MAX_TEXT = 4;
+      const MAX_TEXT = 10;
       function syncTextInputs() {
         const at = (i) => (node.inputs || []).findIndex(x => x.name === "text_" + i);
         const linked = (i) => {
@@ -879,7 +892,10 @@ app.registerExtension({
 
         let changed = false;
         for (let i = 1; i <= want; i++) {
-          if (at(i) < 0) { node.addInput("text_" + i, "STRING"); changed = true; }
+          /* "*" rather than "STRING": the Python side declares these sockets
+             with the wildcard type, so a FLOAT or an INT can be wired straight
+             in without a converter node sitting in between. */
+          if (at(i) < 0) { node.addInput("text_" + i, "*"); changed = true; }
         }
         /* from the end backwards, so removing one cannot renumber the next */
         for (let i = MAX_TEXT; i > want; i--) {

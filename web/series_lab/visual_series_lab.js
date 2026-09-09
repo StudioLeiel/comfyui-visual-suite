@@ -694,8 +694,8 @@ const SKIP_WIDGET_TYPES = ["button", "converted-widget", "hidden",
 const SKIP_WIDGETS = new Set([
   "control_after_generate", "log_to_console", "debug", "queue_json",
 ]);
-/* Nodes that hold text or files rather than anything worth sweeping. */
-const SKIP_CLASS = /^(Leiel|VisualSeries|Note|MarkdownNote|Reroute|PrimitiveNode|SaveImage|PreviewImage|CLIPTextEncode|.*Loader.*)$/i;
+/* No class is filtered out. Every node in the workflow is offered as a sweep
+   candidate; this node excludes only itself, by identity, in the scan below. */
 
 function optionKey(nodeId, widget) {
   return nodeId + "::" + widget;
@@ -706,7 +706,6 @@ function scanWorkflowOptions(self) {
   const out = [];
   const nodes = (app.graph && app.graph._nodes ? app.graph._nodes : [])
     .filter((n) => n !== self && n.mode !== 2 && n.mode !== 4)
-    .filter((n) => !SKIP_CLASS.test(String(n.comfyClass || n.type || "")))
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   for (const n of nodes) {
@@ -719,7 +718,9 @@ function scanWorkflowOptions(self) {
       const isNum = typeof v === "number";
       const isCombo = Array.isArray(w.options && w.options.values);
       const isBool = typeof v === "boolean";
-      const isText = typeof v === "string" && !isCombo && v.length <= 40;
+      /* Long strings are offered too. The chip truncates on screen, so there is
+         no reason to hide a prompt or a path from the sweep list. */
+      const isText = typeof v === "string" && !isCombo;
       if (!isNum && !isCombo && !isBool && !isText) continue;
       out.push({
         key: optionKey(n.id, w.name),
