@@ -46,6 +46,7 @@ Every section header carries the controls that matter for that section alone:
 | copy | Duplicate the section. |
 | **△ ▽** | Move the section up or down. |
 | **✕** | Remove the section. |
+| **SNIP** | Add a saved phrase to what is already here. |
 | **PRESET** | Save or load the text of this section. |
 
 Bypass is the one to know. Testing what a part contributes normally means
@@ -126,6 +127,97 @@ them.
 
 ---
 
+## Snippets
+
+![The snippet library](images/prompt-composer/10-snip.png)
+
+A preset replaces a section. A snippet joins one.
+
+That is the whole distinction, and it exists because of what the reader below
+will and will not tell you. The reader describes what a photograph shows and
+stops there - deliberately, so that four readings of four references do not
+repeat and contradict one another. It follows that it can never give you
+anything the picture does not contain: a film stock you want but did not shoot,
+a time of day you are moving the scene to, a shot size it could not make out.
+
+Those get typed in by hand. After the third time of typing one out, it belongs
+in a library.
+
+Press `SNIP` on any section and pick a phrase. Clicking the name puts it at the
+**front** of the section; the `END` button on the right of the row puts it at
+the **bottom**. Front for anything that should be read first - a shot size, a
+lens, who the subject is. End for anything that adds to a picture already
+described.
+
+| | PRESET | SNIP |
+| --- | --- | --- |
+| What it does | replaces the whole section | adds to what is there |
+| Typical size | a finished anchor | one or two sentences |
+| Use it for | a prompt you want back | a phrase you keep retyping |
+
+### Each section has its own shelf
+
+The panel shows the phrases filed under the section you opened it from, matched
+on the section title. `Camera Anchor`, `Camera Details` and `camera` all reach
+the camera shelf; `Model Anchor` reaches the subject shelf, on the same aliases
+the reader uses to pick its question. Tick **all sections** to see the rest.
+
+### Groups
+
+Some phrases answer the same question. A picture has one shot size, one lens,
+one time of day. Others simply add up: a warm cast and available light are both
+true at once.
+
+So a snippet can carry a **group**, and snippets sharing a group replace one
+another rather than piling up.
+
+- Add *Medium*, then add *Close-up* → the medium line is replaced **where it
+  stands**. One shot size, in the same place in the text.
+- Add *Medium*, then add *85mm* → both are kept. Different groups, different
+  questions.
+
+The swap matches on the library's own wording, so it works whether the first one
+went in at the front or at the end, and it still works after reloading the
+workflow - nothing is remembered on the section. Edit a phrase by hand and it no
+longer matches; the new one is then added rather than swapped, which is visible
+and easy to fix. Leave the group empty and the snippet always stacks.
+
+The shipped groups are:
+
+| Shelf | Groups |
+| --- | --- |
+| camera | shot, lens, height, facing, focus |
+| quality | grain, contrast, cast, saturation, edge, stock |
+| scene | time, weather, source |
+| subject | gaze, hands, hair, prop |
+
+The group is shown in yellow before each name, so running an eye down the list
+shows which phrases compete with one another before you read a single one.
+
+### Saving your own
+
+Select a phrase inside the section, type a name, optionally a group, and press
+`Save`. With nothing selected the whole section is saved instead. Saving under a
+name that already exists on that shelf replaces it; the ✕ on a row removes it,
+and asks once first.
+
+A recurring character is a good candidate for the subject shelf. Give each of
+them the same group - `model`, say - and picking a second one swaps the first
+out rather than putting two people in the frame.
+
+### Where the library lives
+
+The pack ships a starting set of about seventy phrases at `snippets.json` in the
+pack folder. The first time the panel opens it is copied to
+`user/visual_prompt_composer/snippets.json`, and from then on only that copy is
+read and written.
+
+So your edits survive an update, and a phrase you deleted stays deleted. The
+user file can be edited by hand - press `Reload` after. To go back to the
+shipped set, delete it and restart.
+
+---
+
 ## Translation
 
 ![Translation](images/prompt-composer/04-translation.png)
@@ -192,15 +284,20 @@ four different references.
 ![Four layers, four references](images/prompt-composer/02-layers.png)
 
 Here each section reads its own image and is asked its own question. A section
-called `Camera Anchor` is asked about angle, distance, depth of field and light,
-and told to leave the subject and the setting alone. The one called `Subject
-Anchor` is asked the opposite. Four references, four sections, one prompt
-assembled from the parts you actually wanted from each.
+called `Camera Anchor` is asked about the shape of the view - which way round
+the frame stands, how strongly nearness enlarges, the height it was taken from,
+how far round the subject the camera stands, where the subject is cut, how the
+space divides around them, where sharpness sits - and told to leave the subject,
+the setting and the light alone. The one called `Subject Anchor` is asked the
+opposite. Four references, four sections, one prompt assembled from the parts
+you actually wanted from each.
 
-The questions matter more than the model. They are what stop a camera reading
-from drifting into what the person is wearing, and what stop the model inventing
-a focal length it cannot possibly know. They are stored beside the presets,
-where you can edit them.
+The questions matter more than the model. Each one names the words its layer may
+use and the words it may not, which is what stops a camera reading from drifting
+into what the person is wearing, and what stops the model reporting a focal
+length it cannot possibly know. Every question also asks for what is there
+rather than what is missing, so a reading arrives as description and not as a
+list of absences. They are stored beside the presets, where you can edit them.
 
 ---
 
@@ -248,10 +345,17 @@ line again in another language and a claim that sounded fine in English often
 turns out to be vaguer than it seemed. Then keep what the picture supports and
 rewrite the rest.
 
-One thing neither of them catches: a sentence can be well formed and still
-describe something the model never really looked at. A reading of a plain
-backdrop will report confidently on a depth of field there is no depth to have.
-For that, compare the words against the photograph.
+Two things neither of them catches.
+
+A sentence can be well formed and still describe something the model never
+really looked at. A reading of a plain backdrop will report confidently on a
+depth of field there is no depth to have. For that, compare the words against
+the photograph.
+
+And the camera layer will occasionally name something it was told to leave to
+the scene - a wall, a railing, the thing it picked out to judge how strongly
+nearness enlarges. It is obvious when it happens and takes a moment to delete,
+but it is worth a glance before the reading goes into an anchor.
 
 And the layers are worth using as intended. Reading all four off a single image
 is a description of that image, and the result will look like it. Reading the
@@ -259,6 +363,11 @@ quality from one, the subject from another, the place from a third and the
 camera from a fourth is composition - four decisions you made, assembled. The
 button that reads one layer and leaves the other three alone is there so the
 second is as easy as the first.
+
+What the reader leaves out is the snippet library's job. It describes the
+photograph in front of it and nothing else, so the shot size you want instead,
+the stock you are working in, the hour you are moving the scene to all come from
+`SNIP` - added to the reading rather than over it.
 
 ---
 
@@ -284,6 +393,13 @@ in memory at any moment. Any setting you change is yours and is never
 overridden. 4-bit is the default at every size - it costs about three seconds a
 reading and saves several gigabytes, and on the layer questions here the loss is
 slight.
+
+A larger model is not automatically a better one for this. The layer questions
+ask a model to hold back as much as to describe, and a more fluent model writes
+more and so reaches for more of what it was told to leave alone. 4B at 4-bit is
+the default because it reads well and stays inside its layer; try 8B by all
+means, and compare the two on the same references before paying for it in
+memory.
 
 What it deliberately does not do is manage ComfyUI's memory. An earlier version
 asked ComfyUI to unload its models before reading, which seemed reasonable and

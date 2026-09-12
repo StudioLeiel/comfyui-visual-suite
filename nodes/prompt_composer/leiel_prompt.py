@@ -218,6 +218,20 @@ class LeielPromptComposer:
 PRESET_DIRNAME = "visual_prompt_composer"
 PRESET_FILENAME = "presets.json"
 SNAPSHOT_FILENAME = "snapshots.json"
+# Short pieces of writing that go INTO a section rather than over it. The
+# reader describes what a photograph shows; a shot size it failed to name, a
+# film stock, a time of day it could not know - those are added by hand, and
+# after the third time of typing one out it belongs in a library.
+#
+# Two copies, and the difference matters. The pack ships a starting set so the
+# node is useful on the first run and so the set travels with a release. That
+# file is overwritten by the next release, so it is never the live one: the
+# first time the library is read it is copied into the user folder, and from
+# then on only the copy is read or written. Edits survive an update, and a
+# deletion stays deleted instead of coming back with the next version.
+SNIPPET_FILENAME = "snippets.json"
+SNIPPET_MAX = 400
+SNIPPET_TEXT_MAX = 20000
 # Automatic snapshots rotate; the ones the user named have their own room and
 # are never dropped to make space for a record nobody asked for.
 SNAPSHOT_AUTO_MAX = 25
@@ -379,6 +393,68 @@ def _sanitize_presets(data):
     return out
 
 
+def _snippets_path():
+    return _user_file(SNIPPET_FILENAME)
+
+
+def _pack_snippets_path():
+    """The shipped starting set, at the root of the pack."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(os.path.dirname(os.path.dirname(here)),
+                        SNIPPET_FILENAME)
+
+
+def _sanitize_snippets(data):
+    """Drop anything malformed rather than hand it to the browser."""
+    out = []
+    seen = set()
+    for raw in data:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name", "")).strip()
+        text = raw.get("text", "")
+        kind = str(raw.get("kind", "")).strip().lower()
+        # Snippets in the same group answer the same question - one shot size,
+        # one lens, one time of day - so a new one takes the old one's place
+        # instead of arguing with it. An empty group simply stacks.
+        group = str(raw.get("group", "")).strip().lower()[:80]
+        if not isinstance(text, str) or not name or not text.strip():
+            continue
+        if len(name) > 200 or len(text) > SNIPPET_TEXT_MAX or len(kind) > 80:
+            continue
+        key = (kind, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"kind": kind, "group": group, "name": name, "text": text})
+        if len(out) >= SNIPPET_MAX:
+            break
+    return out
+
+
+def _load_snippets():
+    """Read the user copy, seeding it from the pack on the first run."""
+    path = _snippets_path()
+    if not os.path.exists(path):
+        seed = _sanitize_snippets(
+            _read_json_list(_pack_snippets_path(), "snippets"))
+        if seed:
+            try:
+                _write_json(path, {"format": "leiel.vpc.snippets",
+                                   "version": 1, "snippets": seed})
+            except Exception:
+                pass          # read-only user folder: serve them anyway
+        return seed
+    return _sanitize_snippets(_read_json_list(path, "snippets"))
+
+
+def _store_snippets(data):
+    clean = _sanitize_snippets(data)
+    _write_json(_snippets_path(), {"format": "leiel.vpc.snippets",
+                                   "version": 1, "snippets": clean})
+    return clean
+
+
 def _load_presets():
     return _sanitize_presets(_read_json_list(_presets_path(), "presets"))
 
@@ -409,6 +485,26 @@ def _register_routes():
             return web.json_response(_load_presets())
         except Exception as exc:
             return web.json_response([], headers={"X-VPC-Presets-Error": str(exc)})
+
+    @routes.get("/leiel_vpc/snippets")
+    async def _get_snippets(request):
+        return web.json_response({"snippets": _load_snippets()})
+
+    @routes.post("/leiel_vpc/snippets")
+    async def _save_snippets(request):
+        try:
+            data = await request.json()
+            if isinstance(data, dict):
+                data = data.get("snippets", None)
+            if not isinstance(data, list):
+                return web.json_response(
+                    {"ok": False, "error": "snippets must be a list"},
+                    status=400)
+            clean = _store_snippets(data)
+            return web.json_response({"ok": True, "snippets": clean})
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)},
+                                     status=500)
 
     @routes.get("/leiel_vpc/snapshots")
     async def _get_snapshots(request):

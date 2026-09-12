@@ -133,8 +133,54 @@ def suggested_setup():
     }
 
 TAIL = (
-    " Write as flowing prose in two or three sentences. "
+    " Write as flowing prose in three or four sentences. Work through the "
+    "items in the order given. An item with something to report gets words; "
+    "an item with nothing to report is passed over in silence, with no remark "
+    "that it was passed over and no sentence saying it is absent. Say each "
+    "thing once: do not restate a point in other words. "
     "No lists, no headings, no labels, no preamble."
+)
+
+# A standing instruction, sent as the system turn rather than folded into the
+# question. The same sentence carries much further from there: asked inside the
+# question it reads as one more thing to cover, and the model covers it and
+# moves on. Asked from the system turn it reads as the terms of the job.
+#
+# It says why the restriction exists as well as what it is. A model told only
+# "name no objects" treats the ban as a style note and writes around it, which
+# is how "a wide arched opening" survives - it is not an object, it is a
+# description of the frame. A model told that four readings of one picture are
+# joined afterwards understands what a stray noun costs, and drops the clause
+# instead of rephrasing it.
+SYSTEM = (
+    "You are reading one photograph for a single named layer of a prompt, and "
+    "for nothing else. Four separate readings are taken from this same image "
+    "and joined together afterwards, so anything you mention that belongs to "
+    "another layer is repeated or contradicted downstream, and an image model "
+    "will build it twice.\n"
+    "The rules, in order:\n"
+    "1. Stay inside the layer you are given. A detail that belongs to another "
+    "layer is left out completely - not mentioned in passing, not used to "
+    "introduce a sentence, not offered as context.\n"
+    "2. Do not name a thing your layer does not own. No nouns for objects, "
+    "buildings, furniture, plants, garments, materials or places. When you "
+    "need to point at something, use only the words your layer gives you.\n"
+    "3. Describe what is visible. Do not infer equipment, settings, brands or "
+    "numbers, and do not add a detail because photographs usually have one.\n"
+    "4. When something in your layer cannot be described without naming "
+    "something outside it, leave it out. A short reading is correct. A "
+    "complete one that borrows is not.\n"
+    "5. Describe what is there. Never report an absence - not that something "
+    "is missing, not that an effect is not happening, not that a quality is "
+    "absent. A thing that is not in the picture gets no sentence at all, not "
+    "a sentence saying it is not there. These words do not appear in your "
+    "answer at any point, in any sentence: no, not, never, without, nothing, "
+    "none, free of, lacking, absent, devoid. If a sentence needs "
+    "one of them, that sentence is describing an absence, and the present "
+    "state should be described instead: a grain that is fine is fine, not "
+    "'without coarseness'; contrast that rolls off gently rolls off gently, "
+    "not 'with no harsh roll-off'.\n"
+    "Reply with the description alone."
 )
 
 # The questions are the real substance of this node. A model can be swapped;
@@ -145,57 +191,196 @@ TAIL = (
 # layer a sentence came from. A camera reading that mentions "a wide arched
 # opening" is describing the frame, correctly and obediently - but the image
 # model reads it as an arch to build, and builds one in a scene that said it
-# had no man-made structures. So the camera question is not allowed to name
-# objects at all: an edge that darkens is described as an effect on the frame,
-# never as the thing casting it.
+# had no man-made structures.
+#
+# Each question is therefore built the same way, and the order matters:
+#
+#   Layer:      one line naming what this reading is, so the restriction has
+#               something to attach to.
+#   Describe:   the list of things to cover. Positive, and specific enough
+#               that the model has somewhere to put its attention. A model
+#               given too little to say goes looking, and what it finds is
+#               the next layer over.
+#   Refer with: the vocabulary. This is the part that actually works. A
+#               prohibition leaves the model needing a word it has just been
+#               denied, and it takes the nearest one; handing it a small set
+#               of allowed words gives it somewhere to land instead.
+#   Omit:       the exclusions, named concretely rather than as a category,
+#               because "nothing from the scene" is not a thing a model can
+#               check a sentence against and "no walls, doorways, windows"
+#               is.
+#   If:         what to say when something cannot be judged. Without it the
+#               model invents rather than returns an incomplete answer.
+#
+# Camera is the strict one, and light is the reason. Light was asked for in
+# both the scene question and the camera question, and it cannot be described
+# without saying what it falls on - so the camera reading reached for a
+# surface every time, and the surface was a noun. Light now belongs to scene
+# alone. Camera keeps the geometry of the view and the focus, and nothing
+# else.
 BUILTIN_PRESETS = {
     "quality": {
         "label": "Quality Details",
         "question": (
-            "Describe only how this photograph was recorded: the grain and how "
-            "coarse it is, the contrast and the way shadows and highlights roll "
-            "off, the colour cast and saturation, the character of the "
-            "sharpness, and whether it reads as film or as digital capture. "
-            "Treat these as properties of the image itself. Name no person, "
-            "object, material or place, and do not say what the picture is of. "
-            "Do not name a film stock, camera or lens, and give no numbers."
+            "Layer: photographic quality - the properties of the image "
+            "itself, not of anything in it.\n"
+            "Four things to work out by looking at this picture. What follows "
+            "are the questions and never the wording of the reply: an answer "
+            "that would fit any photograph is a sign that the picture was not "
+            "consulted.\n"
+            "1. Find the flattest, most evenly lit area in the picture and "
+            "describe the surface you find there - the texture that is in it, "
+            "and how that texture stands against the detail beside it.\n"
+            "2. Follow the tone from the brightest part of the picture down "
+            "to the darkest. Say how far apart those two ends sit, and "
+            "describe what the steps are doing as they arrive at each end.\n"
+            "3. The colour: which way the whole picture leans, and how hard "
+            "the colours are driven - where the strongest colour in the frame "
+            "sits and how far it goes.\n"
+            "4. Find an edge where two tones meet and describe the crossing "
+            "itself - its width, and how the tone travels across it.\n"
+            "Four answers, each describing what is at the place you looked. "
+            "Describe the thing you found; an answer that names something you "
+            "went looking for and did not find is not an answer.\n"
+            "A surface that carries little texture is smooth; a crossing that "
+            "is gradual is gradual. Describe each of them by what it is doing "
+            "rather than by the amount of something it falls short of.\n"
+            "Refer with: the image, the frame, the grain, the tone, the "
+            "shadows, the highlights, the colour, bright areas, dark areas.\n"
+            "Omit: what the picture is of. No person, no object, no material, "
+            "no place, no weather, no time of day, no camera position, no "
+            "framing - not in a clause, not as an aside, not as the thing a "
+            "quality is demonstrated on. Name no film stock, camera or lens, "
+            "and give no numbers. These words do not appear in your answer: "
+            "foreground, background, sky, subject, woman, man, face, hair, "
+            "skin, dress, gown, fabric, wall, floor, tree, leaves, grass, "
+            "water, camera, lens, angle, framing, focus.\n"
+            "If a quality is not visible enough to describe, pass over it."
             + TAIL
         ),
     },
     "subject": {
         "label": "Subject Details",
         "question": (
-            "Describe only the main subject: build and proportions, hair, face "
-            "and expression, clothing and the fabrics it is made of, posture, "
-            "and what the hands are doing. Name nothing behind or around them "
-            "- no background, no furniture, no architecture, no landscape, no "
-            "weather. Say nothing about the light, and nothing about where the "
-            "camera is or how the shot is framed." + TAIL
+            "Layer: the main subject, and only the subject.\n"
+            "Describe: build and proportions; hair - its length, colour and "
+            "how it is arranged; the face, and what the expression is doing; "
+            "the clothing, its cut and the fabrics it is made of; the skin; "
+            "posture and the line of the body; what the hands are doing.\n"
+            "Refer with: the subject, their hair, face, eyes, mouth, jaw, "
+            "neck, shoulders, arms, hands, the garments they wear and the "
+            "fabrics those are made of.\n"
+            "Omit: everything behind, beside or beneath them - no wall, "
+            "floor, ground, furniture, architecture, landscape, plant, sky or "
+            "weather. Say nothing about light, shadow or colour temperature "
+            "on them. Say nothing about the camera, the distance, the framing "
+            "or what is in focus. Where the body meets or rests against "
+            "something you may not name, describe the posture alone and not "
+            "what it is resting on. These words do not appear in your answer: "
+            "light, lit, sunlight, daylight, shadow, glow, bright, dark, "
+            "wall, floor, ground, ceiling, railing, window, door, sky, cloud, "
+            "grass, tree, leaf, leaves, flower, water, room, street, "
+            "background, camera, lens, frame, focus, blur, sharp.\n"
+            "Where part of the subject is hidden, leave it out of the "
+            "description entirely and carry on with what is visible." + TAIL
         ),
     },
     "scene": {
         "label": "Scene Details",
         "question": (
-            "Describe only the place: what kind of space it is, its "
-            "architecture, its surfaces and materials, what grows or stands in "
-            "it, the time of day, the weather, and the quality of the light "
-            "falling on it. Say nothing about any person, their body or their "
-            "clothing. Say nothing about where the camera is, how near it is, "
-            "or what is in or out of focus." + TAIL
+            "Layer: the place, and the light in it.\n"
+            "Describe: what kind of space this is; its architecture and its "
+            "condition; the surfaces and the materials they are made of; what "
+            "grows or stands in it; how far the space runs back and what "
+            "happens to it with distance; the time of day; the weather; the "
+            "air; and the light - where it comes from, how hard or soft it "
+            "is, its colour, and what it does to the surfaces it lands on.\n"
+            "Refer with: the space and anything standing in it, named "
+            "plainly.\n"
+            "Omit: the person entirely - their body, their clothing, their "
+            "position, and the shadow they cast. Say nothing about where the "
+            "camera is, how near it is, what is sharp, what is blurred, or "
+            "how the frame is cropped. Say nothing about the grain, the "
+            "contrast or the colour rendering of the image; the light in the "
+            "place is yours, the way the image records it belongs to another "
+            "layer. These words do not appear in your answer, in any form and "
+            "in any part of speech - not as a verb either, so nothing frames "
+            "anything and nothing is in focus: camera, lens, frame, framing, "
+            "focus, focused, blur, blurred, sharp, softness, depth of field, "
+            "grain, contrast, saturation, exposure, foreground, background, "
+            "unbroken, woman, man, girl, boy, person, subject, figure, model, "
+            "she, he, her, his, hair, face, hand, dress, gown.\n"
+            "Where the person stands in front of a part of the space you "
+            "cannot make out, describe the rest and carry on." + TAIL
         ),
     },
     "camera": {
         "label": "Camera Details",
         "question": (
-            "Describe only the camera: its height relative to the subject, its "
-            "angle, how near or far it is, how much of the frame is in focus "
-            "and how the rest falls away, and the direction and quality of the "
-            "light. Name no object, building, material or place. Where part of "
-            "the frame is darker, narrower or softer, describe it as an effect "
-            "on the frame and never as the thing that causes it. Do not guess "
-            "focal length, aperture or any other number. If nothing sits at a "
-            "different distance from the subject, say the depth cannot be "
-            "judged rather than inventing it." + TAIL
+            "Layer: the geometry of the view, and the focus. Nothing else.\n"
+            "Seven things to work out, in this order. Work each one out by "
+            "looking at this picture. What follows are the questions and "
+            "never the wording of the reply: none of these has a stock "
+            "answer, and an answer that would fit any photograph is a sign "
+            "that the picture was not consulted.\n"
+            "1. Which way round the frame stands - taller than it is wide, or "
+            "wider than it is tall.\n"
+            "2. How strongly nearness enlarges. Take the thing closest to the "
+            "camera and the thing furthest from it, and say how far apart "
+            "their sizes have been driven, and how much the outer parts of "
+            "the frame pull and stretch. Point at each of the two by where it "
+            "sits and never by what it is - what stands nearest at the lower "
+            "left, what lies furthest off behind the subject. Near and far "
+            "close in scale means the picture was taken from a long way off; "
+            "a near thing towering over a far one means it was taken from "
+            "close up.\n"
+            "3. Where the level of the view falls. Find the height at which "
+            "the view stops looking up and starts looking down - the lines "
+            "running away from the camera converge there - and say where in "
+            "the frame that height sits: near the top, across the middle, low "
+            "down, or off the frame entirely.\n"
+            "4. How far round the subject the camera stands - facing them "
+            "head on, or round towards one side, and how far round.\n"
+            "5. Where the subject is cut. Name the highest part of them the "
+            "frame keeps and the lowest.\n"
+            "6. How the space divides around the subject. Say how much room "
+            "is left above them against how much is left below, and how much "
+            "to their left against how much to their right - which side of "
+            "each pair holds more, and by how much.\n"
+            "7. Where sharpness is at its best, and what becomes of it nearer "
+            "the camera than that point, and further away than it.\n"
+            "All seven get words, and each of the seven gets words that could "
+            "only have been written about this picture.\n"
+            "How to read item 3, for you and never for the answer: the level "
+            "comes off the frame. A subject who is leaning, tilted, crouched "
+            "or lying has moved their own eyes while the camera stayed where "
+            "it was, so read the converging lines and let the body alone. "
+            "This is a method, and methods are never mentioned in a "
+            "reading.\n"
+            "Refer with: the camera, the lens, the frame, the subject, near, "
+            "far, foreground, background, sharp, soft. The edges and corners "
+            "of the frame are available only where something is happening to "
+            "them; a frame that is doing nothing at its edges is described "
+            "without reference to them.\n"
+            "Omit: every noun for a thing. No wall, arch, window, doorway, "
+            "column, railing, road, tree, branch, furniture, garment or "
+            "material - not to say what is out of focus, and not to explain "
+            "what darkens or narrows the view. Where part of the frame goes "
+            "dark, closes in, cuts across or softens, say what happens to the "
+            "frame and never what causes it. The edges of the frame are "
+            "mentioned only where something is happening to them; an even "
+            "frame gets no words at all. These words do not appear in your "
+            "answer: wall, floor, ground, ceiling, railing, window, door, "
+            "doorway, arch, column, road, street, step, stair, tile, sky, "
+            "cloud, grass, tree, branch, leaf, leaves, flower, water, chair, "
+            "table, backdrop, dress, gown, shirt, jacket, coat, glove, hair, "
+            "fabric, stone, concrete, wood, metal, light, sunlight, shadow, "
+            "grain, colour, color, contrast.\n"
+            "Judge the focus falloff against whatever sits nearer or farther "
+            "than the subject; anything behind them will show it. Only where "
+            "the whole frame sits at one distance may you say the depth of "
+            "field cannot be judged, and that is a last resort rather than a "
+            "way to pass over item seven." + TAIL
         ),
     },
     "all": {
@@ -621,14 +806,22 @@ def analyse(payload):
     with _lock:
         model, processor = _load(model_id, quantization)
 
+        # The system turn carries the rule, the user turn carries the layer.
+        # Both Qwen3-VL and Qwen2.5-VL templates accept a system role; if a
+        # template ever drops it the reading still works, only less strictly,
+        # so this is not worth guarding.
         messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": SYSTEM}],
+            },
             {
                 "role": "user",
                 "content": [
                     {"type": "image"},
                     {"type": "text", "text": question},
                 ],
-            }
+            },
         ]
         text = processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True

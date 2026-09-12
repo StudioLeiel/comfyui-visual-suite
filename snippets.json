@@ -1,0 +1,420 @@
+{
+  "format": "leiel.vpc.snippets",
+  "version": 1,
+  "snippets": [
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Extreme wide",
+      "text": "An extreme wide view: the subject stands small within the frame, the space running far out around them on every side."
+    },
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Wide / full length",
+      "text": "A wide view holding the subject at full length, head to feet inside the frame with room above and below."
+    },
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Cowboy / mid-thigh",
+      "text": "The frame holds the subject from mid-thigh up."
+    },
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Medium",
+      "text": "A medium view holding the subject from the waist up."
+    },
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Medium close",
+      "text": "A medium close view holding the subject from the chest up."
+    },
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Close-up",
+      "text": "A close view holding the head and shoulders, the face filling much of the frame."
+    },
+    {
+      "kind": "camera",
+      "group": "shot",
+      "name": "Extreme close-up",
+      "text": "An extreme close view: a single feature crosses the whole frame."
+    },
+    {
+      "kind": "camera",
+      "group": "lens",
+      "name": "Wide lens 24mm",
+      "text": "Taken from close in on a wide lens: near things swell against far ones and the outer parts of the frame pull outward."
+    },
+    {
+      "kind": "camera",
+      "group": "lens",
+      "name": "Standard 50mm",
+      "text": "Taken on a standard lens at a natural distance, near and far holding their true proportion to one another."
+    },
+    {
+      "kind": "camera",
+      "group": "lens",
+      "name": "Short tele 85mm",
+      "text": "Taken from a little way off on a short telephoto: the planes sit close in scale and the background gathers behind the subject."
+    },
+    {
+      "kind": "camera",
+      "group": "lens",
+      "name": "Long lens 135mm",
+      "text": "Taken from far off on a long lens: the planes stack flat against one another and the background presses up close."
+    },
+    {
+      "kind": "camera",
+      "group": "height",
+      "name": "Low angle",
+      "text": "The view is taken from below and looks up into the space."
+    },
+    {
+      "kind": "camera",
+      "group": "height",
+      "name": "Eye level",
+      "text": "The view sits level with the space and looks straight across it."
+    },
+    {
+      "kind": "camera",
+      "group": "height",
+      "name": "High angle",
+      "text": "The view is taken from above and looks down onto the space."
+    },
+    {
+      "kind": "camera",
+      "group": "height",
+      "name": "Overhead",
+      "text": "The view is taken from directly overhead, looking straight down."
+    },
+    {
+      "kind": "camera",
+      "group": "facing",
+      "name": "Head on",
+      "text": "The camera stands square to the subject, facing them head on."
+    },
+    {
+      "kind": "camera",
+      "group": "facing",
+      "name": "Three-quarter",
+      "text": "The camera stands round towards one side of the subject, holding a three-quarter view."
+    },
+    {
+      "kind": "camera",
+      "group": "facing",
+      "name": "Profile",
+      "text": "The camera stands to the side of the subject, holding a full profile."
+    },
+    {
+      "kind": "camera",
+      "group": "facing",
+      "name": "From behind",
+      "text": "The camera stands behind the subject, the far side of them turned to the frame."
+    },
+    {
+      "kind": "camera",
+      "group": "focus",
+      "name": "Shallow focus",
+      "text": "Sharpness holds on the subject alone and falls away quickly in front of them and behind."
+    },
+    {
+      "kind": "camera",
+      "group": "focus",
+      "name": "Deep focus",
+      "text": "Sharpness carries from the nearest part of the frame through to the furthest."
+    },
+    {
+      "kind": "camera",
+      "group": "focus",
+      "name": "Focus behind the subject",
+      "text": "Sharpness sits behind the subject, who softens a little in front of it."
+    },
+    {
+      "kind": "quality",
+      "group": "grain",
+      "name": "Fine grain",
+      "text": "Fine even grain across the whole frame, sitting close under the detail rather than over it."
+    },
+    {
+      "kind": "quality",
+      "group": "grain",
+      "name": "Coarse grain",
+      "text": "Coarse grain standing clear of the detail, heaviest through the middle tones."
+    },
+    {
+      "kind": "quality",
+      "group": "contrast",
+      "name": "Gentle roll-off",
+      "text": "The brightest tones give way gradually and the darkest hold their separation, the steps keeping their spacing at both ends."
+    },
+    {
+      "kind": "quality",
+      "group": "contrast",
+      "name": "Hard contrast",
+      "text": "A long way between the brightest and darkest tones, the steps crowding together at both ends."
+    },
+    {
+      "kind": "quality",
+      "group": "contrast",
+      "name": "Low contrast",
+      "text": "A short way between the brightest and darkest tones, the whole picture sitting in the middle of its range."
+    },
+    {
+      "kind": "quality",
+      "group": "cast",
+      "name": "Warm cast",
+      "text": "The whole picture leans warm, the light tones carrying amber and the shadows a soft brown."
+    },
+    {
+      "kind": "quality",
+      "group": "cast",
+      "name": "Cool cast",
+      "text": "The whole picture leans cool, the light tones carrying blue and the shadows a deep slate."
+    },
+    {
+      "kind": "quality",
+      "group": "saturation",
+      "name": "Muted colour",
+      "text": "The colours run quiet and close together, the strongest of them still held well short of full."
+    },
+    {
+      "kind": "quality",
+      "group": "saturation",
+      "name": "Saturated colour",
+      "text": "The colours run hard and hold their strength into the shadows."
+    },
+    {
+      "kind": "quality",
+      "group": "edge",
+      "name": "Soft edges",
+      "text": "Tones cross into one another over a wide gentle boundary."
+    },
+    {
+      "kind": "quality",
+      "group": "edge",
+      "name": "Crisp edges",
+      "text": "Tones cross into one another over a narrow hard boundary."
+    },
+    {
+      "kind": "quality",
+      "group": "",
+      "name": "Halation",
+      "text": "Bright areas bleed a soft warm glow into the tone beside them."
+    },
+    {
+      "kind": "quality",
+      "group": "stock",
+      "name": "Medium format",
+      "text": "The character of a medium format negative: a long tonal range, fine grain, and a smooth fall from sharp to soft."
+    },
+    {
+      "kind": "quality",
+      "group": "stock",
+      "name": "35mm film",
+      "text": "The character of 35mm film: visible grain, a gentle roll-off at both ends, and colour that sits a little off true."
+    },
+    {
+      "kind": "quality",
+      "group": "",
+      "name": "Available light",
+      "text": "Recorded on available light alone, the exposure held where the scene put it."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Before dawn",
+      "text": "The hour before sunrise: the light flat and blue, the air still cold, the space holding its own colour rather than the sky's."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Early morning",
+      "text": "Early morning, the sun low and coming in long across the space, the air clear and cool."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Midday sun",
+      "text": "Midday, the sun high and hard overhead, the shadows short and sharp beneath everything."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Late afternoon",
+      "text": "Late afternoon, the light low and warm and raking across the surfaces from one side."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Golden hour",
+      "text": "The last half hour of sun: the light warm and level, coming in almost flat across the space."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Blue hour",
+      "text": "The half hour after sunset: the sky still holding light, the space lit evenly and cool with the sun already gone."
+    },
+    {
+      "kind": "scene",
+      "group": "time",
+      "name": "Night",
+      "text": "Night, the space lit by whatever stands in it, the light pooling where its sources are and falling away between them."
+    },
+    {
+      "kind": "scene",
+      "group": "weather",
+      "name": "Overcast",
+      "text": "A flat overcast day, the light coming from the whole sky at once and settling evenly over everything."
+    },
+    {
+      "kind": "scene",
+      "group": "weather",
+      "name": "After rain",
+      "text": "Just after rain: every surface wet and returning the light, the air washed and clear."
+    },
+    {
+      "kind": "scene",
+      "group": "weather",
+      "name": "Fog",
+      "text": "Fog through the space, the far parts of it going pale and thin while the near parts hold their colour."
+    },
+    {
+      "kind": "scene",
+      "group": "source",
+      "name": "Window light",
+      "text": "Daylight through a single opening, strong where it lands and falling away quickly into the rest of the room."
+    },
+    {
+      "kind": "scene",
+      "group": "source",
+      "name": "Practical light",
+      "text": "The space lit by the lamps standing in it, warm and close around each one."
+    },
+    {
+      "kind": "scene",
+      "group": "source",
+      "name": "Backlit",
+      "text": "The light comes from behind the space, running towards the camera and lifting the edges of everything it passes."
+    },
+    {
+      "kind": "subject",
+      "group": "gaze",
+      "name": "Into the lens",
+      "text": "The eyes meet the lens directly and hold it."
+    },
+    {
+      "kind": "subject",
+      "group": "gaze",
+      "name": "Away from the lens",
+      "text": "The head is turned away from the lens, the eyes settled on something outside the frame."
+    },
+    {
+      "kind": "subject",
+      "group": "gaze",
+      "name": "Eyes lowered",
+      "text": "The eyes are lowered, the lids heavy and the gaze resting a little below the horizontal."
+    },
+    {
+      "kind": "subject",
+      "group": "gaze",
+      "name": "Eyes closed",
+      "text": "The eyes are closed and the face is at rest."
+    },
+    {
+      "kind": "subject",
+      "group": "gaze",
+      "name": "Caught looking back",
+      "text": "The head is turned back over one shoulder toward the lens, caught in the act of looking round."
+    },
+    {
+      "kind": "subject",
+      "group": "hands",
+      "name": "Hands empty",
+      "text": "Both hands are open and at rest, the fingers uncurled and the palms free."
+    },
+    {
+      "kind": "subject",
+      "group": "hands",
+      "name": "One hand raised",
+      "text": "One arm is lifted and the hand has arrived at the height of the face, the wrist relaxed."
+    },
+    {
+      "kind": "subject",
+      "group": "hands",
+      "name": "Hands at the sides",
+      "text": "Both arms hang easy at the sides, the hands loose."
+    },
+    {
+      "kind": "subject",
+      "group": "hands",
+      "name": "A hand at the hip",
+      "text": "One hand rests at the hip, the fingers lying flat and the weight carried elsewhere."
+    },
+    {
+      "kind": "subject",
+      "group": "hands",
+      "name": "Correct hands",
+      "text": "The hands are correct and gracefully formed, five fingers each, in natural proportion to the frame."
+    },
+    {
+      "kind": "subject",
+      "group": "hair",
+      "name": "Hair loose",
+      "text": "The hair is worn long and loose, falling naturally over the shoulders."
+    },
+    {
+      "kind": "subject",
+      "group": "hair",
+      "name": "Hair gathered",
+      "text": "The hair is drawn back and gathered at the nape, a few fine strands worked free at the temples."
+    },
+    {
+      "kind": "subject",
+      "group": "hair",
+      "name": "Hair in the air",
+      "text": "Fine strands lift free of the mass and follow the air rather than any arrangement."
+    },
+    {
+      "kind": "subject",
+      "group": "",
+      "name": "Skin at pore level",
+      "text": "Real living skin rendered at pore level: fine visible texture, open pores, delicate tonal variation, faint natural imperfection."
+    },
+    {
+      "kind": "subject",
+      "group": "",
+      "name": "Makeup that reads as skin",
+      "text": "The makeup is finished by a master hand and reads as skin, a soft base with the natural texture left intact."
+    },
+    {
+      "kind": "subject",
+      "group": "prop",
+      "name": "Holding a single stem",
+      "text": "A single cut stem is held loosely in one hand, the bloom hanging toward the ground."
+    },
+    {
+      "kind": "subject",
+      "group": "prop",
+      "name": "Holding a cup",
+      "text": "A plain cup is held in both hands at the height of the chest."
+    },
+    {
+      "kind": "subject",
+      "group": "prop",
+      "name": "A coat over the arm",
+      "text": "A coat is folded once and carried over the forearm."
+    },
+    {
+      "kind": "subject",
+      "group": "prop",
+      "name": "A bag at the shoulder",
+      "text": "A single bag hangs from one shoulder, the strap settled where it falls."
+    }
+  ]
+}

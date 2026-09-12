@@ -329,6 +329,12 @@ const ICON_DEL =
   ` stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 
 const GAP = 6;
+/* Room under the last section. Scrolled to the bottom, its 6px grip used to
+   sit flush against the edge of the list, so resizing the bottom section meant
+   scrolling all the way down and then catching a strip that was half under the
+   rim. This is counted into the node height as well, or the clearance would
+   simply produce a scrollbar where there was none. */
+const LIST_PAD = 8;
 
 const DEFAULT_SECTIONS = [
   "LoRA Trigger", "Quality Anchor", "Subject Anchor",
@@ -634,6 +640,32 @@ const PS_KEY = "leiel.vpc.presets";
    wrong quietly, not to ration anything. */
 const PS_MAX = 2000;
 const PS_URL = "/leiel_vpc/presets";
+const SNIP_URL = "/leiel_vpc/snippets";
+/* Which library a section sees. Matched on a word inside the title rather than
+   on the whole title, so "Camera Anchor", "Camera Details" and "camera" all
+   reach the same shelf. The aliases are the reader's own: a section called
+   Model Anchor holds a person, which is the subject shelf. Longest first, so
+   "casting" is tried before "cast" could ever match something else. */
+const SNIP_ALIAS = [
+  ["quality", "quality"],
+  ["subject", "subject"],
+  ["character", "subject"],
+  ["casting", "subject"],
+  ["model", "subject"],
+  ["scene", "scene"],
+  ["setting", "scene"],
+  ["location", "scene"],
+  ["background", "scene"],
+  ["camera", "camera"],
+  ["lens", "camera"],
+  ["framing", "camera"],
+  ["composition", "camera"],
+];
+function snipKind(title) {
+  const t = String(title || "").toLowerCase();
+  for (const [word, kind] of SNIP_ALIAS) if (t.includes(word)) return kind;
+  return t.trim().replace(/\s+/g, " ");
+}
 
 let PS_CACHE = null;          // null until the file has been read once
 let PS_LOADING = null;
@@ -963,7 +995,7 @@ const CSS = `
 .lvp-sep{width:1px;height:12px;background:#333;margin:0 5px;flex:0 0 auto;}
 .lvp-list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:6px;padding-right:2px;
-  align-content:flex-start;}
+  padding-bottom:${LIST_PAD}px;align-content:flex-start;}
 .lvp-sec{border:1px solid var(--border-color,#444);border-radius:5px;background:#1b1b1b;
   display:flex;flex-direction:column;overflow:hidden;
   /* the translation pane reads these rather than hard-coding a colour, so one
@@ -1822,6 +1854,18 @@ app.registerExtension({
         const one = layoutSectionOf(up, hop.out);
         if (one !== null) return one;
 
+        /* A node that publishes its own outputs. The guess below cannot work on
+           a node with several outputs, because there is no way to tell which
+           string belongs to which one - so a node that knows the answer says so
+           by exposing leielLiveOutput(slot), returning the text for that output
+           index or null. Any pack can implement it; the Idea Board does. */
+        if (typeof up.leielLiveOutput === "function") {
+          try {
+            const said = up.leielLiveOutput(hop.out);
+            if (typeof said === "string") return said;
+          } catch (e) { /* fall through to the guess */ }
+        }
+
         /* A plain text node: one output, one string, and reading the widget
            means it updates as you type with no run needed. That guess is only
            safe when there is nothing else the output could be, so anything
@@ -2477,7 +2521,7 @@ app.registerExtension({
         const body = trSecEl(s)?.querySelector(".lvp-tr-body");
         if (!body) return;
         const c = trCell(s);
-        const behind = c.src !== (s.text || "").trim();
+        const behind = c.src !== sectionText(s).trim();
         body.classList.toggle("err", c.status === "error");
         body.classList.toggle("stale",
           c.status !== "error" && (behind || c.status === "working" || c.status === "load"));
@@ -2496,6 +2540,19 @@ app.registerExtension({
         body.innerHTML = trBodyHtml(c);
       }
 
+      /* What the section is actually showing. A wired section keeps its own
+         s.text untouched and displays what arrived on the input instead, so
+         anything that reads a section has to ask for this rather than for
+         s.text - the translate pane used to read s.text and so translated the
+         empty local buffer while the incoming English sat right above it. */
+      function sectionText(s) {
+        if (extLinked(s)) {
+          const inc = extTextFor(s);
+          return typeof inc === "string" ? inc : "";
+        }
+        return s.text || "";
+      }
+
       function trSchedule(s, delay) {
         const c = trCell(s);
         clearTimeout(c.timer);
@@ -2504,14 +2561,15 @@ app.registerExtension({
 
       async function trRun(s) {
         const c = trCell(s);
-        const src = (s.text || "").trim();
+        const live = sectionText(s);
+        const src = live.trim();
         /* one at a time per section - a second request while the first is out
            is remembered and run after it, so fast typing cannot pile up */
         if (c.status === "working" || c.status === "load") { c.again = true; return; }
         if (!src) { c.src = ""; c.tokens = []; c.status = "done"; trPaint(s); return; }
         if (c.status === "done" && c.src === src) { trPaint(s); return; }
         c.status = "working";
-        c.tokens = trSplit(s.text || "");
+        c.tokens = trSplit(live);
         trPaint(s);
         try {
           if (!trHas()) {
@@ -2684,7 +2742,7 @@ app.registerExtension({
         const t = i >= 0 ? c.tokens[i] : null;
         /* the offsets describe the text as it was translated - once the box
            has moved on they point at nothing in particular */
-        const stale = c.src !== (s.text || "").trim();
+        const stale = c.src !== sectionText(s).trim();
 
         if (body) {
           const was = body.querySelector(".lvp-sent.on");
@@ -2834,14 +2892,19 @@ app.registerExtension({
 
           const split = paneSplit(s, linked);
           let extPane;
+          /* The translation pane belongs to every branch, not just the
+             unwired one. It used to be built only in the else, so on a wired
+             section the TR switch lit up and nothing appeared: there was no
+             pane in the markup for the text to be painted into. */
+          const trPane = s.tr ? trBox(split.tr) : "";
           if (linked && s.extMode === "replace") {
-            extPane = extBox(split.ext);                  // the box is ignored
+            extPane = extBox(split.ext) + trPane;         // the box is ignored
           } else if (linked && (s.extMode === "prepend" || s.extMode === "append")) {
-            extPane = s.extMode === "prepend"
+            extPane = (s.extMode === "prepend"
               ? extBox(split.ext) + editBox(split.edit)
-              : editBox(split.edit) + extBox(split.ext);
+              : editBox(split.edit) + extBox(split.ext)) + trPane;
           } else {
-            extPane = editBox(split.edit) + (s.tr ? trBox(split.tr) : "");
+            extPane = editBox(split.edit) + trPane;
           }
           /* above the box: the picture is what you are reading from, and the
              text it produces belongs underneath it */
@@ -2869,9 +2932,9 @@ app.registerExtension({
               <div class="lvp-imgb imgb${s.imgOpen ? " on" : ""}"
                    title="Read a reference image into this section"
                    >IMG</div>
-              <div class="lvp-trb trb${s.tr ? " on" : ""}${linked ? " no" : ""}"
+              <div class="lvp-trb trb${s.tr ? " on" : ""}"
                    title="${linked
-                     ? "not available while an input is wired into this section"
+                     ? "Read the incoming text in another language. The translation is never saved and never reaches the model"
                      : "Read this section in another language. The translation is never saved and never reaches the model"}"
                    >TR</div>
               <span class="lvp-caret" title="${s.collapsed ? "Expand this section" : "Collapse this section"}"
@@ -2895,6 +2958,7 @@ app.registerExtension({
               <span class="lvp-mini ico down" title="Move down">${ICON_DOWN}</span>
               <span class="lvp-mini ico del" title="Delete section">${ICON_DEL}</span>
               <span class="lvp-bar-sep"></span>
+              <button class="lvp-tiny snip" title="Snippet library - add a saved phrase to what is already here">SNIP</button>
               <button class="lvp-tiny pre" title="Preset library for this section">PRESET</button>
             </div>
             ${extPane}
@@ -3217,19 +3281,51 @@ app.registerExtension({
           }
 
           const trb = el.querySelector(".trb");
-          if (trb && !linked) {
+          if (trb) {
             trb.addEventListener("click", () => {
+              /* Measured before the toggle, while the panes are still laid
+                 out the way the user is looking at them. */
+              const linked = !!el.querySelector(".lvp-ext");
+              const edEl = el.querySelector(".lvp-ed");
+              const edH = edEl ? Math.round(edEl.offsetHeight) : null;
+              const boxNeed = linked ? null : paneNeed(el.querySelector(".lvp-ta"));
+
               s.tr = !s.tr;
               if (s.tr) {
-                /* The section GROWS by the pane. The old line only guaranteed
-                   the box 40px and then carved the pane out of the height the
-                   section already had, so opening a translation on a long
-                   section cut the English down to a few lines. */
                 s.trH = Math.min(360, Math.max(TR_MIN,
                   s.trH || Math.min(300, Math.round(s.h * 0.6))));
-                s.h += s.trH + 4;
+                /* The section used to GROW by the whole pane every time. That
+                   was right when the box was full - carving the pane out of
+                   the existing height cut the English down to a few lines -
+                   and wrong whenever the box had room to spare, which is most
+                   readings: a four-sentence answer in a box sized for twelve
+                   pushed the node taller for no reason, and the height had to
+                   be dragged back by hand afterwards.
+                   So grow by what the box cannot spare, and nothing more. The
+                   box keeps exactly the height its text needs; the pane takes
+                   the slack first and asks for new height only once the slack
+                   runs out. An empty-ish box grows by nothing, a full one
+                   still grows by the whole pane, and everything between lands
+                   in between. Same arithmetic FIT uses, so opening a
+                   translation on a full box now settles where FIT would put
+                   it.
+                   A wired section keeps the old behaviour: its height is
+                   shared between two panes by a rule of its own, and one
+                   measurement of the box does not describe it. */
+                if (boxNeed === null) {
+                  s.h += s.trH + 4;
+                } else {
+                  s.h = Math.max(s.h, Math.max(MIN_H, boxNeed) + s.trH + 4);
+                }
               } else if (s.trH) {
-                s.h = Math.max(MIN_H, s.h - (s.trH + 4));   // and hand it back
+                /* Hand back whatever the pane was using and not a pixel of the
+                   box. Taken from the box's own measured height rather than by
+                   subtracting trH, because the section grip moves trH while
+                   the pane is open - subtracting it then returns a different
+                   height than the one the box has been sitting at. */
+                s.h = (!linked && edH !== null)
+                  ? Math.max(MIN_H, edH)
+                  : Math.max(MIN_H, s.h - (s.trH + 4));
               }
               touch();
               /* Started before render, not after. trRun marks the cell working
@@ -3342,7 +3438,8 @@ app.registerExtension({
               trDiv.addEventListener("pointerup", up);
             });
           }
-          el.querySelector(".pre").addEventListener("click", () => openPresets(s));
+          el.querySelector(".pre").addEventListener("click", () => openPresets(s, el));
+          el.querySelector(".snip")?.addEventListener("click", () => openSnips(s, el));
           el.querySelector(".lvp-caret").addEventListener("click", () => {
             s.collapsed = !s.collapsed; touch(); render(); save();
           });
@@ -3468,11 +3565,16 @@ app.registerExtension({
             ta?.classList.toggle("painting", brushMode === "apply");
           }
 
-          if (s.tr && !linked) {
+          /* Repaint from cache after every render, wired or not. This was
+             gated on !linked, so any redraw - clicking a switch, opening
+             another section's pane - rebuilt the wired section's markup with
+             an empty pane and left it that way: the translation was still in
+             the cache, nothing ever put it back on screen. */
+          if (s.tr) {
             trPaint(s);
             const c = trCell(s);
             if (c.status !== "working" && c.status !== "load"
-                && c.src !== (s.text || "").trim()) trSchedule(s, 120);
+                && c.src !== sectionText(s).trim()) trSchedule(s, 120);
           }
         });
         updateFoot();
@@ -3523,7 +3625,7 @@ app.registerExtension({
           const noteH = (!s.on || linked) ? 15 : 0;
           return n + HEADER_H + s.h + 6 + noteH + GAP + imgBlock(s);
         }, 0);
-        return 34 + secs + 18;
+        return 34 + secs + 18 + LIST_PAD;
       }
 
       /* Dragging the node's corner turns into section heights.
@@ -3680,11 +3782,21 @@ app.registerExtension({
           th = Math.min(Math.max(TR_MIN, th), room);
           return { edit: total - th - 4, ext: 0, tr: th };
         }
-        if (sec.extMode === "replace") return { edit: 0, ext: sec.h, tr: 0 };
-        const total = Math.max(2 * 24 + 4, sec.h);
+        /* A wired section can carry a translation pane as well. The height is
+           taken off the bottom first and whatever the mode wanted is fitted
+           into what is left, so turning TR on grows the section rather than
+           squeezing the text you were reading. */
+        const th = sec.tr
+          ? Math.min(Math.max(TR_MIN, Math.round(sec.trH || Math.round(sec.h * 0.4))),
+                     Math.max(TR_MIN, sec.h - 4 - 24))
+          : 0;
+        const rest = sec.tr ? Math.max(24, sec.h - th - 4) : sec.h;
+
+        if (sec.extMode === "replace") return { edit: 0, ext: rest, tr: th };
+        const total = Math.max(2 * 24 + 4, rest);
         let eh = Math.round(total * 0.4);
         eh = Math.min(Math.max(24, eh), total - 4 - 24);
-        return { edit: total - eh - 4, ext: eh, tr: 0 };
+        return { edit: total - eh - 4, ext: eh, tr: th };
       }
 
       /* Cheap path used while dragging: only touch the box heights. */
@@ -4082,8 +4194,249 @@ app.registerExtension({
         fEl.focus();
       }
 
+      /* Put a panel where the work is. Both libraries used to cover the whole
+         node, so opening one from the bottom section showed its text far above
+         the button that was just pressed, and choosing meant scrolling up and
+         back down each time. Anchored to the section instead, clamped so it
+         cannot hang off either end of the node. */
+      function placePanel(box, secEl) {
+        if (!secEl) return;
+        const avail = root.clientHeight;
+        const h = Math.min(380, Math.max(170, avail - 16));
+        const top = Math.max(4, Math.min(
+          list.offsetTop + secEl.offsetTop - list.scrollTop, avail - h - 4));
+        box.style.inset = "auto";
+        box.style.left = "0";
+        box.style.right = "0";
+        box.style.top = `${Math.round(top)}px`;
+        box.style.height = `${h}px`;
+      }
+
+      /* ---------- snippet library ---------- */
+      /* The one thing a preset cannot do: add to a section instead of taking
+         it over. The reader writes what the photograph shows and stops there,
+         so a shot size it could not make out, a film stock, a time of day -
+         all of that is typed in by hand, every time. This keeps them.
+         Two places to land, and no caret handling: the front, which is where a
+         shot size or a person wants to be, and the end, which is where another
+         line about the light belongs. Aiming at the caret would mean reaching
+         into the marked-up HTML, and that structure is not worth risking for a
+         third option nobody asked for. */
+      async function openSnips(sec, secEl) {
+        if (root.querySelector(".lvp-panel")) return;
+        const kind = snipKind(sec.title);
+        const box = document.createElement("div");
+        box.className = "lvp-panel";
+        box.innerHTML = `
+          <h5>SNIPPETS &mdash; ${escapeHtml(sec.title)}<span class="lvp-cap"></span><span class="lvp-x" title="Close">&#10005;</span></h5>
+          <div class="lvp-row">
+            <input type="text" class="nm" placeholder="name for the selected text">
+            <input type="text" class="gp" placeholder="group (optional)" style="max-width:120px"
+              title="Snippets sharing a group replace one another - shot, lens, time. Leave it empty to stack.">
+            <button class="lvp-btn keep" title="Save the selected text, or the whole section if nothing is selected">Save</button>
+          </div>
+          <div class="lvp-row">
+            <input type="text" class="q" placeholder="filter">
+            <label style="display:flex;align-items:center;gap:4px;opacity:.7;font-size:10px">
+              <input type="checkbox" class="all"> all sections
+            </label>
+            <button class="lvp-btn rl" title="Read the library again">Reload</button>
+          </div>
+          <div class="lvp-scroll"></div>
+          <div class="lvp-row">
+            <span class="msg" style="opacity:.6">click a name to put it at the front, or END for the bottom</span>
+            <span style="flex:1"></span>
+            <button class="lvp-btn cls">Close</button>
+          </div>`;
+        root.appendChild(box);
+        placePanel(box, secEl);
+        box.querySelector(".lvp-x")?.addEventListener("click", () => box.remove());
+        for (const ev of ["pointerdown", "mousedown", "wheel", "contextmenu"]) {
+          box.addEventListener(ev, e => e.stopPropagation());
+        }
+        box.querySelectorAll("input").forEach(el =>
+          ["keydown", "keyup", "keypress"].forEach(k =>
+            el.addEventListener(k, e => e.stopPropagation())));
+
+        const scroll = box.querySelector(".lvp-scroll");
+        const msg = box.querySelector(".msg");
+        const qEl = box.querySelector(".q");
+        const allEl = box.querySelector(".all");
+        let list = [];
+
+        /* Whatever was highlighted in the box when the panel opened. Reading
+           it now rather than at save time, because opening the panel and
+           typing a name both drop the selection. */
+        let picked = "";
+        try {
+          const selNow = window.getSelection();
+          const ta = secEl && secEl.querySelector(".lvp-ta");
+          if (selNow && selNow.rangeCount && ta
+              && ta.contains(selNow.getRangeAt(0).commonAncestorContainer)) {
+            picked = String(selNow.toString() || "").trim();
+          }
+        } catch (e) { /* no selection to read */ }
+        if (picked) msg.textContent = `Save will keep the ${picked.length} selected chars`;
+
+        async function pull(force) {
+          scroll.textContent = "reading\u2026";
+          try {
+            const r = await api.fetchApi(SNIP_URL + (force ? "?t=" + Date.now() : ""));
+            const j = await r.json();
+            list = Array.isArray(j && j.snippets) ? j.snippets : [];
+          } catch (e) {
+            list = [];
+          }
+          paint();
+        }
+
+        async function push(next) {
+          try {
+            const r = await api.fetchApi(SNIP_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ snippets: next }),
+            });
+            const j = await r.json();
+            if (!j || !j.ok) {
+              msg.textContent = (j && j.error) || "could not write snippets.json";
+              return false;
+            }
+            list = Array.isArray(j.snippets) ? j.snippets : [];
+            paint();
+            return true;
+          } catch (e) {
+            msg.textContent = "could not reach the server";
+            return false;
+          }
+        }
+
+        function put(sn, atEnd) {
+          snapPush(state.sections, "before snippet");
+          const piece = normalizeText(sn.text).trim();
+          let had = normalizeText(sec.text || "").trim();
+          /* One shot size, one lens, one time of day. Where a snippet from the
+             same group is already sitting in the box, the new one takes its
+             place where it stands - so a medium shot becomes a close-up rather
+             than arguing with one. Matched against the library's own text, so
+             it works whether the old one went in at the front or the end, and
+             it still works after a reload because nothing is remembered on the
+             section. A snippet that has since been edited by hand no longer
+             matches and is left alone; the new one is added instead, which is
+             visible and easy to fix. Groupless snippets always stack - a warm
+             cast and available light are both true at once. */
+          let swapped = false;
+          if (sn.group) {
+            for (const other of list) {
+              if (other === sn || other.kind !== sn.kind
+                  || other.group !== sn.group) continue;
+              const old = normalizeText(other.text).trim();
+              const at = old ? had.indexOf(old) : -1;
+              if (at < 0) continue;
+              had = (had.slice(0, at) + piece + had.slice(at + old.length)).trim();
+              swapped = true;
+              break;
+            }
+          }
+          if (swapped) {
+            sec.text = had;
+          } else if (!had) {
+            sec.text = piece;
+          } else if (had.indexOf(piece) >= 0) {
+            sec.text = had;                 // already there; nothing to add
+          } else {
+            sec.text = atEnd ? had + "\n\n" + piece : piece + "\n\n" + had;
+          }
+          sec.html = "";
+          touch(); render(); save();
+          box.remove();
+        }
+
+        function paint() {
+          scroll.innerHTML = "";
+          const q = (qEl.value || "").trim().toLowerCase();
+          const shown = list
+            .filter(x => allEl.checked || x.kind === kind)
+            .filter(x => !q || x.name.toLowerCase().includes(q)
+              || x.text.toLowerCase().includes(q));
+          if (!shown.length) {
+            scroll.innerHTML = list.length
+              ? `<span style="opacity:.55">Nothing here for this section.`
+                + ` Tick <b>all sections</b> to see the rest, or select some`
+                + ` text in the box, name it above and press Save.</span>`
+              : `<span style="opacity:.55">The library is empty.<br><br>`
+                + `Select a phrase in the box, type a name above and press`
+                + ` <b>Save</b>. It is filed under this section, so Camera`
+                + ` keeps camera phrases and Scene keeps scene ones.</span>`;
+            return;
+          }
+          for (const sn of shown) {
+            const row = document.createElement("div");
+            row.className = "lvp-snap";
+            row.innerHTML =
+              `<span>`
+              + (sn.group
+                ? `<span style="color:#e0b658">${escapeHtml(sn.group)}</span>  ` : "")
+              + `<b style="color:#cfe6ff">${escapeHtml(sn.name)}</b>`
+              + (allEl.checked && sn.kind !== kind
+                ? `<span style="opacity:.4">  [${escapeHtml(sn.kind)}]</span>` : "")
+              + `<br><span style="opacity:.5">${escapeHtml(sn.text.slice(0, 110))}${sn.text.length > 110 ? "\u2026" : ""}</span>`
+              + `</span>`
+              + `<span class="end" title="Add it at the bottom instead"
+                   style="opacity:.5;font-size:10px;padding:0 6px;cursor:pointer">END</span>`
+              + `<span class="del" title="Remove from the library">&#10005;</span>`;
+            row.title = sn.text;
+            row.addEventListener("click", () => put(sn, false));
+            row.querySelector(".end").addEventListener("click", (ev) => {
+              ev.stopPropagation(); put(sn, true);
+            });
+            const del = row.querySelector(".del");
+            del.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              if (del.dataset.armed !== "1") {
+                scroll.querySelectorAll(".del").forEach(d => {
+                  d.dataset.armed = ""; d.textContent = "\u2715";
+                });
+                del.dataset.armed = "1";
+                del.textContent = "delete?";
+                setTimeout(() => {
+                  if (!del.isConnected || del.dataset.armed !== "1") return;
+                  del.dataset.armed = ""; del.textContent = "\u2715";
+                }, 4000);
+                return;
+              }
+              const next = list.filter(
+                x => !(x.kind === sn.kind && x.name === sn.name));
+              if (await push(next)) msg.textContent = `deleted "${sn.name}"`;
+            });
+            scroll.appendChild(row);
+          }
+        }
+
+        box.querySelector(".keep").addEventListener("click", async () => {
+          const nm = box.querySelector(".nm").value.trim();
+          if (!nm) { msg.textContent = "give it a name first"; return; }
+          const body = (picked || normalizeText(sec.text || "")).trim();
+          if (!body) { msg.textContent = "nothing to save"; return; }
+          const gp = box.querySelector(".gp").value.trim().toLowerCase();
+          const had = list.some(x => x.kind === kind && x.name === nm);
+          const next = list.filter(x => !(x.kind === kind && x.name === nm))
+            .concat([{ kind, group: gp, name: nm, text: body }]);
+          if (await push(next)) {
+            box.querySelector(".nm").value = "";
+            msg.textContent = (had ? `replaced "${nm}"` : `saved "${nm}"`)
+              + `  ${body.length} chars`;
+          }
+        });
+        qEl.addEventListener("input", paint);
+        allEl.addEventListener("change", paint);
+        box.querySelector(".rl").addEventListener("click", () => pull(true));
+        box.querySelector(".cls").addEventListener("click", () => box.remove());
+        pull(false);
+      }
+
       /* ---------- preset library ---------- */
-      function openPresets(sec) {
+      function openPresets(sec, secEl) {
         if (root.querySelector(".lvp-panel")) return;
         const box = document.createElement("div");
         box.className = "lvp-panel";
@@ -4108,6 +4461,7 @@ app.registerExtension({
             <button class="lvp-btn cls">Close</button>
           </div>`;
         root.appendChild(box);
+        placePanel(box, secEl);
         box.querySelector(".lvp-x")?.addEventListener("click", () => box.remove());
         for (const ev of ["pointerdown", "mousedown", "wheel", "contextmenu"]) {
           box.addEventListener(ev, e => e.stopPropagation());
@@ -4503,7 +4857,20 @@ app.registerExtension({
         el.style.bottom = prevBottom;
         el.style.height = prevHeight;
         el.style.overflowY = prevOver;
-        return h;
+        /* Two small things that Fit used to lose, and together they are why
+           fitting always left a scrollbar and a second drag to be rid of it.
+           The box is absolutely positioned inside its wrapper, so its own
+           height covers the text and its padding but not the wrapper's
+           border. And offsetHeight is an integer, while a 10px font on a 1.45
+           line height produces fractions all day - a box wanting 100.6px
+           reports 100 and clips the last line by a whisker.
+           The wrapper's chrome is measured rather than assumed, so it stays
+           right if the border ever changes, and one pixel covers the
+           rounding. */
+        const wrap = el.parentElement;
+        const chrome = wrap
+          ? Math.max(0, wrap.offsetHeight - wrap.clientHeight) : 0;
+        return h + chrome + 1;
       }
 
       /* A ceiling per section, so one very long piece of text cannot swallow
@@ -4565,7 +4932,7 @@ app.registerExtension({
           ? HEADER_H + GAP
           : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)
             + imgBlock(x)), 0);
-        const budget = FIT_TOTAL_MAX - 34 - 18 - fixed;
+        const budget = FIT_TOTAL_MAX - 34 - 18 - LIST_PAD - fixed;
         let total = 0;
         for (const h of want.values()) total += h;
         if (total > budget && budget >= open.length * MIN_H) {
@@ -5225,7 +5592,15 @@ app.registerExtension({
         const sig = state.sections
           .map(s => (extLinked(s) ? s.extMode : "-") + (s.on ? "1" : "0") +
                     "|" + (extLinked(s) ? (extTextFor(s) || "") : "")).join("\u0001");
-        if (sig !== node._lvpExtSig) { node._lvpExtSig = sig; render(); }
+        if (sig !== node._lvpExtSig) {
+          node._lvpExtSig = sig;
+          /* Text arriving on an input changes what an open pane should say, and
+             nothing else would notice: the pane is normally rerun by typing. */
+          for (const s of state.sections) {
+            if (s.tr && extLinked(s)) trSchedule(s, 250);
+          }
+          render();
+        }
       }, 200);
 
       return this;

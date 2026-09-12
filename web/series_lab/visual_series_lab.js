@@ -1737,8 +1737,15 @@ app.registerExtension({
         const box = document.createElement("div");
         box.className = "vsl-edit";
         box.style.minWidth = "300px";
+        /* A width as well as a height. Options are widget values, and one of
+           those widgets is a Prompt Composer section holding a whole prompt -
+           a few thousand characters on one button, which stretched the picker
+           across the screen. The list is allowed to be as long as it likes;
+           it is the line length that has to be held. */
+        box.style.maxWidth = "440px";
         box.style.maxHeight = "420px";
         box.style.overflowY = "auto";
+        box.style.overflowX = "hidden";
         const head = document.createElement("div");
         head.className = "eh";
         head.textContent = "Add an option";
@@ -1761,7 +1768,18 @@ app.registerExtension({
             const b = document.createElement("button");
             b.className = "vsl-btn";
             b.style.textAlign = "left";
-            b.textContent = o.widget + "   " + String(o.value);
+            /* One line, ending in an ellipsis where the value runs on. The
+               whole value is still there on hover, which is where a value
+               that long belongs. */
+            b.style.display = "block";
+            b.style.width = "100%";
+            b.style.whiteSpace = "nowrap";
+            b.style.overflow = "hidden";
+            b.style.textOverflow = "ellipsis";
+            const flat = String(o.value).replace(/\s+/g, " ").trim();
+            b.textContent = o.widget + "   "
+              + (flat.length > 90 ? flat.slice(0, 90) + "\u2026" : flat);
+            b.title = o.widget + "\n" + String(o.value);
             b.addEventListener("click", (e) => {
               e.stopPropagation();
               /* Exactly the shape the recipe builder makes, so a row built
