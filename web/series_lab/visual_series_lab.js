@@ -434,6 +434,19 @@ const CSS = `
 .vsl-edit select[multiple] option{padding:2px 4px;}
 .vsl-edit select[multiple] option:checked{background:#3a6a86;color:#fff;}
 .vsl-edit .rowb{display:flex;gap:4px;justify-content:flex-end;}
+/* A flex item only keeps its content height while its overflow is visible.
+   The option rows clip their text, so without this they are shrunk to a
+   line the moment the list is taller than the panel. */
+.vsl-edit>*{flex-shrink:0;}
+.vsl-pick{max-height:420px;overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;gap:4px;}
+.vsl-pick>*{flex-shrink:0;}
+.vsl-btn.optpick{display:flex;align-items:baseline;gap:8px;width:100%;
+  box-sizing:border-box;text-align:left;overflow:hidden;}
+.vsl-btn.optpick .w{flex:0 0 auto;color:#ffd479;}
+.vsl-btn.optpick .v{flex:1 1 auto;min-width:0;overflow:hidden;
+  white-space:nowrap;text-overflow:ellipsis;opacity:.75;}
+.vsl-btn.optpick .v:empty{display:none;}
 `;
 
 /* ---------- upstream ---------- */
@@ -709,7 +722,7 @@ function scanWorkflowOptions(self) {
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   for (const n of nodes) {
-    const title = String(n.title || n.type || "node");
+    const title = String(n.title || n.type || "").trim() || ("#" + n.id);
     for (const w of n.widgets || []) {
       if (!w || !w.name) continue;
       if (SKIP_WIDGET_TYPES.includes(w.type)) continue;
@@ -1741,15 +1754,17 @@ app.registerExtension({
            those widgets is a Prompt Composer section holding a whole prompt -
            a few thousand characters on one button, which stretched the picker
            across the screen. The list is allowed to be as long as it likes;
-           it is the line length that has to be held. */
+           it is the line length that has to be held. The scrolling belongs to
+           the list and not to the panel, so the heading and the Cancel button
+           stay put while it moves. */
         box.style.maxWidth = "440px";
-        box.style.maxHeight = "420px";
-        box.style.overflowY = "auto";
-        box.style.overflowX = "hidden";
         const head = document.createElement("div");
         head.className = "eh";
         head.textContent = "Add an option";
         box.appendChild(head);
+        const list = document.createElement("div");
+        list.className = "vsl-pick";
+        box.appendChild(list);
 
         const taken = new Set((row.opts || []).map((o) => o.key));
         const groups = new Map();
@@ -1759,26 +1774,30 @@ app.registerExtension({
           groups.get(o.title).push(o);
         }
         let any = false;
-        for (const [title, list] of groups) {
+        for (const [title, opts] of groups) {
           const lab = document.createElement("label");
-          lab.textContent = shortNodeName(title);
-          box.appendChild(lab);
-          for (const o of list) {
+          /* A node with no title of its own still has to be findable, so it
+             falls back to its class and then to its id. */
+          lab.textContent = shortNodeName(title) || String(opts[0].cls || "")
+            || ("#" + opts[0].nodeId);
+          list.appendChild(lab);
+          for (const o of opts) {
             any = true;
             const b = document.createElement("button");
-            b.className = "vsl-btn";
-            b.style.textAlign = "left";
-            /* One line, ending in an ellipsis where the value runs on. The
-               whole value is still there on hover, which is where a value
-               that long belongs. */
-            b.style.display = "block";
-            b.style.width = "100%";
-            b.style.whiteSpace = "nowrap";
-            b.style.overflow = "hidden";
-            b.style.textOverflow = "ellipsis";
+            b.className = "vsl-btn optpick";
+            /* Two parts on one line: the widget name is what is being chosen,
+               so it is never cut, and the value after it ends in an ellipsis
+               where it runs on. The whole value is still there on hover,
+               which is where a value that long belongs. */
+            const wn = document.createElement("span");
+            wn.className = "w";
+            wn.textContent = o.widget;
+            const vv = document.createElement("span");
+            vv.className = "v";
             const flat = String(o.value).replace(/\s+/g, " ").trim();
-            b.textContent = o.widget + "   "
-              + (flat.length > 90 ? flat.slice(0, 90) + "\u2026" : flat);
+            vv.textContent = flat.length > 90 ? flat.slice(0, 90) + "\u2026" : flat;
+            b.appendChild(wn);
+            b.appendChild(vv);
             b.title = o.widget + "\n" + String(o.value);
             b.addEventListener("click", (e) => {
               e.stopPropagation();
@@ -1792,7 +1811,7 @@ app.registerExtension({
               writeStore();
               paint();
             });
-            box.appendChild(b);
+            list.appendChild(b);
           }
         }
         if (!any) {
@@ -1800,7 +1819,7 @@ app.registerExtension({
           e2.textContent = state.options.length
             ? "every option is already in this recipe"
             : "no options found - press Refresh on the Options Shelf";
-          box.appendChild(e2);
+          list.appendChild(e2);
         }
         const bar = document.createElement("div");
         bar.className = "rowb";
