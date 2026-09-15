@@ -1,14 +1,18 @@
-Screenshots for the main README.
+Screenshots for the README and the node documents.
 
-Expected files, one per node, PNG, taken at 100% zoom on the dark theme:
+One folder per node, named after its document:
 
-    prompt_composer.png
-    series_lab.png
-    filename_manager.png
-    latent_size_picker.png
-    node_bag.png
-    crop.png
+    docs/images/<node>/01-overview.png
+                      /02-....png
 
-Add the matching line to the top-level README as each one is taken:
+Numbered in the order they appear in the document. The first is the one the
+top-level README uses as well, so it has to stand on its own:
 
-    ![Visual Node Bag](docs/images/node_bag.png)
+    ![Visual Node Bag](docs/images/node-bag/01-before-after.png)
+
+PNG, taken at 100% zoom on the dark theme, with a real workflow on screen
+rather than a placeholder. Shots of the same node are taken at the same width
+so they sit together on the page.
+
+Some folders carry a README of their own with the shot list and the overlay
+text for that node.

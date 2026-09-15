@@ -1,7 +1,7 @@
 # Visual Suite (Studio Leiel)
 
-Six nodes for ComfyUI, built for people who spend their day in the graph rather
-than passing through it. They share one design language: the same palette, the
+Seven nodes for ComfyUI, built for people who spend their day in the graph
+rather than passing through it. They share one design language: the same palette, the
 same chips, the same `?` button that opens a manual on the node itself.
 
 ## The nodes
@@ -50,6 +50,21 @@ the workflow instead: every option is already listed, and a click puts it in the
 folder or the file.
 
 ![Visual Filename Manager](docs/images/filename-manager/01-overview.png)
+
+### [Visual Save Image](docs/save-image.md)
+
+Saves what you rendered, and keeps the folder within reach.
+
+ComfyUI's own Save Image appends a five digit counter to every name it is
+handed. On a name that already carries the date, the settings and the size that
+counter reads `00001` for ever, and costs seven characters on a name long
+enough to be arguing with the path limit. This one writes the name as given —
+and then, because the folder is right there, lets you walk it: arrow keys
+through everything rendered into it, `t` to move a bad one to `_trash`, and
+optional JPEG or WebP copies beside the PNG. Give the Filename Manager a `seq`
+chip and that walk is in the order the renders were made.
+
+![Visual Save Image](docs/images/save-image/01-overview.png)
 
 ### [Visual Latent Size Picker](docs/latent-size-picker.md)
 
@@ -119,7 +134,7 @@ web/<name>/       its frontend, served from /extensions/comfyui-visual-suite/<na
 ```
 
 Each node is imported separately. If one fails - a ComfyUI frontend change, a
-bad edit - it is skipped with a message in the console and the other five still
+bad edit - it is skipped with a message in the console and the other six still
 load. The console line at startup says how many came up.
 
 Nodes that keep state (prompt presets, series favourites, custom size lists)
@@ -140,6 +155,7 @@ it. The ids are invisible unless you read the workflow JSON.
 | Visual Prompt Composer (Studio Leiel) | `LeielPromptComposer` |
 | Visual Series Lab (Studio Leiel) | `VisualSeriesLabSetup` |
 | Visual Filename Manager (Studio Leiel) | `LeielFilenameStudio` |
+| Visual Save Image (Studio Leiel) | `LeielSaveImage` |
 | Visual Latent Size Picker (Studio Leiel) | `RandomLatentSizePicker` |
 | Visual Node Bag (Studio Leiel) | `VisualNodeBag` |
 | Visual Crop (Studio Leiel) | `VisualCrop_StudioLeiel` |

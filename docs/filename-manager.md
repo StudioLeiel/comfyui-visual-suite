@@ -38,7 +38,8 @@ one node per row, and `flat` runs everything together.
 
 Two groups are not from the graph:
 
-- **special** — the date, the clock, the render time, and a free text field.
+- **special** — the date, the clock, the render time, a running number, and a
+  free text field.
 - **wired** — anything connected to `text_1` … `text_4`. Some values only exist
   while the graph is running — a size chosen at random, a label computed
   downstream — and cannot be read off the canvas, because the widget showing
@@ -66,6 +67,22 @@ Inside a box, drag a chip to reorder it and drag it out to remove it. Order is
 worth care: the first thing in a name is what the folder sorts by, so putting
 the date first gives you a chronological list and putting the LoRA first groups
 by LoRA.
+
+### The `seq` chip
+
+A name built from the settings sorts by whichever setting happens to come
+first, which is rarely the order you want to look through it in. Put `seq` at
+the front of the file and every render is numbered instead — `0001_`, `0002_` —
+so the folder reads in the order it was made, in any image viewer.
+
+The number is the highest already at the front of a name in that folder, plus
+one. Counted rather than remembered, so it survives a restart; taken from the
+highest rather than from how many files are there, so deleting one in the
+middle cannot hand the same number out twice.
+
+Its format field is the digit count, 4 by default. A `seq` chip dropped in the
+folder box is ignored — a number there would make a new folder for every
+render, and the report says so.
 
 ---
 

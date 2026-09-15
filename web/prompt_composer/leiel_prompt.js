@@ -947,6 +947,35 @@ function sanitizeMarkup(html) {
 
 function textToHtml(text) { return escapeHtml(text || ""); }
 
+/* A snippet is dropped into the box beside whatever marks are already on it,
+   so the colours and emphasis a section has been given survive a phrase being
+   added or swapped. The run being replaced is found by counting characters
+   through the text nodes, and only that run is touched. */
+function markPoint(root, offset) {
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let seen = 0, n = null, last = null;
+  while ((n = w.nextNode())) {
+    const len = n.nodeValue.length;
+    if (offset <= seen + len) return { node: n, off: offset - seen };
+    seen += len;
+    last = n;
+  }
+  return last ? { node: last, off: last.nodeValue.length } : null;
+}
+
+function spliceMarkup(root, start, end, insert) {
+  const a = markPoint(root, start);
+  const b = markPoint(root, end);
+  if (!a || !b) return false;
+  const r = document.createRange();
+  r.setStart(a.node, a.off);
+  r.setEnd(b.node, b.off);
+  r.deleteContents();
+  r.insertNode(document.createTextNode(insert));
+  root.normalize();
+  return true;
+}
+
 /* ---------- styles ---------- */
 const CSS = `
 /* One control face for the whole node.
@@ -4314,7 +4343,13 @@ app.registerExtension({
         function put(sn, atEnd) {
           snapPush(state.sections, "before snippet");
           const piece = normalizeText(sn.text).trim();
-          let had = normalizeText(sec.text || "").trim();
+          /* Worked on as markup whenever the section has any, so a snippet
+             going in no longer costs the box every mark on it. */
+          const host = document.createElement("div");
+          host.innerHTML = sec.html ? sanitizeMarkup(sec.html)
+            : textToHtml(normalizeText(sec.text || ""));
+          const marked = !!sec.html;
+          const had = htmlToText(host);
           /* One shot size, one lens, one time of day. Where a snippet from the
              same group is already sitting in the box, the new one takes its
              place where it stands - so a medium shot becomes a close-up rather
@@ -4333,21 +4368,25 @@ app.registerExtension({
               const old = normalizeText(other.text).trim();
               const at = old ? had.indexOf(old) : -1;
               if (at < 0) continue;
-              had = (had.slice(0, at) + piece + had.slice(at + old.length)).trim();
-              swapped = true;
+              swapped = spliceMarkup(host, at, at + old.length, piece);
               break;
             }
           }
-          if (swapped) {
-            sec.text = had;
-          } else if (!had) {
-            sec.text = piece;
-          } else if (had.indexOf(piece) >= 0) {
-            sec.text = had;                 // already there; nothing to add
-          } else {
-            sec.text = atEnd ? had + "\n\n" + piece : piece + "\n\n" + had;
+          if (!swapped) {
+            if (!had.trim()) {
+              host.textContent = piece;
+            } else if (had.indexOf(piece) >= 0) {
+              /* already there; nothing to add */
+            } else if (atEnd) {
+              host.appendChild(document.createTextNode("\n\n" + piece));
+            } else {
+              host.insertBefore(
+                document.createTextNode(piece + "\n\n"), host.firstChild);
+            }
           }
-          sec.html = "";
+          trimEdgeWhitespace(host);
+          sec.text = htmlToText(host);
+          sec.html = marked ? sanitizeMarkup(host.innerHTML) : "";
           touch(); render(); save();
           box.remove();
         }

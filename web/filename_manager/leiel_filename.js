@@ -115,7 +115,7 @@ function nodeColourClass(title) {
 }
 
 const NODELESS_KINDS = new Set(["lora", "loras", "date", "time", "elapsed",
-                                "text"]);
+                                "text", "seq"]);
 
 function chipColourClass(chip) {
   if (chip && !NODELESS_KINDS.has(chip.kind) && chip.group) {
@@ -128,7 +128,7 @@ function chipCategory(chip) {
   switch (chip.kind) {
     case "lora": case "loras":   return "lora";
     case "date": case "time":    return "time";
-    case "elapsed":              return "time";
+    case "elapsed": case "seq":   return "time";
     case "text":                 return "free";
   }
   const w = (chip.widget || "").toLowerCase();
@@ -466,7 +466,11 @@ function scanGraph(selfNode) {
     { kind: "date", fmt: "%Y-%m-%d", label: "date", hint: today(), group: "special", score: 0 },
     { kind: "time", fmt: "%H%M%S", label: "time", hint: "143022", group: "special", score: 1 },
     { kind: "elapsed", fmt: ".1f", label: "elapsed", hint: "50.4", group: "special", score: 2 },
-    { kind: "text", text: "K2", label: "text", hint: "free text", group: "special", score: 3 },
+    /* A running number counted off the folder the images go into. Put it at
+       the front of the file name and the folder reads in the order it was
+       made, whatever comes after it. The format field is the digit count. */
+    { kind: "seq", fmt: "4", label: "seq", hint: "0001", group: "special", score: 3 },
+    { kind: "text", text: "K2", label: "text", hint: "free text", group: "special", score: 4 },
   ];
 
   return specials
@@ -509,6 +513,10 @@ function rebindChip(chip) {
   chip.id = String(hit.id);
   chip.cls = hit.comfyClass || hit.type;
   chip.title = hit.title || chip.cls;
+  /* The colour follows the node, so a chip repointed at a different one has
+     to take that node's colour with it. Left behind, it would sit in the File
+     box wearing the colour of a node it no longer reads from. */
+  chip.group = chip.title;
   return true;
 }
 
@@ -558,6 +566,12 @@ function previewChip(chip, node, zone, namesOnly) {
     case "date":    core = today(); break;
     case "time":    core = "143022"; break;
     case "elapsed": core = "50.4"; break;
+    case "seq": {
+      let d = parseInt(chip.fmt, 10);
+      if (!(d >= 1 && d <= 6)) d = 4;
+      core = "1".padStart(d, "0");
+      break;
+    }
     case "loras": {
       const l = collectLoras(node);
       if (!l.length) return null;
@@ -1008,12 +1022,12 @@ app.registerExtension({
         const snap = {};
         const no = namesOnly();
         state.folder.forEach((c, i) => {
-          if (c.kind === "elapsed" || c.kind === "input") return;
+          if (c.kind === "elapsed" || c.kind === "input" || c.kind === "seq") return;
           const v = previewChip(c, node, "folder", no);
           if (v !== null) snap["f" + i] = v;
         });
         state.file.forEach((c, i) => {
-          if (c.kind === "elapsed" || c.kind === "input") return;
+          if (c.kind === "elapsed" || c.kind === "input" || c.kind === "seq") return;
           const v = previewChip(c, node, "file", no);
           if (v !== null) snap["n" + i] = v;
         });
@@ -1197,6 +1211,10 @@ app.registerExtension({
           if (ticked.size < 2) return;
           addChip(zone, {
             kind: "bundle", label: title, inner: "_",
+            /* A bundle is made from one node's pod, so it carries that node's
+               title and wears its colour - the same shade as the pod it was
+               gathered from, rather than the grey of an uncategorised chip. */
+            group: title,
             items: [...ticked].map((c) => {
               const sub = JSON.parse(JSON.stringify(c));
               delete sub.score; delete sub.muted; delete sub.group;
@@ -1239,7 +1257,13 @@ app.registerExtension({
 
       function addChip(zone, src, index) {
         const c = JSON.parse(JSON.stringify(src));
-        delete c.score; delete c.muted; delete c.group; delete c.hint;
+        /* score, muted and hint describe the chip's life in the palette and
+           mean nothing once it is placed. group is different: it is the node
+           the value came from, and it is what gives the chip its colour. It
+           used to be dropped here, so a FaceDetailer chip arrived in the File
+           box wearing a category colour and no longer matched the one in the
+           palette it had just been dragged out of. */
+        delete c.score; delete c.muted; delete c.hint;
         if (c.kind === "bundle") {
           if (index === undefined) state[zone].push(c);
           else state[zone].splice(index, 0, c);

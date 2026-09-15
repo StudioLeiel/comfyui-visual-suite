@@ -538,6 +538,16 @@ def _resolve_chip(chip, idx, prompt, missing, ext_loras=None, ext_texts=None):
             t = f"{pre}{chip.get('text', '')}{suf}"
             return t if t else None
 
+        if kind == "seq":
+            digits = 4
+            try:
+                d = int(str(fmt).strip() or 4)
+                if 1 <= d <= 6:
+                    digits = d
+            except Exception:
+                pass
+            return f"{pre}LEIELSEQ{digits}Q{suf}"
+
         if kind == "date":
             core = datetime.datetime.now().strftime(fmt or "%Y-%m-%d")
         elif kind == "time":
@@ -591,7 +601,14 @@ def _resolve_chip(chip, idx, prompt, missing, ext_loras=None, ext_texts=None):
         return None
 
 
-_LIVE_ONLY = ("elapsed", "date", "time", "input")
+_LIVE_ONLY = ("elapsed", "date", "time", "input", "seq")
+
+# The number cannot be worked out while the chips are being resolved: it is
+# read off the folder the images are going into, and that folder is only
+# finished once every chip in it has resolved. So the chip leaves a mark
+# behind and the number is put in at the end. Letters and digits only, so it
+# survives the cleaning that strips everything a filesystem would refuse.
+_SEQ_RE = re.compile(r"LEIELSEQ([1-6])Q")
 
 _PAREN_NUM = re.compile(r"\(\s*[-+0-9.eE]+\s*\)")
 
@@ -614,6 +631,13 @@ def _resolve_zone(chips, idx, prompt, missing, sep, snap=None,
     for i, c in enumerate(chips or []):
         kind = c.get("kind", "widget")
         key = f"{key_prefix}{i}"
+
+        # A running number belongs to a file inside a folder. In a folder name
+        # it would make a new folder for every render, so it is dropped there.
+        if kind == "seq" and key_prefix == "f":
+            missing.append("seq - a running number cannot be part of a folder "
+                           "name, omitted")
+            continue
 
         # a chip pointing at a bypassed node is dropped even if a snapshot exists
         if kind == "widget" and idx.get("modes", {}).get(str(c.get("id"))) in (2, 4):
@@ -678,6 +702,46 @@ def _as_text(value):
     if isinstance(value, str):
         return value
     return None
+
+
+def _next_sequence(folder, digits):
+    """The next running number for the folder these images are going into.
+
+    An image viewer sorts by name, and a name that starts with the date and
+    ends with the settings sorts by neither - two renders a minute apart can
+    land pages away from each other. A number at the front fixes the order in
+    the only place a viewer looks.
+
+    Counted as the highest number already at the front of a name in that
+    folder, plus one, rather than as a count of the files. Counting files
+    hands the same number out twice as soon as one is deleted.
+    """
+    start = 1
+    try:
+        import folder_paths
+        base = folder_paths.get_output_directory()
+    except Exception:
+        return start
+    parts = [p for p in str(folder or "").split("/") if p.strip()]
+    target = os.path.join(base, *parts) if parts else base
+    best = 0
+    try:
+        names = os.listdir(target)
+    except Exception:
+        # The folder is made by the save node, so a folder that is not there
+        # yet is simply an empty one.
+        return start
+    for name in names:
+        m = re.match(r"(\d+)", name)
+        if not m:
+            continue
+        try:
+            n = int(m.group(1))
+        except ValueError:
+            continue
+        if n > best:
+            best = n
+    return best + 1
 
 
 class LeielFilenameStudio:
@@ -783,6 +847,15 @@ class LeielFilenameStudio:
             if not filename:
                 filename = (fallback_name or "LEIEL") + \
                     datetime.datetime.now().strftime("_%H%M%S")
+            # Filled in before the length is checked, so the trim is measured
+            # against the name that actually gets written.
+            seq_note = None
+            mark = _SEQ_RE.search(filename)
+            if mark:
+                digits = int(mark.group(1))
+                seq_note = "%0*d" % (digits, _next_sequence(folder, digits))
+                filename = _SEQ_RE.sub(seq_note, filename)
+
             if len(filename) > max_filename_chars:
                 filename = filename[:max_filename_chars].rstrip("_-. ") + "~"
 
@@ -794,6 +867,9 @@ class LeielFilenameStudio:
                       f"  filename : {filename}",
                       f"  chars    : {len(filename)}",
                       f"  prefix   : {prefix}"]
+            if seq_note:
+                report.append(f"  sequence : {seq_note}  (next free number in "
+                              f"{folder or 'output'})")
             if any(c.get("kind") == "elapsed"
                    for c in (layout.get("file") or []) + (layout.get("folder") or [])):
                 report.append("  timer    : " + _anchor_status())
