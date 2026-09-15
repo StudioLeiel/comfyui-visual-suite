@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-visual-suite"
-version = "1.2.0"
+version = "1.2.1"
 description = "Seven visual nodes for ComfyUI: prompt composer with image reading, series lab, filename manager, save image with folder browsing, latent size picker, node bag and image crop."
 license = { text = "Apache-2.0" }
 requires-python = ">=3.8"
