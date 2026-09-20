@@ -4,6 +4,11 @@ A prompt editor for ComfyUI: named sections you can switch off, reorder, mark up
 and reuse - and, when you want it, a reader that fills a section from a
 reference image, one layer at a time.
 
+> **Use it however you like.** The sections are optional. Keep a single section
+> and it is simply a text input; split it into quality, subject, scene and camera
+> if that suits you - or into any parts and names of your own. Nothing requires a
+> particular layout.
+
 ![Overview](images/prompt-composer/01-overview.png)
 
 ---
