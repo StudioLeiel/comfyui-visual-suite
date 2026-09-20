@@ -10,6 +10,10 @@ same chips, the same `?` button that opens a manual on the node itself.
 
 A prompt editor: named sections you can switch off, reorder, mark up and reuse.
 
+Use it however you like: with a single section it is simply a free text input,
+and you can split it into quality, subject, scene and camera - or any parts of
+your own - only if that helps. Nothing requires a particular layout.
+
 A prompt usually arrives as one long string with nothing in it to hold on to, so
 it gets pasted in and run, and when the result is wrong the whole thing is
 replaced rather than examined. Here it has parts. Bypass one section to find out
