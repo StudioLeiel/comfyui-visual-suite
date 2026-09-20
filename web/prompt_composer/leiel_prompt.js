@@ -217,6 +217,12 @@ async function readImage(ref, question, settings) {
       /* sent on every reading, so the clock restarts from the last thing the
          user actually did rather than from when the panel was last opened */
       idle_minutes: settings.idle,
+      /* when set, the card gets its memory back the moment the answer is
+         written rather than after the idle wait */
+      unload_after: !!settings.after,
+      /* ask ComfyUI to put its models away before the reader loads, rather
+         than waiting for the card to refuse */
+      purge_first: !!settings.purge,
     }),
   });
   const d = await r.json().catch(() => ({}));
@@ -976,6 +982,19 @@ function spliceMarkup(root, start, end, insert) {
   return true;
 }
 
+/* A snippet dropped at the caret sits between whatever is already on either
+   side of it, so it needs its own spacing: a space in front unless a line
+   break is already there, and a space behind unless the next character brings
+   its own gap. */
+function spliceAtCaret(root, at, piece) {
+  const text = htmlToText(root);
+  const before = text.charAt(at - 1);
+  const after = text.charAt(at);
+  const lead = (!before || /\s/.test(before)) ? "" : " ";
+  const tail = (!after || /\s/.test(after)) ? "" : " ";
+  return spliceMarkup(root, at, at, lead + piece + tail);
+}
+
 /* ---------- styles ---------- */
 const CSS = `
 /* One control face for the whole node.
@@ -1260,30 +1279,41 @@ const CSS = `
    second, permanently-lit version of it just put a box back in the row. */
 /* amber on the way in, matching the strip it opens */
 .lvp-imgb{--hue:#e6c476;--hue-soft:#e6c47624;font-size:8px;letter-spacing:0;}
-.lvr-panel{position:fixed;z-index:9999;width:420px;background:#1b1b1b;
-  border:1px solid #555;border-radius:8px;padding:10px;color:#ccc;font-size:11px;
+/* Sized for reading rather than for the smallest box that would hold the
+   controls: this panel is opened to check what the card is holding, often
+   mid-render, and the old 9px labels were being squinted at. */
+.lvr-panel{position:fixed;z-index:9999;width:600px;background:#1b1b1b;
+  border:1px solid #555;border-radius:8px;padding:17px;color:#ccc;font-size:15px;
   box-shadow:0 10px 30px #000a;}
-.lvr-panel h4{margin:0 0 8px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+.lvr-panel h4{margin:0 0 12px;font-size:14px;letter-spacing:.1em;text-transform:uppercase;
   color:#d9b26a;}
-.lvr-panel label{display:block;margin:6px 0 2px;font-size:9px;color:#8a8a8a;
+.lvr-panel label{display:block;margin:12px 0 4px;font-size:13px;color:#9a9a9a;
   letter-spacing:.06em;text-transform:uppercase;}
 /* Memory is the thing that stops the work, so the line about what is held is
    the one line in the panel allowed to be loud. */
-.lvr-panel p.vram{margin:9px 0 0;font-size:12.5px;font-weight:600;
+.lvr-panel p.vram{margin:13px 0 0;font-size:16.5px;font-weight:600;
   line-height:1.4;letter-spacing:.2px;}
 .lvr-panel p.vram.held{color:#f0a860;}
 .lvr-panel p.vram.idle{color:#7e9e86;}
 /* a remark about the card, not a reading of it */
-.lvr-panel p.vram.advice{font-size:10.5px;font-weight:400;color:#8a8a8a;
+.lvr-panel p.vram.advice{font-size:13.5px;font-weight:400;color:#8a8a8a;
   letter-spacing:0;margin-top:8px;}
-.lvr-panel label.chk{display:flex;align-items:center;gap:6px;cursor:pointer;
-  margin-top:9px;}
-.lvr-panel label.chk input{width:auto;flex:0 0 auto;margin:0;}
+/* The tick sits on the same line as its own words, which is why this one is
+   not the block label every other control has. Its text keeps sentence case:
+   it is a sentence, not a field name. */
+.lvr-panel label.chk{display:flex;align-items:center;gap:8px;cursor:pointer;
+  margin:14px 0 2px;font-size:15px;color:#ccc;letter-spacing:0;
+  text-transform:none;}
+.lvr-panel label.chk input{width:18px;height:18px;flex:0 0 auto;margin:0;
+  accent-color:#d9b26a;}
 .lvr-panel select,.lvr-panel input{width:100%;box-sizing:border-box;background:#2b2b2b;
-  border:1px solid #555;border-radius:4px;color:#ddd;font-size:12px;padding:4px 5px;}
-.lvr-panel .foot{display:flex;gap:6px;margin-top:10px;}
-.lvr-panel .foot button{flex:1 1 0;}
-.lvr-warn{color:#e6a0a0;font-size:10px;line-height:1.5;margin:4px 0 0;}
+  border:1px solid #555;border-radius:4px;color:#ddd;font-size:16px;padding:7px 9px;}
+.lvr-panel .foot{display:flex;gap:10px;margin-top:16px;}
+/* Scoped to this panel rather than raised on .lvp-btn itself: the same chip is
+   the node's own toolbar button, where the small size is right. */
+.lvr-panel .foot button{flex:1 1 0;height:36px;font-size:14px;
+  letter-spacing:.3px;padding:0 14px;}
+.lvr-warn{color:#e6a0a0;font-size:13.5px;line-height:1.5;margin:6px 0 0;}
 /* the English-side highlight: bars drawn over the text, never in it */
 .lvp-hl{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0;}
 .lvp-hl i{position:absolute;background:#3a6ea5;opacity:.34;border-radius:2px;}
@@ -3268,6 +3298,9 @@ app.registerExtension({
               if (!readBtn) return;
               const blocked = BUSY.on && !reading;
               readBtn.disabled = reading || BUSY.on || !s.img;
+              /* The note under the strip carries the same word, but a tall
+                 picture pushes it out of sight - so the button says it too. */
+              readBtn.textContent = reading ? "Reading" : "Read";
               readBtn.classList.toggle("waiting", blocked);
               readBtn.title = blocked
                 ? "ComfyUI is rendering - reading now would run the card out of "
@@ -3647,14 +3680,46 @@ app.registerExtension({
         }
       }
 
+      /* Everything in the node that is not the list of sections: the toolbar,
+         the find panel when it is open, the footer, and the wrapper's own
+         padding and gaps.
+
+         This used to be two constants, 34 and 18, and they were right for one
+         arrangement only - toolbar on a single row, no find panel. Open Search
+         and the panel took about seventy pixels that nothing accounted for, so
+         the list was handed seventy pixels less than the node had been sized
+         for: a scrollbar that would not go away however large the node was
+         dragged, the bottom section's grip pushed under the rim, and Fit
+         leaving the last section cut off. The same went for a narrow node,
+         where the toolbar wraps onto a second row.
+
+         Measured instead, so whatever is up there is counted. The fallbacks
+         are only for the first pass, before the browser has laid anything
+         out. */
+      const WRAP_PAD = 4, WRAP_GAP = 5;
+      function chromeHeight() {
+        const bar = root.querySelector(".lvp-bar");
+        const fr = root.querySelector(".lvp-fr");
+        const barH = (bar && bar.offsetHeight) || 26;
+        const footH = (foot && foot.offsetHeight) || 14;
+        const frH = (fr && fr.offsetHeight) ? fr.offsetHeight + WRAP_GAP : 0;
+        return WRAP_PAD * 2 + barH + WRAP_GAP + frH + WRAP_GAP + footH;
+      }
+
+      /* Each section is drawn with a 1px border, top and bottom, and the sum
+         below is of what sits inside them. Two pixels a section: with six
+         sections that is twelve, which is about the height of one scrollbar
+         appearing and refusing to leave. */
+      const SEC_BORDER = 2;
       function contentHeight() {
         const secs = state.sections.reduce((n, s) => {
-          if (s.collapsed) return n + HEADER_H + GAP;
+          if (s.collapsed) return n + HEADER_H + SEC_BORDER + GAP;
           const linked = extLinked(s);
           const noteH = (!s.on || linked) ? 15 : 0;
-          return n + HEADER_H + s.h + 6 + noteH + GAP + imgBlock(s);
+          return n + HEADER_H + SEC_BORDER + s.h + 6 + noteH + GAP
+            + imgBlock(s);
         }, 0);
-        return 34 + secs + 18 + LIST_PAD;
+        return chromeHeight() + secs + LIST_PAD;
       }
 
       /* Dragging the node's corner turns into section heights.
@@ -3861,6 +3926,11 @@ app.registerExtension({
           if (ex) ex.style.height = `${split.ext}px`;
           if (tr) tr.style.height = `${split.tr}px`;
         });
+        /* Heights are on the page now, so this is the moment to see whether
+           they actually fit. Next frame, because the browser has not measured
+           them yet. */
+        absorbed = false;
+        requestAnimationFrame(() => absorbOverflow());
       }
 
       /* ---------- find and replace ---------- */
@@ -4014,6 +4084,15 @@ app.registerExtension({
         if (!findState) return;
         findState.bar.remove();
         findState = null;
+        /* Before anything is redrawn, not after. The panel's height belonged
+           to the node, and for the moment between the panel going and the
+           node coming down the node is taller than its contents - which is
+           exactly the state that means "the user dragged the node bigger,
+           hand the room to the sections". Every open and close of Search was
+           dealing the panel's height out to the boxes and they crept up a
+           little each time. Taking it off the node first means that state
+           never exists. */
+        fitNodeToContent();
         if (clearFindMarks()) { render(); save(); }
         else render();
       }
@@ -4052,6 +4131,10 @@ app.registerExtension({
             <span style="flex:1"></span>
           </div>`;
         root.querySelector(".lvp-bar").insertAdjacentElement("afterend", bar);
+        /* The panel needs its own room, or it takes it from the sections and
+           every one of them gains a scrollbar. Measured after the browser has
+           laid it out. */
+        setTimeout(fitNodeToContent, 0);
 
         for (const ev of ["pointerdown", "mousedown", "wheel", "contextmenu"]) {
           bar.addEventListener(ev, e => e.stopPropagation());
@@ -4246,11 +4329,11 @@ app.registerExtension({
          it over. The reader writes what the photograph shows and stops there,
          so a shot size it could not make out, a film stock, a time of day -
          all of that is typed in by hand, every time. This keeps them.
-         Two places to land, and no caret handling: the front, which is where a
-         shot size or a person wants to be, and the end, which is where another
-         line about the light belongs. Aiming at the caret would mean reaching
-         into the marked-up HTML, and that structure is not worth risking for a
-         third option nobody asked for. */
+         Three places to land: where the caret was left in the box, the front,
+         which is where a shot size or a person wants to be, and the end, which
+         is where another line about the light belongs. The caret is read as a
+         character count through the text nodes, the same counting the group
+         swap already uses, so the marks on the box survive the insertion. */
       async function openSnips(sec, secEl) {
         if (root.querySelector(".lvp-panel")) return;
         const kind = snipKind(sec.title);
@@ -4273,7 +4356,7 @@ app.registerExtension({
           </div>
           <div class="lvp-scroll"></div>
           <div class="lvp-row">
-            <span class="msg" style="opacity:.6">click a name to put it at the front, or END for the bottom</span>
+            <span class="msg" style="opacity:.6">click a name to put it where the caret is (or at the front), or END for the bottom</span>
             <span style="flex:1"></span>
             <button class="lvp-btn cls">Close</button>
           </div>`;
@@ -4306,6 +4389,30 @@ app.registerExtension({
           }
         } catch (e) { /* no selection to read */ }
         if (picked) msg.textContent = `Save will keep the ${picked.length} selected chars`;
+
+        /* Where the caret sat in the box, counted in characters through the
+           text nodes so it can be found again in the copy the snippet is
+           spliced into. Read now, because opening the panel takes the caret
+           away. Null means the box was never clicked into, and the snippet
+           goes to the front as before. */
+        let caretAt = null;
+        try {
+          const selNow = window.getSelection();
+          const ta = secEl && secEl.querySelector(".lvp-ta");
+          if (selNow && selNow.rangeCount && ta) {
+            const r = selNow.getRangeAt(0);
+            if (ta.contains(r.startContainer)) {
+              const probe = document.createRange();
+              probe.selectNodeContents(ta);
+              probe.setEnd(r.startContainer, r.startOffset);
+              const w = document.createTreeWalker(
+                probe.cloneContents(), NodeFilter.SHOW_TEXT);
+              let n = null, count = 0;
+              while ((n = w.nextNode())) count += n.nodeValue.length;
+              caretAt = count;
+            }
+          }
+        } catch (e) { caretAt = null; }
 
         async function pull(force) {
           scroll.textContent = "reading\u2026";
@@ -4379,6 +4486,9 @@ app.registerExtension({
               /* already there; nothing to add */
             } else if (atEnd) {
               host.appendChild(document.createTextNode("\n\n" + piece));
+            } else if (caretAt !== null && caretAt > 0 && caretAt < had.length
+                       && spliceAtCaret(host, caretAt, piece)) {
+              /* landed at the caret */
             } else {
               host.insertBefore(
                 document.createTextNode(piece + "\n\n"), host.firstChild);
@@ -4971,7 +5081,7 @@ app.registerExtension({
           ? HEADER_H + GAP
           : HEADER_H + 6 + GAP + ((!x.on || extLinked(x)) ? 15 : 0)
             + imgBlock(x)), 0);
-        const budget = FIT_TOTAL_MAX - 34 - 18 - LIST_PAD - fixed;
+        const budget = FIT_TOTAL_MAX - chromeHeight() - LIST_PAD - fixed;
         let total = 0;
         for (const h of want.values()) total += h;
         if (total > budget && budget >= open.length * MIN_H) {
@@ -5241,6 +5351,8 @@ app.registerExtension({
           idle: r.idle === undefined || r.idle === null
             ? (sug.idle_minutes === undefined ? 2 : sug.idle_minutes)
             : Number(r.idle),
+          after: !!r.after,
+          purge: !!r.purge,
         };
       }
 
@@ -5314,6 +5426,14 @@ app.registerExtension({
           <input class="t" type="number" min="32" max="1024" step="10" value="${cur.tokens}">
           <label>Unload after idle (minutes, 0 = never)</label>
           <input class="i" type="number" min="0" max="120" step="1" value="${cur.idle}">
+          <label class="chk">
+            <input class="u" type="checkbox"${cur.after ? " checked" : ""}>
+            <span>Unload as soon as a reading is done</span>
+          </label>
+          <label class="chk">
+            <input class="p" type="checkbox"${cur.purge ? " checked" : ""}>
+            <span>Free ComfyUI's models before every reading</span>
+          </label>
           <div class="mem">${memoryLines()}</div>
           <div class="foot">
             <button class="lvp-btn drop">Unload model</button>
@@ -5323,7 +5443,7 @@ app.registerExtension({
         const btn = root.querySelector(".reader");
         const place = () => {
           const r = btn.getBoundingClientRect();
-          const w = box.offsetWidth || 420;
+          const w = box.offsetWidth || 600;
           const h = box.offsetHeight || 220;
           /* under the button, and only pushed back when the window would
              otherwise cut it off */
@@ -5392,6 +5512,9 @@ app.registerExtension({
             /* 0 is a real choice here - never unload - so an empty box falls
                back to the suggestion while a typed 0 is kept */
             idle: idleRaw === "" ? null : Math.max(0, Math.min(120, Number(idleRaw) || 0)),
+            /* the idle wait still stands for anyone who leaves this off */
+            after: !!box.querySelector(".u").checked,
+            purge: !!box.querySelector(".p").checked,
           };
           save();
         };
@@ -5521,6 +5644,25 @@ app.registerExtension({
       function fitNodeToContent() {
         try {
           node.setSize([Math.max(node.size[0], 420), node.computeSize()[1]]);
+          node.setDirtyCanvas(true, true);
+        } catch (e) { /* ignore */ }
+      }
+
+      /* The arithmetic above is a model of the layout, and a model can always
+         be a pixel or two behind the browser - a font that renders a line
+         taller, a border that changes. Rather than trust it absolutely, look
+         at what actually happened: if the list is still scrolling, the node
+         takes on exactly the overflow. Once per render, never while the node
+         is being dragged, and the height goes to the node rather than to the
+         sections, so it cannot feed back into the content and run away. */
+      let absorbed = false;
+      function absorbOverflow() {
+        if (absorbed || !ready || drag || gripDragging || beingResized()) return;
+        const over = list.scrollHeight - list.clientHeight;
+        if (over <= 0 || over > 200) return;
+        absorbed = true;
+        try {
+          node.setSize([node.size[0], node.size[1] + over]);
           node.setDirtyCanvas(true, true);
         } catch (e) { /* ignore */ }
       }

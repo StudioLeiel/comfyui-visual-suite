@@ -401,18 +401,32 @@ the default because it reads well and stays inside its layer; try 8B by all
 means, and compare the two on the same references before paying for it in
 memory.
 
-What it deliberately does not do is manage ComfyUI's memory. An earlier version
-asked ComfyUI to unload its models before reading, which seemed reasonable and
-was not: after a render ComfyUI holds its model patched and ready, and unloading
+It touches ComfyUI's memory only when it has to. An earlier version asked
+ComfyUI to unload its models before every reading, which seemed reasonable and
+was not: after a render ComfyUI holds its model patched and ready, and trimming
 that from outside, at a moment of this node's choosing, left the patcher half
 restored and killed the next render with an error pointing deep into ComfyUI and
-nowhere near here. ComfyUI frees its own memory when something else asks the
-card for room. It only needs to not be asked in the middle of a render, and that
-is what the greyed-out button is for.
+nowhere near here. Usually none of that is needed - ComfyUI frees its own memory
+when something else asks the card for room.
+
+Usually is not always. A render stopped part way through, or one that ended
+without giving its memory back, leaves the card full of a model nothing is
+using, and nothing has asked ComfyUI to let it go. So when a reading does not
+fit, the reader asks ComfyUI to unload everything and tries once more. It asks
+only with the queue empty and nothing rendering, and it unloads everything
+rather than trimming, because it was the partial unload that did the damage. The
+price is a reload on the next render.
+
+Two boxes in the `Reader` panel move that line. `Unload as soon as a reading is
+done` takes the reader off the card the moment it answers, instead of waiting
+out the idle time. `Free ComfyUI's models before every reading` asks for the
+room up front every time rather than only after the card has refused - for a
+card that is always nearly full, at the cost of that reload on every render that
+follows a reading.
 
 None of this makes a small card large. On 8-12GB the 2B model at 4-bit is the
-realistic choice, and setting the idle time to 1 keeps the reader off the card
-between readings.
+realistic choice, and `Unload as soon as a reading is done` keeps the reader off
+the card between readings.
 
 ---
 

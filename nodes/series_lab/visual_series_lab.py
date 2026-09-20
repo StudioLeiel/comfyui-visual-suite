@@ -481,9 +481,14 @@ class VisualSeriesLabSetup:
                     "STRING")
     # "this render's" rather than "currently in use": every one of these
     # describes the single render on its way out, and saying so leaves no
-    # room to read them as a list of everything the queue holds.
+    # room to read them as a list of everything the queue holds. And "name"
+    # on both of the middle two, because that is what they carry - the names
+    # the shelf gives a prompt and a LoRA, for filing and for reading on
+    # screen. Without the word, someone meeting the node for the first time
+    # reads them as the prompt text and the LoRA files themselves and wires
+    # them somewhere expecting to get those.
     RETURN_NAMES = ("model", "conditioning",
-                    "this render's prompt", "this render's loras",
+                    "this render's prompt name", "this render's lora names",
                     "status", "filename")
     FUNCTION = "run"
     CATEGORY = "Studio Leiel"

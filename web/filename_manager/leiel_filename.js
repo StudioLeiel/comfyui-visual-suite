@@ -866,7 +866,6 @@ app.registerExtension({
       /* Both inputs are optional and each serves exactly one feature, so say
          so on the slot itself - most people never reach the README. */
       const SLOT_LABELS = {
-        run_after: "run_after (for elapsed)",
         lora_text: "lora_text (for Visual Series Lab)",
         text_1: "text_1 (any value -> chip)",
         text_2: "text_2 (any value -> chip)",

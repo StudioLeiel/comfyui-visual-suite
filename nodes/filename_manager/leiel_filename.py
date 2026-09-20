@@ -759,7 +759,11 @@ class LeielFilenameStudio:
                 "fallback_name": ("STRING", {"default": "LEIEL_FALLBACK"}),
             },
             "optional": {
-                "run_after": (ANY, {}),
+                # There was a run_after socket here, for wiring this node
+                # behind the sampler so an elapsed chip measured the render
+                # rather than the moment before it. The timer anchor does that
+                # on its own now, and a socket that no longer changes anything
+                # is worse than no socket: it reads as a step someone forgot.
                 # Takes either shape: prompt-style <lora:name:strength> tags,
                 # or the plain "name, name" list the Series Lab sends.
                 "lora_text": ("STRING", {"forceInput": True}),
@@ -794,7 +798,7 @@ class LeielFilenameStudio:
 
     def build(self, layout_json, folder_sep, file_sep, max_filename_chars,
               resolve_mode, folder_style, escape_percent, fallback_name,
-              run_after=None, lora_text=None, prompt=None, extra_pnginfo=None,
+              lora_text=None, prompt=None, extra_pnginfo=None,
               unique_id=None, **wired):
         import json
         try:
@@ -873,9 +877,6 @@ class LeielFilenameStudio:
             if any(c.get("kind") == "elapsed"
                    for c in (layout.get("file") or []) + (layout.get("folder") or [])):
                 report.append("  timer    : " + _anchor_status())
-                if run_after is None:
-                    report.append("  ! run_after is not connected - this node may "
-                                  "run before sampling, giving a near-zero time")
             if ext_loras:
                 report.append("  lora_text: " +
                               ", ".join(f"{n}({s})" for n, s in ext_loras))

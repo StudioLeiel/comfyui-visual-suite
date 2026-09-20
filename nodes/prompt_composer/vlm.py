@@ -141,6 +141,13 @@ TAIL = (
     "No lists, no headings, no labels, no preamble."
 )
 
+# The subject layer carries more to report than the others - a garment run
+# alone can be four or five pieces - and the shared three-or-four-sentence tail
+# was cutting the answer off at the waist, which is exactly where the shoes
+# are. Same rules, more room.
+SUBJECT_TAIL = TAIL.replace(
+    "three or four sentences", "five or six sentences")
+
 # A standing instruction, sent as the system turn rather than folded into the
 # question. The same sentence carries much further from there: asked inside the
 # question it reads as one more thing to cover, and the model covers it and
@@ -265,8 +272,38 @@ BUILTIN_PRESETS = {
             "Layer: the main subject, and only the subject.\n"
             "Describe: build and proportions; hair - its length, colour and "
             "how it is arranged; the face, and what the expression is doing; "
-            "the clothing, its cut and the fabrics it is made of; the skin; "
-            "posture and the line of the body; what the hands are doing.\n"
+            "the skin; posture and the line of the body; what the hands are "
+            "doing.\n"
+            "Then the clothing, worked through garment by garment from the "
+            "head down to the feet: headwear, then whatever covers the upper "
+            "body including anything worn open over another piece, then what "
+            "is at the waist, then what covers the lower body, then the "
+            "footwear, then anything carried or worn on the hands, wrists, "
+            "ears or neck. Take them one at a time and in that order, and for "
+            "each one say four things: what garment it is, what colour it is, "
+            "what it appears to be made of, and how it is cut - where it ends "
+            "on the body, how close or loose it sits, and what fastens or "
+            "holds it. Name each piece with the narrowest word that fits what "
+            "you can see - a cardigan rather than a top, a trench coat rather "
+            "than a coat, ankle boots rather than shoes. Where one garment "
+            "covers both the upper and the lower body, report it once as the "
+            "single piece it is rather than splitting it in two.\n"
+            "The colour of a piece is the particular shade in front of you, "
+            "said with its depth and which way it leans: ink black, charcoal, "
+            "warm ivory, dusty rose, faded indigo. A colour named on its own, "
+            "as black or white or blue and nothing more, is the family and not "
+            "the shade, and is worth another look before it is written down.\n"
+            "What a piece is made of is the name of the cloth: silk satin, "
+            "jersey, chiffon, wool crepe, tweed, denim, corduroy, leather, "
+            "loosely knitted wool. Where the cloth cannot be named, say how it "
+            "is built instead - how it is woven or knitted, how heavy it hangs, "
+            "how much light sits on its surface - rather than calling it soft "
+            "or flowing and leaving it there. The same holds for the footwear: "
+            "leather, suede, patent, canvas.\n"
+            "The "
+            "footwear gets the same four things as everything else: shoes are "
+            "part of the clothing and are reported whenever the feet are in "
+            "the picture, however small they are.\n"
             "Where the subject sits on, rides, leads or holds an animal or a "
             "machine - a horse, a bicycle, a motorcycle, a car, a boat - that "
             "animal or machine is part of the subject and is described with "
@@ -294,7 +331,10 @@ BUILTIN_PRESETS = {
             "grass, tree, leaf, leaves, flower, water, room, street, "
             "background, camera, lens, frame, focus, blur, sharp.\n"
             "Where part of the subject is hidden, leave it out of the "
-            "description entirely and carry on with what is visible." + TAIL
+            "description entirely and carry on with what is visible. Where a "
+            "garment is in the picture but one of its four things cannot be "
+            "made out, report the ones that can and pass over the rest."
+            + SUBJECT_TAIL
         ),
     },
     "scene": {
@@ -459,6 +499,13 @@ _state = {"model": None, "processor": None, "key": None}
 #
 # A timer rather than an unload-after-every-read, because a reload costs eight
 # to ten seconds and reading four anchors would pay it four times.
+#
+# The timer is still the right default, but it is not right for every card. At
+# bf16 the 4B sits on about ten gigabytes, and on a card that is also holding
+# an image model those ten gigabytes matter more than the seventeen seconds a
+# reload costs. So the interface can ask for the model to be put away the
+# moment a reading is done, and a user who reads one anchor at a time and
+# renders in between can have the memory back immediately.
 _idle = {"minutes": 0, "timer": None}
 
 
@@ -646,7 +693,9 @@ def render_in_progress():
         return False
 
 
-# There was a free_comfy_models() here, and it is gone for good.
+# There was a free_comfy_models() here, it was removed, and this is it back -
+# on different terms. What follows is the old note, kept because the terms only
+# make sense beside it.
 #
 # It asked ComfyUI to put its own models away before the reader loaded, on the
 # reasoning that the two are never needed at the same instant. The reasoning
@@ -664,6 +713,64 @@ def render_in_progress():
 # asks for the card - at 4-bit the reader needs about 4GB and gets it without
 # any help. What it cannot survive is being asked mid-render, and that is now
 # prevented in the interface rather than worked around here.
+#
+# Unnecessary held while the handover was orderly. It is not, in two cases a
+# user runs into: a render stopped part way through, and a render that ended
+# without its memory being given back. The card is then full of an image model
+# nothing is using, ComfyUI has no reason to release it because nothing has
+# asked, and the reading fails outright.
+#
+# So it comes back, with the lesson from last time as the rule: the timing was
+# never ours to choose, so this never chooses. It runs only where there is
+# nothing to corrupt - the queue empty, no render running - and it unloads
+# everything rather than trimming, because it was partial unloading that left
+# the patcher half restored. And it is asked for only when the card has
+# already refused, or when the user has ticked the box saying to ask every
+# time. A reading that fits in the memory that is free never touches it.
+
+
+def free_comfy_models():
+    """Ask ComfyUI to put its own models away. Empty queue only.
+
+    Returns True when something was asked to unload. Every failure here is
+    survivable - the reading either fits or reports that it does not - so
+    nothing raises.
+    """
+    if render_in_progress():
+        return False
+    try:
+        import comfy.model_management as mm
+    except Exception:
+        return False
+    try:
+        import torch
+        # Out of inference mode, on purpose: the traceback that killed renders
+        # for a day came from unloading inside it.
+        with torch.inference_mode(False):
+            mm.unload_all_models()
+    except Exception:
+        try:
+            mm.unload_all_models()
+        except Exception:
+            return False
+    try:
+        mm.soft_empty_cache()
+    except Exception:
+        pass
+    print("[Leiel Composer] ComfyUI models unloaded to make room for a reading")
+    return True
+
+
+def _out_of_memory(error):
+    """CUDA is out of memory, by whichever name this torch build calls it."""
+    try:
+        import torch
+        if isinstance(error, getattr(torch.cuda, "OutOfMemoryError", ())):
+            return True
+    except Exception:
+        pass
+    text = str(error).lower()
+    return "out of memory" in text or "cuda error" in text and "memory" in text
 
 
 def _quant_config(quantization):
@@ -826,8 +933,22 @@ def analyse(payload):
 
     image = _shrink(_open_image(payload.get("image")))
 
+    # Ticked in the panel: clear the card first, every time, without waiting
+    # for it to fill. Costs ComfyUI a reload on its next render.
+    if payload.get("purge_first"):
+        free_comfy_models()
+
     with _lock:
-        model, processor = _load(model_id, quantization)
+        try:
+            model, processor = _load(model_id, quantization)
+        except Exception as error:
+            # The card is full and what is on it is not ours. One attempt to
+            # clear it, then one more try; if that fails too the error goes
+            # back to the panel as it always did.
+            if not _out_of_memory(error) or not free_comfy_models():
+                raise
+            unload()
+            model, processor = _load(model_id, quantization)
 
         # The system turn carries the rule, the user turn carries the layer.
         # Both Qwen3-VL and Qwen2.5-VL templates accept a system role; if a
@@ -852,10 +973,25 @@ def analyse(payload):
         inputs = processor(text=[text], images=[image], return_tensors="pt")
         inputs = inputs.to(model.device)
 
-        with torch.inference_mode():
-            generated = model.generate(
-                **inputs, max_new_tokens=max_tokens, do_sample=False
-            )
+        def _generate():
+            with torch.inference_mode():
+                return model.generate(
+                    **inputs, max_new_tokens=max_tokens, do_sample=False
+                )
+
+        try:
+            generated = _generate()
+        except Exception as error:
+            # Weights fit, working memory did not. Same one attempt, and the
+            # model stays where it is: it is already on the card and reloading
+            # it would ask for the memory twice.
+            if not _out_of_memory(error) or not free_comfy_models():
+                raise
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+            generated = _generate()
 
         start = inputs["input_ids"].shape[1]
         answer = processor.decode(generated[0][start:], skip_special_tokens=True)
@@ -866,7 +1002,15 @@ def analyse(payload):
     # already holding, so the request hung for ever and the button never came
     # back. Timed from here rather than from the start of the reading, because
     # a long generation is not idleness.
-    _idle_restart()
+    if payload.get("unload_after"):
+        # Asked for by the interface, and done here rather than on a timer:
+        # the reading is over, so the memory is free to give back now. Same
+        # rule as everywhere else in this file - only our own model is
+        # touched, never ComfyUI's.
+        unload()
+        print("[Leiel Composer] reading done - model unloaded, memory released")
+    else:
+        _idle_restart()
     return answer.strip()
 
 

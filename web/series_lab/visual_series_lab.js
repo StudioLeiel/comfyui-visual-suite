@@ -66,7 +66,7 @@ const CSS = `
   min-height:0;overflow-y:auto;}
 .vsl-rest{flex:1 1 0;min-height:0;}
 /* a thin band by default - it holds a few words, not a gallery */
-.vsl-chips.trig{height:48px;}
+.vsl-chips.trig{}
 .vsl-left{flex:1.15;}
 .vsl-right{flex:1;padding-left:2px;}
 .vsl-split{width:6px;flex:0 0 auto;cursor:col-resize;border-radius:3px;
@@ -187,7 +187,7 @@ const CSS = `
   border:1px solid #3a3a3a;
   border-radius:4px;color:#ddd;font-family:inherit;font-size:10px;
   padding:2px 6px;}
-.vsl-chip.live{outline:1px solid #ffd479;}
+/* the yellow border alone marks it; an outline on top doubled the ring */
 /* a trigger word riding along with the render on the way out */
 .vsl-chip.c-text.live{border-color:#ffd479;background:#3a3320;color:#ffe9a3;}
 .vsl-chip.c-lora{border-color:#7b6ce0;background:#2f2b45;color:#b9aef5;}
@@ -373,7 +373,7 @@ const CSS = `
    different kind of thing from the bundles sitting inside it, and warmer
    than everything else on the node says "this is the part that is running".
    Red on its own would say "wrong". */
-.vsl-list.box{flex:0 0 auto;min-height:74px;border:3px solid #c25a2f;
+.vsl-list.box{flex:0 0 auto;min-height:74px;border:4px solid #c25a2f;
   border-radius:24px;background:#c25a2f1f;padding:9px;
   display:flex;flex-direction:column-reverse;justify-content:flex-start;
   gap:8px;}
@@ -416,6 +416,13 @@ const CSS = `
 .vsl-hero .cap{font-size:9px;opacity:.75;max-width:100%;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;}
 .vsl-note{opacity:.45;font-size:9px;}
+/* Said once, where the confusion happens: a person who pressed the canvas
+   Run button got one picture and a queue that looks stuck, and nothing on
+   the node told them the rest are waiting on RUN ALL. Not the dim grey of
+   the status line - this one has to be read. */
+.vsl-tip{margin-top:6px;padding:5px 7px;border:1px solid #c25a2f;
+  border-radius:6px;background:#2a1a12;color:#e8b48a;font-size:10px;
+  line-height:1.5;}
 .vsl-warn{display:none;font-size:10px;line-height:1.5;color:#ffb0b0;
   background:#3a2020;border:1px solid #c85f5f;border-radius:4px;
   padding:4px 6px;margin-top:3px;}
@@ -441,6 +448,14 @@ const CSS = `
 .vsl-pick{max-height:420px;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:4px;}
 .vsl-pick>*{flex-shrink:0;}
+/* The node heading in the picker does something, so it has to look as though
+   it might: the options below it are its own, and taking them one at a time
+   is a lot of clicks for a node that holds eight. */
+.vsl-pick label.grab{cursor:pointer;border-radius:4px;padding:1px 4px;
+  margin:0 -4px;display:flex;align-items:baseline;gap:6px;}
+.vsl-pick label.grab:hover{background:#2b2b2b;color:#fff;}
+.vsl-pick label.grab .n{margin-left:auto;font-size:10px;opacity:.5;}
+.vsl-pick label.grab:hover .n{opacity:.9;}
 .vsl-btn.optpick{display:flex;align-items:baseline;gap:8px;width:100%;
   box-sizing:border-box;text-align:left;overflow:hidden;}
 .vsl-btn.optpick .w{flex:0 0 auto;color:#ffd479;}
@@ -742,7 +757,7 @@ function scanWorkflowOptions(self) {
         cls: String(n.comfyClass || n.type || ""),
         widget: w.name,
         value: v,
-        choices: isCombo ? w.options.values.slice(0, 40) : null,
+        choices: isCombo ? w.options.values.slice() : null,
         kind: isCombo ? "combo" : isBool ? "bool" : isNum ? "number" : "text",
       });
     }
@@ -1078,6 +1093,7 @@ app.registerExtension({
               <button class="vsl-btn wide reset" title="back to the first render, widgets put back">RESET</button>
               <button class="vsl-btn wide big run runall">RUN ALL</button>
             </div>
+            <div class="vsl-tip tip" hidden></div>
           </div>
           <div class="vsl-zone">
             <h4>Now rendering</h4>
@@ -1105,6 +1121,7 @@ app.registerExtension({
       const elFill = $(".vsl-fill");
       const elHeroes = $(".heroes"), elNowChips = $(".nowchips");
       const elNote = $(".note");
+      const elTip = $(".tip");
       const elPrompts = $(".prompts");
       const elBench = $(".bench"), elBox = $(".box.vsl-list") || $(".vsl-list.box");
       const elBenchCt = $(".benchct"), elBoxCt = $(".boxct");
@@ -1401,6 +1418,16 @@ app.registerExtension({
         paint();
       }
 
+      /* Options saved before the full list was kept carry a shortened copy
+         of it. When the node is still in the graph, take its list as it is
+         now, so every choice the node offers can be picked. */
+      function refreshChoices(o) {
+        if (o.kind !== "combo") return;
+        const w = widgetOf(o.nodeId, o.widget);
+        const live = w && w.options && w.options.values;
+        if (Array.isArray(live) && live.length) o.choices = live.slice();
+      }
+
       /* Every setting of that node at once. A comma separated list sweeps
          that setting: "euler, dpmpp_sde" renders both. */
       function openGroupEditor(title, list, anchor, onSaved) {
@@ -1419,6 +1446,7 @@ app.registerExtension({
         box.appendChild(sub);
         const rows = [];
         for (const o of list) {
+          refreshChoices(o);
           const lab = document.createElement("label");
           lab.textContent = o.widget +
             (o.choices ? "   (pick one or several)" : "");
@@ -1760,7 +1788,7 @@ app.registerExtension({
         box.style.maxWidth = "440px";
         const head = document.createElement("div");
         head.className = "eh";
-        head.textContent = "Add an option";
+        head.textContent = "Add an option  -  or a node name for all of its";
         box.appendChild(head);
         const list = document.createElement("div");
         list.className = "vsl-pick";
@@ -1773,13 +1801,40 @@ app.registerExtension({
           if (!groups.has(o.title)) groups.set(o.title, []);
           groups.get(o.title).push(o);
         }
+        /* Exactly the shape the recipe builder makes, so a row built here and
+           a row built from the shelf are the same thing. */
+        const asOpt = (o) => ({
+          key: o.key, nodeId: o.nodeId, title: o.title, widget: o.widget,
+          kind: o.kind, choices: o.choices, values: [o.value], out: true,
+        });
+
         let any = false;
         for (const [title, opts] of groups) {
           const lab = document.createElement("label");
+          lab.className = "grab";
           /* A node with no title of its own still has to be findable, so it
              falls back to its class and then to its id. */
-          lab.textContent = shortNodeName(title) || String(opts[0].cls || "")
+          const nameText = shortNodeName(title) || String(opts[0].cls || "")
             || ("#" + opts[0].nodeId);
+          const nm = document.createElement("span");
+          nm.textContent = nameText;
+          const count = document.createElement("span");
+          count.className = "n";
+          count.textContent = "+ all " + opts.length;
+          lab.appendChild(nm);
+          lab.appendChild(count);
+          lab.title = "Add every option under " + nameText
+            + " that is not in this recipe yet";
+          /* Only what is missing: the list here already leaves out whatever
+             the recipe holds, so nothing that was set by hand is overwritten
+             by a press meant to save time. */
+          lab.addEventListener("click", (e) => {
+            e.stopPropagation();
+            row.opts = (row.opts || []).concat(opts.map(asOpt));
+            closeEditor();
+            writeStore();
+            paint();
+          });
           list.appendChild(lab);
           for (const o of opts) {
             any = true;
@@ -1801,12 +1856,7 @@ app.registerExtension({
             b.title = o.widget + "\n" + String(o.value);
             b.addEventListener("click", (e) => {
               e.stopPropagation();
-              /* Exactly the shape the recipe builder makes, so a row built
-                 here and a row built from the shelf are the same thing. */
-              row.opts = (row.opts || []).concat([{
-                key: o.key, nodeId: o.nodeId, title: o.title, widget: o.widget,
-                kind: o.kind, choices: o.choices, values: [o.value], out: true,
-              }]);
+              row.opts = (row.opts || []).concat([asOpt(o)]);
               closeEditor();
               writeStore();
               paint();
@@ -1884,6 +1934,23 @@ app.registerExtension({
         editor = box;
         placeNear(box, anchor);
         dismissOnOutside(box);
+      }
+
+      /* One LoRA, gone from the shelf, the recipe and every queued row.
+         Rows are left in place even when this empties them: a row is a set of
+         options as much as a set of LoRAs, and the person who queued it is
+         the one who decides whether it is still worth rendering. */
+      function dropLoraEverywhere(name, quiet) {
+        state.picked = state.picked.filter((x) => x.name !== name);
+        state.loras = state.loras.filter((x) => x.name !== name);
+        state.draft.loras = state.draft.loras.filter((x) => x.name !== name);
+        for (const row of state.queue) {
+          if (!row.loras) continue;
+          row.loras = row.loras.filter((x) => x.name !== name);
+        }
+        if (quiet) return;
+        writeStore();
+        paint();
       }
 
       function makeSortable(el, list, item) {
@@ -2148,14 +2215,16 @@ app.registerExtension({
             title: l.name + "\nclick to reserve, x to take off the shelf",
             onClick: () => addLoraToDraft(l),
             onRemove: () => {
-              /* Off the shelf and out of the recipe being built. A LoRA the
-                 loader still has switched on comes back on the next scan,
-                 which is the loader's business, not this node's. */
-              state.picked = state.picked.filter((x) => x.name !== l.name);
-              state.loras = state.loras.filter((x) => x.name !== l.name);
-              state.draft.loras = state.draft.loras
-                .filter((x) => x.name !== l.name);
-              paint();
+              /* Off the shelf and out of everywhere it was going to be used:
+                 the recipe being built and every row waiting in the queue.
+                 Taking it off the shelf and leaving it queued was the one
+                 way to render a LoRA that the panel no longer showed. Its
+                 trigger words follow on their own - that box is read from
+                 the recipe and the queue, so a name gone from both takes its
+                 words with it. A LoRA the loader still has switched on comes
+                 back on the next scan, which is the loader's business, not
+                 this node's. */
+              dropLoraEverywhere(l.name);
             },
           });
           attachHoverPreview(c, l.name);
@@ -2682,6 +2751,17 @@ app.registerExtension({
           add("at", Math.min(doneNow, total) + " / " + total, "live");
           add("left", Math.max(0, total - doneNow), "left");
         }
+        /* Only while it is true: the moment RUN ALL is pressed, or the queue
+           runs out, there is nothing to warn about. */
+        if (elTip) {
+          const show = state.tipRunAll && !state.running && runRemaining() > 0;
+          elTip.hidden = !show;
+          if (show) {
+            elTip.textContent = "That was one render. The other " +
+              runRemaining() + " in the queue box are waiting - press RUN ALL " +
+              "to render them all.";
+          }
+        }
         elFill.style.width = live.total
           ? Math.round(((live.index + 1) / live.total) * 100) + "%" : "0";
         const left = runRemaining();
@@ -2751,12 +2831,12 @@ app.registerExtension({
          keep it; the flexible one takes whatever is left over. */
       const H_MIN = 200, H_MAX = 2000;
       const H_DEFAULT = 470;   // one number, so the two readers cannot drift
-      const STORED = ["prompts", "pool", "opts", "queue"];
-      const DEF_H = { prompts: 46, pool: 118, opts: 92, queue: 230 };
-      const MIN_H = { prompts: 24, pool: 26, opts: 26, queue: 120 };
+      const STORED = ["prompts", "pool", "trig", "opts", "queue"];
+      const DEF_H = { prompts: 46, pool: 118, trig: 48, opts: 92, queue: 230 };
+      const MIN_H = { prompts: 24, pool: 26, trig: 24, opts: 26, queue: 120 };
       const bodyOf = {};
 
-      const ROOM = 186;   // left for the zones that carry no stored height
+      const ROOM = 138;   // left for the zones that carry no stored height
       const hOf = (k) => {
         const raw = state.heights[k] === undefined ? DEF_H[k] : state.heights[k];
         const ceiling = Math.max(MIN_H[k],
@@ -2973,7 +3053,7 @@ app.registerExtension({
 
         <h5>Outputs</h5>
         <p><code>model</code> and <code>conditioning</code> carry the render.
-        <code>this render's prompt</code> and <code>this render's loras</code>
+        <code>this render's prompt name</code> and <code>this render's lora names</code>
         name what went into the picture on its way out - both are meant for a
         file manager node downstream. <code>status</code> says where the run
         has got to, and <code>filename</code> is a name describing the
@@ -3411,8 +3491,12 @@ app.registerExtension({
       });
       $(".poolclear").addEventListener("click", (e) => {
         e.stopPropagation();
+        /* Clearing the shelf clears what the shelf was feeding, for the same
+           reason one chip does. */
+        for (const l of state.loras.slice()) dropLoraEverywhere(l.name, true);
         state.picked = [];
         state.loras = [];
+        writeStore();
         paint();
       });
       $(".browse").addEventListener("click", (e) => {
@@ -3609,6 +3693,10 @@ app.registerExtension({
         /* Draw straight away: the counters and the badges are how a person
            sees that a picture landed, and waiting for the next send to
            repaint would hold them a step behind. */
+        /* Arrived without this node driving the queue, which means the
+           picture came from the canvas Run button. If the queue box still
+           holds renders, they are not going to happen on their own. */
+        if (arrived && !state.running) state.tipRunAll = true;
         if (arrived) paint();
         retireFinished();
         if (state.running && !state.paused) stepRun();
@@ -3621,6 +3709,9 @@ app.registerExtension({
       };
 
       elRunAll.addEventListener("click", () => {
+        /* Pressed: the point has been made, and the line does not come back
+           in this session. */
+        state.tipRunAll = false;
         if (state.running) {
           /* Pause after the picture being made, not during it. */
           state.paused = !state.paused;
@@ -4099,14 +4190,17 @@ app.registerExtension({
         return el ? el.closest(".vsl-zone") : null;
       };
       addGrip(zoneOf(".prompts"), "prompts", "pool");
-      addGrip(zoneOf(".pool"), "pool", "opts");
+      addGrip(zoneOf(".pool"), "pool", "trig");
+      addGrip(zoneOf(".trig"), "trig", "opts");
       addGrip(zoneOf(".opts"), "opts", null);
       addGrip(root.querySelectorAll(".vsl-right .vsl-zone")[0], "queue", null);
       /* by content, like the grips above - a new box between them must not
          move these onto the wrong ones either */
       const poolZone = zoneOf(".pool");
+      const trigZone = zoneOf(".trig");
       const optsZone = zoneOf(".opts");
       if (poolZone) poolZone.classList.add("pinned");
+      if (trigZone) trigZone.classList.add("pinned");
       if (optsZone) optsZone.classList.add("pinned");
       root.querySelectorAll(".vsl-right .vsl-zone")[0].classList.add("pinned");
       applyHeights();
