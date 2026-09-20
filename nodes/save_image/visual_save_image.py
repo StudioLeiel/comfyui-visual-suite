@@ -53,7 +53,7 @@ except Exception:                                    # pragma: no cover
 
 
 def _inside_output(path):
-    """A folder is only opened when it really sits under the output folder."""
+    """A path is only touched when it really sits under the output folder."""
     try:
         root = os.path.realpath(folder_paths.get_output_directory())
         target = os.path.realpath(path)
@@ -97,6 +97,14 @@ TRASH_DIRNAME = "_trash"
 
 def _trash_dir():
     return os.path.join(folder_paths.get_output_directory(), TRASH_DIRNAME)
+
+
+def _inside_trash(path):
+    try:
+        root = os.path.realpath(_trash_dir())
+        return os.path.realpath(path).startswith(root + os.sep)
+    except Exception:
+        return False
 
 
 def _discard(folder, name):
@@ -153,10 +161,13 @@ try:                                                 # pragma: no cover
         if os.sep in name or "/" in name or name in (".", ".."):
             return _web.json_response({"ok": False, "error": "bad name"},
                                       status=400)
+        if not name.lower().endswith(_IMG_EXT):
+            return _web.json_response({"ok": False, "error": "not an image"},
+                                      status=400)
         try:
             moved = _discard(folder, name)
-        except Exception as exc:
-            return _web.json_response({"ok": False, "error": str(exc)},
+        except Exception:
+            return _web.json_response({"ok": False, "error": "discard failed"},
                                       status=500)
         if not moved:
             return _web.json_response({"ok": False, "error": "not found"},
@@ -178,6 +189,12 @@ try:                                                 # pragma: no cover
             if not src or not dest:
                 continue
             if not _inside_output(src) or not _inside_output(dest):
+                continue
+            # Only a file that is sitting in the trash can be put back, and
+            # only a render: this is the undo for discard, not a general move.
+            if not _inside_trash(src) or not src.lower().endswith(_IMG_EXT):
+                continue
+            if not dest.lower().endswith(_IMG_EXT) or _inside_trash(dest):
                 continue
             if not os.path.isfile(src) or os.path.exists(dest):
                 continue
