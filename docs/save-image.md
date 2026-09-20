@@ -61,9 +61,6 @@ Without it this still works; it simply walks the alphabet instead.
   copy it.
 - **`↻`** reads the folder again, for when files have been moved or deleted
   outside ComfyUI.
-- **`Open folder`** opens it in the file manager — of the machine running
-  ComfyUI, which is not the machine looking at this page if the server is
-  remote.
 
 The folder is remembered with the workflow. Open it tomorrow, or on a fresh
 start, and the last render is already on screen marked `BEFORE`, with the arrows
@@ -133,7 +130,6 @@ Everything else is on the bar under the picture.
 | `png level` | PNG compression, 0–9. Lossless either way. |
 | `jpg` `webp` | Write a lighter copy beside the PNG. |
 | `quality` | Quality of those copies, 1–100. Greyed out when neither is on. |
-| `Open folder` | Opens the output folder on the machine running ComfyUI. |
 | `◀ ▶` | Step through the folder, in name order. |
 | `trash` | Move this render to `_trash`. |
 | `put back` | Undo that, newest first, this session. |

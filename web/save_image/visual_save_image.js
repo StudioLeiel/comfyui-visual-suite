@@ -87,13 +87,6 @@ const CSS = `
 .leiel-save .sep {
   width: 1px; align-self: stretch; background: #3a3a3a; margin: 0 3px;
 }
-.leiel-save .go {
-  background: #2b2b2b; color: #ddd; border: 1px solid #444;
-  border-radius: 5px; padding: 4px 10px; font: inherit; cursor: pointer;
-  margin-left: auto;
-}
-.leiel-save .go:hover:not(:disabled) { background: #363636; }
-.leiel-save .go:disabled { opacity: .35; cursor: default; }
 .leiel-save .nm {
   background: #1a1a1a; border: 1px solid #333; border-radius: 5px;
   padding: 5px 7px; cursor: pointer; line-height: 1.45;
@@ -342,7 +335,6 @@ async function restoreFolder(node) {
     filename: null,                      /* nothing rendered this session */
     extra: [],
   };
-  node._leielUI.go.disabled = false;
   await loadFolder(node);
   const files = node._leielFiles || [];
   if (files.length) {
@@ -595,13 +587,6 @@ function buildBar(node) {
   qSeg.appendChild(quality);
   bar.appendChild(qSeg);
 
-  const go = document.createElement("button");
-  go.className = "go";
-  go.textContent = "Open folder";
-  go.title = "Opens on the machine running ComfyUI";
-  go.disabled = true;
-  bar.appendChild(go);
-
   /* The picture, drawn here rather than left to the canvas: a node carrying
      DOM widgets does not reliably get the built-in preview, and this way the
      image grows with the node instead of sitting at a fixed size. */
@@ -669,7 +654,7 @@ function buildBar(node) {
   foot.appendChild(qmark);
   root.appendChild(foot);
 
-  const ui = { root, counter, png, jpg, webp, quality, qSeg, fmtCap, go, nm,
+  const ui = { root, counter, png, jpg, webp, quality, qSeg, fmtCap, nm,
                note, pic, prev, next, count, badge, del, undo, again };
 
   /* read the widgets back, so the row shows what will actually be sent -
@@ -739,29 +724,6 @@ function buildBar(node) {
     openHelp(e.currentTarget);
   });
   undo.addEventListener("click", () => putBack(node));
-
-  go.addEventListener("click", async () => {
-    const info = node._leielSaved;
-    if (!info?.folder) return;
-    go.disabled = true;
-    note.classList.remove("bad");
-    try {
-      const res = await api.fetchApi("/leiel/open_folder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: info.folder }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        note.classList.add("bad");
-        note.textContent = "could not open: " + (body.error || res.status);
-      }
-    } catch (e) {
-      note.classList.add("bad");
-      note.textContent = "could not open";
-    }
-    go.disabled = false;
-  });
 
   return ui;
 }
@@ -856,10 +818,6 @@ const HELP = `
   <p><code>png level</code> is compression only. PNG is lossless at every
   setting - the number changes the file size and the time taken, never the
   picture.</p>
-
-  <h5>Open folder</h5>
-  <p>Opens the folder in the file manager of the machine running ComfyUI,
-  which is not the machine looking at this page when the server is remote.</p>
 `;
 
 let helpBox = null;
@@ -1008,7 +966,6 @@ app.registerExtension({
       if (!info || !ui) return;
 
       this._leielSaved = info;
-      ui.go.disabled = false;
       showImage(this, info.filename);
       loadFolder(this);
       rememberState(this);

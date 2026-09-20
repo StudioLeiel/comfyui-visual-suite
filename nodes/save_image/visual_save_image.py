@@ -39,8 +39,6 @@ away.
 
 import json
 import os
-import subprocess
-import sys
 
 import numpy as np
 from PIL import Image
@@ -52,21 +50,6 @@ try:                                                 # pragma: no cover
     from comfy.cli_args import args as _cli_args
 except Exception:                                    # pragma: no cover
     _cli_args = None
-
-
-# ----------------------------------------------------------------------
-# opening the folder
-# ----------------------------------------------------------------------
-def _reveal(path):
-    """Open a folder in the desktop file manager of the machine ComfyUI runs
-    on. Not the browser's machine - on a remote server this opens a window
-    nobody is sitting in front of, which is why the button says so."""
-    if sys.platform.startswith("win"):
-        os.startfile(path)                       # noqa: S606  (no shell)
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", path])
-    else:
-        subprocess.Popen(["xdg-open", path])
 
 
 def _inside_output(path):
@@ -217,26 +200,6 @@ try:                                                 # pragma: no cover
             return _web.json_response({"ok": False, "error": "outside output"},
                                       status=400)
         return _web.json_response({"ok": True, "files": _folder_images(path)})
-
-    @_PromptServer.instance.routes.post("/leiel/open_folder")
-    async def _leiel_open_folder(request):
-        try:
-            data = await request.json()
-        except Exception:
-            data = {}
-        path = str(data.get("path") or "")
-        if not path or not _inside_output(path):
-            return _web.json_response({"ok": False, "error": "outside output"},
-                                      status=400)
-        if not os.path.isdir(path):
-            return _web.json_response({"ok": False, "error": "no such folder"},
-                                      status=404)
-        try:
-            _reveal(path)
-        except Exception as exc:
-            return _web.json_response({"ok": False, "error": str(exc)},
-                                      status=500)
-        return _web.json_response({"ok": True})
 except Exception:                                    # pragma: no cover
     pass
 
