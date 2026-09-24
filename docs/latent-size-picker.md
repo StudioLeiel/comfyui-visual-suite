@@ -52,7 +52,8 @@ picture chooses between them yet.
 
 **SEQUENCE** — one step along the list per run, wrapping round at the end. The
 seed is the step counter, so `control after generate` is set to `increment` when
-you switch to this mode. The marked chip is where the next run starts: click a
+you switch to this mode, and back to `randomize` when you return to RANDOM. The
+marked chip is where the next run starts: click a
 chip to start there, drag one to change the order. Queue ten runs against a
 ten-size list and every size is used exactly once.
 
@@ -84,8 +85,9 @@ be tagged or maintained.
 
 `model_family` chooses which table to offer. `custom size` is your own list,
 kept at `ComfyUI/user/random_latent_size_picker/custom_sizes.json` — press EDIT
-to change it, SAVE to write it, RESET to reload the saved copy. The ratio in
-brackets is worked out as you type.
+to change it, SAVE to write it, RESET to reload the saved copy. SAVE and RESET
+appear only while the editor is open, or while edits are left unsaved. The ratio
+in brackets is worked out as you type.
 
 Setting `resolution_preset` to `custom` goes further: nothing stored in the node
 is used at all, and only what is typed into the box is. Useful for a one-off set

@@ -42,7 +42,8 @@ const HELP_TEXT = `MODE
              starts: click a chip to start there, drag one to
              change the order. The seed is the step counter, so
              control after generate is set to increment when you
-             switch to this mode; decrement walks back but stops
+             switch to this mode, and back to randomize when you
+             return to RANDOM; decrement walks back but stops
              at zero, and randomize turns it into RANDOM.
   FIXED      always uses the size in resolution_list, or the chip
              you click in the display.
@@ -75,6 +76,8 @@ DISPLAY
 BUTTONS
   SAVE   writes the editor contents to custom_sizes.json.
   RESET  throws away edits and reloads the saved file.
+  Both show only while the editor is open, or while there are
+  edits that have not been saved.
 
 FORMAT
   One resolution per line: 1536x1024. A comma instead of the x,
@@ -1147,14 +1150,17 @@ function setupNode(node) {
             preset !== "custom" &&
             !sameSizes(sortByRatio(typed), sortByRatio(stored));
 
+        // The editor holds the whole stored list whatever the preset is, so
+        // naming the preset beside its count would pair a filter with a
+        // number it does not apply to.
+        const showPreset = !(editing && preset !== "custom");
         const dot = `<span class="rlsp-sep"> \u00b7 </span>`;
         panel.title.innerHTML =
             `<span class="rlsp-st ${stateClass}">${escapeHtml(stateLabel)}</span>` +
             dot +
             `<span class="rlsp-v">${escapeHtml(family)}</span>` +
             dot +
-            `<span class="rlsp-v">${escapeHtml(preset)}</span>` +
-            dot +
+            (showPreset ? `<span class="rlsp-v">${escapeHtml(preset)}</span>` + dot : "") +
             `<span class="rlsp-v">${escapeHtml(count)}</span>` +
             (unsaved ? `${dot}<span class="rlsp-un">unsaved</span>` : "");
 
@@ -1236,8 +1242,11 @@ function setupNode(node) {
         panel.help.style.display = helpOpen ? "" : "none";
         buttons.help.classList.toggle("rlsp-active", helpOpen);
         // A custom preset never touches the stored list, so saving and
-        // resetting it would do nothing there.
-        const showStoreButtons = isCustomFamily && preset !== "custom";
+        // resetting it would do nothing there. Outside the editor there is
+        // nothing to save either - unless edits were left unsaved when it
+        // closed, and then the buttons stay so they are not lost.
+        const showStoreButtons =
+            isCustomFamily && preset !== "custom" && (editOpen || unsaved);
         buttons.save.style.display = showStoreButtons ? "" : "none";
         buttons.reset.style.display = showStoreButtons ? "" : "none";
 
@@ -1473,6 +1482,18 @@ function setupNode(node) {
                 for (const widget of seedControlWidgets(node, seedWidget)) {
                     if (widget.name === "control_after_generate") {
                         widget.value = "increment";
+                    }
+                }
+            } else if (was !== "random" && modeWidget.value === "random") {
+                // The walk is over, so the seed goes back to being a seed.
+                // Only a stepping value is undone: fixed means someone is
+                // holding a seed on purpose, and that stays theirs.
+                for (const widget of seedControlWidgets(node, seedWidget)) {
+                    if (
+                        widget.name === "control_after_generate" &&
+                        (widget.value === "increment" || widget.value === "decrement")
+                    ) {
+                        widget.value = "randomize";
                     }
                 }
             }

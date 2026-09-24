@@ -105,6 +105,9 @@ const CSS = `
   max-width:80px;overflow:hidden;text-overflow:ellipsis;}
 .vsl-chip .v{min-width:0;max-width:170px;overflow:hidden;text-overflow:ellipsis;
   opacity:.55;font-size:10px;}
+.vsl-chip .badge{flex:0 0 auto;cursor:pointer;opacity:.55;padding:0 1px;
+  font-size:13px;line-height:1;}
+.vsl-chip .badge:hover{opacity:1;color:#8fd6de;}
 .vsl-chip .x{cursor:pointer;opacity:.45;padding:0 1px;}
 .vsl-chip .x:hover{opacity:1;color:#f88;}
 .vsl-chip.muted{opacity:.38;}
@@ -434,6 +437,7 @@ const CSS = `
 .vsl-edit .eh{font-size:13px;font-weight:700;color:#ffd479;letter-spacing:.4px;
   margin-bottom:2px;}
 .vsl-edit label{font-size:12px;opacity:.7;}
+.vsl-hint{font-size:11px;line-height:1.4;opacity:.55;margin-top:3px;max-width:230px;}
 .vsl-edit input,.vsl-edit select{background:#0d0d0d;border:1px solid #444;
   border-radius:4px;color:#ddd;font-family:inherit;font-size:14px;
   padding:6px 8px;}
@@ -785,13 +789,66 @@ app.registerExtension({
         document.head.appendChild(st);
       }
 
-      for (const name of ["queue_json", "current_json"]) {
+      /* The queue and the render in hand are kept in two STRING widgets. They
+         are the node's own bookkeeping, never something to wire, so they are
+         given no height and never drawn.
+
+         Hiding them is not enough. Recent ComfyUI gives every widget an input
+         socket of its own, always present, sitting at the widget's place
+         inside the node - and these two sit under the panel where nothing can
+         be seen. A prompt wire dragged anywhere near the body would snap into
+         one of them, silently replacing the queue with prompt text. So the
+         socket is asked not to exist, and refused as well: asking alone
+         depends on a frontend option, and refusing works whatever the
+         frontend does. */
+      const SEALED = new Set(["queue_json", "current_json"]);
+      for (const name of SEALED) {
         const w = node.widgets?.find((x) => x.name === name);
         if (!w) continue;
         w.computeSize = () => [0, -4];
         w.draw = () => {};
         w.hidden = true;
+        w.options = w.options || {};
+        w.options.socketless = true;
       }
+
+      const sealedAt = (slot) => {
+        const inp = (node.inputs || [])[slot];
+        return !!(inp && (SEALED.has(inp.name)
+                          || SEALED.has(inp.widget && inp.widget.name)));
+      };
+
+      /* Asking for no socket is not enough on every frontend: the socket is
+         refused but still drawn, and a grey dot appears above "model" the
+         moment a STRING wire is picked up - two dots in the same place, since
+         both widgets sit at the same zero height. A dot with nothing behind it
+         is worse than a dot that works, so the entries are taken out of the
+         input list as well. */
+      function dropSealedSockets() {
+        try {
+          for (let i = (node.inputs || []).length - 1; i >= 0; i--) {
+            const inp = node.inputs[i];
+            const name = (inp && inp.widget && inp.widget.name)
+              || (inp && inp.name);
+            if (!SEALED.has(name)) continue;
+            if (inp.link !== null && inp.link !== undefined) {
+              node.disconnectInput(i);
+            }
+            node.inputs.splice(i, 1);
+          }
+          node.setDirtyCanvas(true, true);
+        } catch (e) { /* ignore */ }
+      }
+      dropSealedSockets();
+      setTimeout(dropSealedSockets, 0);
+
+      const prevConnectInput = node.onConnectInput;
+      node.onConnectInput = function (slot, ...rest) {
+        if (sealedAt(slot)) return false;
+        return prevConnectInput
+          ? prevConnectInput.call(this, slot, ...rest)
+          : true;
+      };
       const store = node.widgets?.find((w) => w.name === "queue_json");
 
       const state = {
@@ -939,9 +996,10 @@ app.registerExtension({
       }
       /* The prompt sockets grow as they are used: one empty one is always on
          offer, and a new one appears behind it as soon as that is wired, up
-         to six. Six empty sockets on a fresh node would say "you must fill
-         these in", which is not true of any of them. */
-      const MAX_PROMPTS = 6;
+         to ten. Ten empty sockets on a fresh node would say "you must fill
+         these in", which is not true of any of them. Must match MAX_PROMPTS
+         in the node, which decides how many the backend will accept. */
+      const MAX_PROMPTS = 10;
 
       function promptSlots() {
         const out = [];
@@ -998,6 +1056,10 @@ app.registerExtension({
         /* A wire landing on the last empty socket is what makes the next one
            appear, and the shelf has to show the new prompt straight away. */
         try {
+          /* A frontend that connected one of the sealed sockets without
+             asking gets the wire taken back off, so the queue is never
+             overwritten by something dropped on the body. */
+          dropSealedSockets();
           syncPromptInputs();
           paint();
         } catch (e) { /* ignore */ }
@@ -1017,6 +1079,9 @@ app.registerExtension({
         if (prevConfigure) prevConfigure.apply(this, arguments);
         try {
           trimStaleOutputs();
+          /* the frontend rebuilds widget sockets while restoring a workflow */
+          dropSealedSockets();
+          setTimeout(dropSealedSockets, 0);
           readStore();
           warmQueueTriggers();
           paint();
@@ -1238,6 +1303,21 @@ app.registerExtension({
           p.title = pre;
           el.appendChild(p);
         }
+        /* A small mark before the name that does something when pressed.
+           Only chips in a state worth escaping wear one, so an untouched
+           shelf stays quiet. */
+        if (opts.badge) {
+          const b = document.createElement("span");
+          b.className = "badge";
+          b.textContent = opts.badge.text;
+          if (opts.badge.title) b.title = opts.badge.title;
+          if (opts.badge.onClick) {
+            b.addEventListener("click", (e) => {
+              e.stopPropagation(); opts.badge.onClick(e);
+            });
+          }
+          el.appendChild(b);
+        }
         const l = document.createElement("b");
         l.className = "lbl";
         l.textContent = label;
@@ -1317,7 +1397,8 @@ app.registerExtension({
           if (e.key === "Escape") { e.stopPropagation(); closeEditor(); }
         });
       }
-      function openEditor(fields, defaults, choices, values, anchor, onSave) {
+      function openEditor(fields, defaults, choices, values, anchor, onSave,
+                          extras) {
         closeEditor();
         const box = document.createElement("div");
         box.className = "vsl-edit";
@@ -1341,9 +1422,20 @@ app.registerExtension({
           } else {
             inp = document.createElement("input");
             inp.value = String(values[i] !== undefined ? values[i] : defaults[i]);
+            /* An empty field that means something - "follow the name upstream"
+               - has to say so, or nobody finds the way back to it. */
+            if (extras && extras.placeholder && i === 0) {
+              inp.placeholder = String(extras.placeholder);
+            }
           }
           box.appendChild(inp);
           inputs.push(inp);
+        }
+        if (extras && extras.note) {
+          const note = document.createElement("div");
+          note.className = "vsl-hint";
+          note.textContent = extras.note;
+          box.appendChild(note);
         }
         const bar = document.createElement("div");
         bar.className = "rowb";
@@ -2097,7 +2189,7 @@ app.registerExtension({
          its output STRING, which says nothing - in that case the node's own
          title is a better guess, and failing that the socket number. */
       const GENERIC_OUT =
-        /^(string|text|value|out|output|out_?\d*|prompt\d*|conditioning)$/i;
+        /^(string|text|value|out|output|out_?\d*|prompt\d*|conditioning|all prompt|labeled prompt)$/i;
 
       function promptSource(n) {
         try {
@@ -2151,6 +2243,25 @@ app.registerExtension({
         return (src && src.name) || ("Prompt " + n);
       }
 
+      /* Renaming the node on the other end of a wire changes what the chip
+         should say, and nothing over here is told about it. Being drawn is the
+         one moment the canvas is certainly live, so the names are gathered
+         then and compared with the ones on the shelf; the shelf is repainted
+         only when one has actually changed, so an untouched graph costs a
+         string compare a frame. */
+      let shelfNames = null;
+      const prevDrawFg = node.onDrawForeground;
+      node.onDrawForeground = function (...args) {
+        const r = prevDrawFg ? prevDrawFg.apply(this, args) : undefined;
+        try {
+          let now = "";
+          for (let i = 1; i <= MAX_PROMPTS; i++) now += "\u0001" + promptName(i);
+          if (shelfNames === null) shelfNames = now;
+          else if (now !== shelfNames) { shelfNames = now; paint(); }
+        } catch (e) { /* ignore */ }
+        return r;
+      };
+
       /* ---- paint ---- */
       function paint() {
         /* The shelf mirrors the sockets: one chip per prompt actually wired
@@ -2164,24 +2275,56 @@ app.registerExtension({
           e.className = "vsl-empty";
           e.innerHTML = "<b>No prompt wired up</b>" +
             "Connect a text node to <i>prompt1</i> and it appears here. " +
-            "Another socket opens up each time you use one, up to six.";
+            "Another socket opens up each time you use one, up to ten.";
           elPrompts.appendChild(e);
         }
         for (const n of slots) {
           const chosen = Number(state.draft.prompt) === n;
+          /* A name typed here wins over the one on the node upstream, which is
+             right - it was typed on purpose - but until now nothing said so.
+             A chip that follows its node and a chip that has been fixed looked
+             identical, and the way back (clear the name) was invisible. So a
+             fixed name carries a dot, and its tooltip says what it is
+             ignoring. */
+          const src = promptSource(n);
+          const upstream = (src && src.name) || "";
+          const pinned = !!(state.promptNames && state.promptNames[n]);
           elPrompts.appendChild(chip("c-n6", promptName(n), "", {
+            /* Following the node upstream is the ordinary state and wears no
+               mark - a row of chips all carrying the same badge would say
+               nothing. A name typed here has left that behind, so it carries
+               a dot, and the dot is the way back: press it and the typed name
+               is dropped and the node's own name takes over again. */
+            badge: pinned ? {
+              text: "\u25cf",
+              title: upstream
+                ? "name fixed here\nclick to follow \"" + upstream + "\" again"
+                : "name fixed here\nclick to follow the node upstream again",
+              onClick: () => {
+                delete state.promptNames[n];
+                if (state.promptNameSrc) delete state.promptNameSrc[n];
+                writeStore();
+                paint();
+              },
+            } : null,
             /* Dimmed once it is in the recipe, exactly like a LoRA: the
                shelf shows what is still available. */
             muted: chosen,
-            title: "prompt" + n + "\nclick to put it in the recipe" +
-              "\nright click to rename it",
+            title: "prompt" + n
+              + (pinned
+                ? "\nname fixed here"
+                  + (upstream ? "\nthe node upstream is called \"" + upstream + "\"" : "")
+                  + "\nclick the dot to follow that again"
+                : "\nname follows the node upstream")
+              + "\nclick to put it in the recipe"
+              + "\nright click to rename it",
             onClick: () => {
               /* one prompt to a recipe: picking another swaps it */
               state.draft.prompt = chosen ? 0 : n;
               paint();
             },
             onContext: (ev) => openEditor(["name"], [""], null,
-              [promptName(n)], ev.currentTarget, (v) => {
+              [pinned ? state.promptNames[n] : ""], ev.currentTarget, (v) => {
                 const t = String(v[0] || "").trim();
                 if (!state.promptNameSrc) state.promptNameSrc = {};
                 if (t) {
@@ -2194,7 +2337,11 @@ app.registerExtension({
                 }
                 writeStore();
                 paint();
-              }),
+              },
+              { placeholder: upstream || ("Prompt " + n),
+                note: upstream
+                  ? "Leave it empty to follow the node upstream (" + upstream + ")."
+                  : "Leave it empty to follow the name of the node upstream." }),
           }));
         }
 

@@ -4,11 +4,6 @@ A prompt editor for ComfyUI: named sections you can switch off, reorder, mark up
 and reuse - and, when you want it, a reader that fills a section from a
 reference image, one layer at a time.
 
-> **Use it however you like.** The sections are optional. Keep a single section
-> and it is simply a text input; split it into quality, subject, scene and camera
-> if that suits you - or into any parts and names of your own. Nothing requires a
-> particular layout.
-
 ![Overview](images/prompt-composer/01-overview.png)
 
 ---
@@ -322,6 +317,24 @@ heading because the restriction does not apply to them. Beside the menu, four
 stacked bars show which of the four this reading takes and that the other three
 are being left to their own sections, and the same mark sits on the picture
 itself.
+
+Under the strip is a row of chips, one for each section, headed `read into`.
+They decide where the answers land. The section holding the picture starts as
+the only lit one, so a single press behaves as it always did; light two or three
+more and one press reads the picture into all of them. Each chosen section is
+asked its own question - the one its name picks - so the layers stay separate
+exactly as they do when you read one at a time. The picture is only uploaded and
+the model only loaded once for the whole run, and a chosen section is
+overwritten whether or not it already holds text: choosing it is the instruction
+to read it again.
+
+While a run is going the `Read` button counts the readings off - `2 / 3` - the
+note beside it names the section being read, and a `Stop` button appears. Stop
+finishes the reading that is already running and leaves the rest untouched, so
+what has been read stays. Sections fill in the order they sit in the node, top
+to bottom, and a collapsed one opens itself as its answer arrives: reading a
+reference is how a series gets designed, and there is no sense hiding the part
+worth watching.
 
 A landscape picture opens above the text and a portrait one beside it, which is
 where each has room. The two small squares in the strip move it the other way,

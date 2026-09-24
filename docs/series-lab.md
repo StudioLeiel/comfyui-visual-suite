@@ -39,10 +39,19 @@ the machine.
 ![Three shelves to stock](images/series-lab/02-shelves.png)
 
 **Prompt Shelf** — one chip per prompt wired into the node, named after
-whatever it is connected to. Connect a text node to `prompt1` and a chip
-appears; the next socket opens as soon as that one is used, up to six. Right
-click to rename a chip. A name you type is dropped again if you rewire that
-socket to something else, so a chip never keeps the old thing's name.
+whatever it is connected to: rename the node at the other end of the wire and
+the chip follows it, here and in every recipe already queued. Connect a text
+node to `prompt1` and a chip appears; the next socket opens as soon as that one
+is used, up to ten.
+
+Right click to rename a chip. A name you type wins over the one upstream from
+then on, and the chip carries a dot to say so - following the node is the
+ordinary state and wears no mark, since a shelf where every chip carried the
+same badge would say nothing. The dot is also the way back: press it and the
+typed name is dropped and the node's own name takes over again. Renaming and
+leaving the box empty does the same, and the box shows the upstream name greyed
+out behind it. A name you type is dropped anyway if you rewire that socket to
+something else, so a chip never keeps the old thing's name.
 
 **LoRAs Shelf** — whatever was picked in BROWSE. Hover a chip to see its
 picture; click to reserve it for the recipe, `x` to take it off the shelf.

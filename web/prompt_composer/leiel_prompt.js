@@ -248,6 +248,27 @@ async function readImage(ref, question, settings) {
    it twice. */
 const LAYER_ORDER = ["quality", "subject", "scene", "camera"];
 
+/* One photograph usually holds several layers, and a series is designed by
+   reading them all out of it. Reading was one section, one picture, one press,
+   so the same image had to be dropped into four sections and read four times.
+   Now a reading has targets: the picture stays where it is, and each chosen
+   section is asked its OWN question in turn. The questions stay separate on
+   purpose - one prompt answering for every layer at once is how scene nouns
+   end up in the subject and lighting ends up in the camera. */
+function readTargetsOf(sec, sections) {
+  const ids = Array.isArray(sec.readTo) && sec.readTo.length ? sec.readTo : [sec.id];
+  const want = new Set(ids);
+  const list = sections.filter(x => want.has(x.id));
+  return list.length ? list : [sec];
+}
+
+/* The question a section would ask of a picture, whoever is holding it. */
+function questionOf(sec) {
+  const key = sec.q || questionFor(sec.title);
+  if (key === "custom") return (sec.qText || "").trim();
+  return ((VLM.questions[key] || {}).question || "");
+}
+
 function layerGlyph(key) {
   const rows = LAYER_ORDER.map((layer, i) => {
     const on = key === "all" || layer === key;
@@ -1258,7 +1279,21 @@ const CSS = `
 .lvr-q{--hue:#e6c476;flex:1 1 auto;min-width:46px;font-size:11.5px;font-weight:500;
   letter-spacing:0;padding:0 3px;}
 .lvr-q:focus{outline:none;border-color:var(--hue);}
-.lvr-read{--hue:#e6c476;font-size:10px;letter-spacing:.2px;padding:0 9px;}
+.lvr-read{--hue:#e6c476;font-size:10px;letter-spacing:.2px;padding:0 14px;
+  min-width:54px;text-align:center;}
+.lvr-stop{--hue:#e07a5f;font-size:10px;letter-spacing:.2px;padding:0 8px;
+  background:#1a1207;border:1px solid #5a3226;border-radius:4px;color:#e07a5f;
+  cursor:pointer;height:16px;line-height:14px;}
+.lvr-stop:hover{border-color:#e07a5f;color:#f0947c;}
+.lvr-targets{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center;
+  padding:1px 1px 0;}
+.lvr-tlab{font-size:9px;letter-spacing:.9px;text-transform:uppercase;color:#6b6252;
+  margin-right:2px;}
+.lvr-t{font-size:10px;line-height:14px;height:16px;padding:0 7px;border-radius:4px;
+  background:#15120b;border:1px solid #332c1d;color:#6b6252;cursor:pointer;
+  white-space:nowrap;}
+.lvr-t:hover{border-color:#e6c476;color:#bda877;}
+.lvr-t.on{border-color:#e6c476;color:#e6c476;background:#e6c4761a;}
 .lvr-read:disabled{color:#4a4a4a;border-color:#333;cursor:default;}
 /* disabled because something else is using the card, not because there is
    nothing to read - worth telling apart */
@@ -1588,6 +1623,13 @@ app.registerExtension({
       node._leielPrompt = state;
 
       let ready = false;        // nothing saves before the stored layout loads
+      /* A multi-section reading outlives the DOM it was started from: every
+         answer re-renders the node, so the button and the note the run began
+         with are gone by the second step. The run lives here instead, and each
+         fresh render reads it to draw the progress and the stop button. */
+      let readRun = null;
+      /* and what the run had to say when it ended, for the same reason */
+      let readNote = null;
       let userTouched = false;  // tells a deliberate wipe from an undo wipe
       const touch = () => { userTouched = true; };
 
@@ -1756,6 +1798,8 @@ app.registerExtension({
           img: s.img || null,
           q: s.q || "",
           qText: s.qText || "",
+          /* which sections this picture fills when it is read */
+          readTo: Array.isArray(s.readTo) ? s.readTo.slice() : null,
         }));
         assignSlots();
         ready = true;
@@ -1822,7 +1866,35 @@ app.registerExtension({
           const sec = bySlot.get(parseInt(m[1]));
           o.label = sec ? (sec.title || o.name) : o.name;
         }
+
+        /* A shelf at the other end of the wire names a chip after the label on
+           the output it is fed from, and "all prompt" is the same words on
+           every composer on the canvas - so the series had to be named twice,
+           once here as the node's title and again over there. The title is
+           already the name of the series, so the whole-prompt output wears it:
+           rename the node and the chip follows. Left alone, or renamed back to
+           the node's own name, it says "all prompt" as before. */
+        const whole = (node.outputs || []).find(o => o.name === "all prompt");
+        if (whole) {
+          const mine = String(node.title || "").trim();
+          const stock = String((node.constructor && node.constructor.title) || "").trim();
+          whole.label = (mine && mine !== stock) ? mine : "all prompt";
+        }
       }
+
+      /* Renaming a node is not a graph change anything tells us about, so the
+         title itself reports in. */
+      try {
+        let titleText = node.title;
+        Object.defineProperty(node, "title", {
+          configurable: true,
+          get() { return titleText; },
+          set(v) {
+            titleText = v;
+            try { syncOutputs(); node.setDirtyCanvas(true, true); } catch (e) { /* ignore */ }
+          },
+        });
+      } catch (e) { /* ignore */ }
 
       /* Keep one external input per section, named by its slot. */
       const FIXED_LABELS = {
@@ -2886,6 +2958,23 @@ app.registerExtension({
               <div class="lvp-tr-body"></div>
             </div>`;
 
+          /* One chip per section, lit when this picture will fill it. The
+             section holding the picture starts as the only lit one, so a
+             single press behaves exactly as it always did. */
+          const targetChips = (sec) => {
+            const want = new Set(readTargetsOf(sec, state.sections).map(x => x.id));
+            return state.sections.map((x) => {
+              const key = x.q || questionFor(x.title);
+              const lit = want.has(x.id);
+              const label = key === "custom" ? "own question"
+                : ((VLM.questions[key] || {}).label || key);
+              return `<button class="lvr-t${lit ? " on" : ""}" data-id="${x.id}"`
+                + ` title="${escapeHtml(x.title)} - asks its own question: `
+                + `${escapeHtml(label)}. Chosen sections are overwritten.">`
+                + `${escapeHtml(x.title)}</button>`;
+            }).join("");
+          };
+
           const imgBox = () => {
             const chosen = s.q || questionFor(s.title);
             /* "Read only" is said once, above the four, instead of once inside
@@ -2931,7 +3020,12 @@ app.registerExtension({
                 <span class="lvr-layers" title="${escapeHtml(layerTitle(s))}"
                   >${layerGlyph(s.q || questionFor(s.title))}</span>
                 <select class="lvr-q" title="Reads only this layer of the picture and ignores the rest - the section's name picks it, and you can change it here">${opts}</select>
-                <button class="lvr-read"${s.img ? "" : " disabled"}>Read</button>
+                <button class="lvr-read"${s.img && !readRun ? "" : " disabled"}>${
+                  readRun && readRun.owner === s.id
+                    ? `${readRun.i} / ${readRun.n}` : "Read"}</button>
+                ${readRun && readRun.owner === s.id
+                  ? `<button class="lvr-stop" title="Stop after the reading that is running">Stop</button>`
+                  : ""}
                 <button class="lvr-lay${s.imgSide ? "" : " on"}" data-side="0"
                   title="Picture above the text">${ICON_ROW}</button>
                 <button class="lvr-lay${s.imgSide ? " on" : ""}" data-side="1"
@@ -2939,6 +3033,10 @@ app.registerExtension({
                 ${s.img ? `<button class="lvr-x" title="Take the image out">&#10005;</button>` : ""}
                 <span class="lvr-note"></span>
               </div>
+              ${s.img ? `<div class="lvr-targets">
+                <span class="lvr-tlab">read into</span>
+                ${targetChips(s)}
+              </div>` : ""}
               ${chosen === "custom"
                 ? `<textarea class="lvr-custom" spellcheck="false" placeholder="What should it describe?">${escapeHtml(s.qText || "")}</textarea>`
                 : ""}
@@ -3296,11 +3394,13 @@ app.registerExtension({
             let reading = false;
             const setReadState = () => {
               if (!readBtn) return;
-              const blocked = BUSY.on && !reading;
-              readBtn.disabled = reading || BUSY.on || !s.img;
+              const blocked = BUSY.on && !reading && !readRun;
+              readBtn.disabled = reading || BUSY.on || !s.img || !!readRun;
               /* The note under the strip carries the same word, but a tall
                  picture pushes it out of sight - so the button says it too. */
-              readBtn.textContent = reading ? "Reading" : "Read";
+              readBtn.textContent = readRun && readRun.owner === s.id
+                ? `${readRun.i} / ${readRun.n}`
+                : (reading ? "Reading" : "Read");
               readBtn.classList.toggle("waiting", blocked);
               readBtn.title = blocked
                 ? "ComfyUI is rendering - reading now would run the card out of "
@@ -3316,28 +3416,88 @@ app.registerExtension({
             (node._lvaBusyOff || (node._lvaBusyOff = [])).push(
               () => BUSY.listeners.delete(setReadState));
 
-            readBtn.addEventListener("click", async () => {
-              if (!s.img || BUSY.on) return;
-              const key = s.q || questionFor(s.title);
-              const question = key === "custom"
-                ? (s.qText || "").trim()
-                : ((VLM.questions[key] || {}).question || "");
-              if (!question) { say("There is no question to ask.", "err"); return; }
+            /* The chips decide where the answers land. Stored on the section
+               that holds the picture, so a workflow reopens with the same
+               targets it was designed with. */
+            for (const chip of el.querySelectorAll(".lvr-t")) {
+              chip.addEventListener("click", () => {
+                if (readRun) return;
+                const id = Number(chip.dataset.id);
+                const have = new Set(readTargetsOf(s, state.sections).map(x => x.id));
+                if (have.has(id)) have.delete(id); else have.add(id);
+                /* kept in section order so the reading runs top to bottom */
+                s.readTo = state.sections.filter(x => have.has(x.id)).map(x => x.id);
+                touch(); render(); save();
+              });
+            }
 
-              reading = true;
-              setReadState();
-              say("reading…", "busy");
+            const stopBtn = el.querySelector(".lvr-stop");
+            if (stopBtn) {
+              stopBtn.addEventListener("click", () => {
+                if (!readRun) return;
+                readRun.stop = true;
+                say("stopping after this one…", "busy");
+              });
+            }
+
+            /* Re-announced on every render: the run survives the rebuild, so
+               the new note has to be told where the run got to. */
+            if (readRun && readRun.owner === s.id) {
+              say(`reading ${readRun.i} / ${readRun.n} - ${readRun.title}`, "busy");
+            } else if (readNote && readNote.owner === s.id) {
+              say(readNote.msg, readNote.kind);
+            }
+
+            readBtn.addEventListener("click", async () => {
+              if (!s.img || BUSY.on || readRun) return;
+
+              const jobs = [];
+              for (const x of readTargetsOf(s, state.sections)) {
+                const question = questionOf(x);
+                if (!question) {
+                  say(`${x.title} has no question to ask.`, "err");
+                  return;
+                }
+                jobs.push({ sec: x, question });
+              }
+
+              readNote = null;
+              readRun = { owner: s.id, i: 1, n: jobs.length,
+                          title: jobs[0].sec.title, stop: false };
+              render();
+              let failed = "";
               try {
-                const text = await readImage(s.img, question, readerSettings());
-                if (!text) { say("The reader returned nothing.", "err"); return; }
-                s.text = normalizeText(text);
-                s.html = escapeHtml(s.text);
-                touch(); render(); save(); updateFoot();
+                for (let i = 0; i < jobs.length; i++) {
+                  const { sec, question } = jobs[i];
+                  readRun.i = i + 1;
+                  readRun.title = sec.title;
+                  render();
+                  const text = await readImage(s.img, question, readerSettings());
+                  if (!text) { failed = `${sec.title}: the reader returned nothing.`; }
+                  else {
+                    sec.text = normalizeText(text);
+                    sec.html = escapeHtml(sec.text);
+                    /* a section filling itself in should be seen doing it -
+                       reading a picture is how a series gets designed, and a
+                       collapsed section hides the one thing worth watching */
+                    sec.collapsed = false;
+                    touch(); save(); updateFoot();
+                  }
+                  if (readRun.stop && i < jobs.length - 1) {
+                    failed = "stopped";
+                    break;
+                  }
+                  render();
+                }
               } catch (err) {
-                say(String(err.message || err), "err");
+                failed = String(err.message || err);
               } finally {
-                reading = false;
-                setReadState();
+                readRun = null;
+                render();
+              }
+              if (failed) {
+                readNote = { owner: s.id, msg: failed, kind: "err" };
+                render();
               }
             });
           }
@@ -5627,8 +5787,13 @@ app.registerExtension({
          Four full-height references genuinely are a very tall node. Saying so
          is the honest answer; MIN and collapse are there for when it is too
          tall to work in. */
+      /* What the layout model is short of, as the browser measured it. Kept
+         apart from the section heights on purpose - see absorbOverflow. */
+      let overflowPad = 0;
+      const OVERFLOW_MAX = 32;
+
       w.computeSize = function (width) {
-        return [width, Math.max(120, contentHeight())];
+        return [width, Math.max(120, contentHeight() + overflowPad)];
       };
 
       /* Keep the node exactly as tall as its contents.
@@ -5655,14 +5820,34 @@ app.registerExtension({
          takes on exactly the overflow. Once per render, never while the node
          is being dragged, and the height goes to the node rather than to the
          sections, so it cannot feed back into the content and run away. */
+      /* This used to add the overflow to node.size, and that was a ratchet.
+         snapNode reads any node taller than its contents as the user having
+         dragged it taller, and hands the slack to the sections - so the
+         correction became section height, was saved with the workflow, and
+         the next measurement started from the bigger boxes. Harmless while
+         the overflow was a real pixel or two. But coming back to a workflow
+         tab re-renders the node before the canvas has put the element at its
+         final size, the list reads as overflowing by tens of pixels that are
+         not there, and every visit grew every Prompt Composer a little more.
+
+         Now the correction lives in overflowPad, which only computeSize reads.
+         It never touches a section, so it cannot be saved or compound, and
+         it is capped: a rounding difference is a few pixels, and anything
+         bigger is a layout that has not settled, not something to absorb.
+         The list is also only measured when it is actually laid out. */
       let absorbed = false;
       function absorbOverflow() {
         if (absorbed || !ready || drag || gripDragging || beingResized()) return;
+        if (!root.isConnected || root.offsetParent === null || !list.clientHeight) return;
         const over = list.scrollHeight - list.clientHeight;
-        if (over <= 0 || over > 200) return;
+        if (over <= 0) return;
         absorbed = true;
+        if (over > OVERFLOW_MAX) return;
+        const next = Math.min(OVERFLOW_MAX, overflowPad + over);
+        if (next === overflowPad) return;
+        overflowPad = next;
         try {
-          node.setSize([node.size[0], node.size[1] + over]);
+          node.setSize([Math.max(node.size[0], 420), node.computeSize()[1]]);
           node.setDirtyCanvas(true, true);
         } catch (e) { /* ignore */ }
       }

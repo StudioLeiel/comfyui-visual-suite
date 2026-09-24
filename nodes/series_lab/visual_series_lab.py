@@ -35,8 +35,9 @@ except Exception:                                    # pragma: no cover
 
 
 # How many named prompt sockets the node can grow. The face opens them one at
-# a time as they are used, so this is a ceiling and not a row of empty holes.
-MAX_PROMPTS = 6
+# a time as they are used, so this is a ceiling and not a row of empty holes -
+# raised from six, which a single series of scenes filled up in an afternoon.
+MAX_PROMPTS = 10
 
 
 # --------------------------------------------------------------------------
