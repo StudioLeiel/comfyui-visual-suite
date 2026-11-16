@@ -37,8 +37,12 @@ rather than a silent overwrite: a render that has finished is never thrown
 away.
 """
 
+import builtins
 import json
 import os
+import re
+import threading
+import time
 
 import numpy as np
 from PIL import Image
@@ -221,6 +225,41 @@ except Exception:                                    # pragma: no cover
     pass
 
 
+# The Filename Manager's elapsed chip arrives as a mark - LEIELEL1F for one
+# decimal - and the time goes in here, as the file is written, measured from
+# the start of the run: model load, sampling and decode included.
+_ELAPSED_MARK = re.compile(r"LEIELEL(\d)F")
+
+
+def _fill_elapsed(prefix):
+    prefix = str(prefix or "")
+    if "LEIELEL" not in prefix:
+        return prefix
+    store = getattr(builtins, "_LEIEL_TIMER", None) or {}
+    t = store.get("t")
+    e = time.perf_counter() - t if t is not None else None
+    if e is None or e < 0 or e > 6 * 3600:
+        return _ELAPSED_MARK.sub("na", prefix)
+    return _ELAPSED_MARK.sub(lambda m: "%.*f" % (int(m.group(1)), e), prefix)
+
+
+def _prewarm(path, img):
+    """The Image Viewer's thumbnails for a file just written, made from the
+    picture still in memory, off to the side so saving never waits for it.
+    Nothing happens when the viewer is not there."""
+    try:
+        # the same way round as the viewer imports this file, so both reach
+        # the one copy of each module ComfyUI loaded
+        try:
+            from ..image_viewer.visual_image_viewer import prewarm_saved
+        except Exception:
+            from image_viewer.visual_image_viewer import prewarm_saved
+    except Exception:
+        return
+    threading.Thread(target=prewarm_saved, args=(path, img), daemon=True,
+                     name="leiel-save-thumbs").start()
+
+
 def _metadata_allowed():
     """Mirrors SaveImage: --disable-metadata strips prompt and workflow."""
     if _cli_args is None:
@@ -324,6 +363,7 @@ class LeielSaveImage:
     def save(self, images, filename_prefix="Leiel", trailing_counter=False,
              compress_level=4, extra_jpg=False, extra_webp=False,
              extra_quality=92, last_seen="", prompt=None, extra_pnginfo=None):
+        filename_prefix = _fill_elapsed(filename_prefix)
         filename_prefix += self.prefix_append
         # Borrowed rather than rebuilt: this is what keeps a prefix from
         # writing outside the output folder, and what expands %date% and the
@@ -359,6 +399,7 @@ class LeielSaveImage:
                 name = _free_name(full_output_folder, stem)
             img.save(os.path.join(full_output_folder, name),
                      pnginfo=metadata, compress_level=compress_level)
+            _prewarm(os.path.join(full_output_folder, name), img)
             results.append({"filename": name, "subfolder": subfolder,
                             "type": self.type})
 

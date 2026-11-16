@@ -136,6 +136,13 @@ Everything else is on the bar under the picture.
 | `↻` | Read the folder again. |
 | `?` | The manual, on the node. |
 
+Each render's thumbnails for the [Image Viewer](image-viewer.md) are made as
+it is saved, beside the save rather than in its way, so the viewer shows new
+renders without making them itself.
+
+An `elapsed` chip from the Filename Manager is filled in here, as the file is
+written, so it counts the whole render - loading, sampling and decoding.
+
 Two renders can still land on the same name — the same recipe run twice in the
 same second, or a batch, where the name is built once and handed to every image
 in it. The second gets a short suffix rather than overwriting the first. A

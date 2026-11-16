@@ -84,7 +84,48 @@ A long prompt is a record of many decisions that all look alike once it is
 saved. Styling gives it landmarks.
 
 Text can be bold, italic, underlined, coloured or highlighted. Select a run and
-pick an effect, or use the format brush next to `STYLE` to lift the styling off
+pick an effect - the palette stays up over the same run, so several effects
+can be stacked one click after another, and it goes when the selection does:
+a click on empty space or back into the text. A button the whole selection
+already wears is lit, so a colour or a highlight shows on the palette at once
+while the run is still selected. A line can be marked with a large dot or a
+small one - the same mark in two sizes. The palette is one row: bold,
+italic, underline and the paragraph dot, then **Highlight** and **Text colour**,
+the size, letter spacing, **Font**, and the round arrow that clears every mark
+off the selection. Each dropdown and box shows what the selection already
+wears.
+
+- **Highlight** has seven colours.
+- **Text colour** has ten, then your favourites, then **RGB** sliders for any
+  colour at all. Drag R, G and B, type each channel as a number (0 - 255),
+  or type a colour such as `#DB4070` (or `DB4070`, or a three-digit `#D47`)
+  into the box - Enter in any of the boxes puts the colour on, as does
+  **Apply**. The eyedropper beside the colour box picks a colour from anywhere
+  on the screen, even outside the browser, and sets the sliders to it (Chrome
+  and Edge; Esc cancels). The star adds the colour to your favourites,
+  which sit after the preset colours; hover a favourite and press its small
+  cross to remove it. Favourites are kept in this browser.
+- **Size**: the two buttons move in small steps, about a tenth at a time. The
+  box between them shows the size of the selection; type a number (in
+  percent, 30 to 400) and press Enter to set it exactly.
+- **Font** has three parts. **My fonts** lists every font installed on this
+  computer: press *Show the fonts on this computer* once (Chrome or Edge ask
+  for permission the first time), search by name, and open a family to see
+  its faces - Thin, Light, Regular, Medium, Bold, Black, the italics - each
+  drawn in itself. Click a face to put it on; press its star to keep it under
+  **Favourites** at the top, and hover a favourite and press its cross to
+  remove it. **Basic** keeps the fonts every Windows PC or Mac has (Segoe
+  UI, Arial, Georgia, Times, Consolas and so on). Favourites and the
+  faces used are remembered in this browser; on a computer without a face the
+  text falls back to the font around it.
+- **Letter spacing** (the AV box) is in thousandths of an em, as in InDesign:
+  − and + move it by 10, or type a number from -200 to 800 and press Enter;
+  0 takes it off. While a number is being typed, the selection it will act
+  on stays painted.
+- Each list starts with **Default**, which takes that one kind of mark off.
+  Text sized or coloured before keeps its look.
+
+Or use the format brush next to `STYLE` to lift the styling off
 one piece of text and stamp it onto another. **None of it reaches the model.**
 The styling is metadata stored alongside the text; the output is plain. `STYLE`
 toggles the whole display so you can see the prompt exactly as it will be sent,
@@ -95,6 +136,20 @@ you read: the clause you changed last run, the two sentences that contradict
 each other, the phrase you keep meaning to cut, the part you are not sure is
 doing anything. It all survives in the saved workflow, so next week's you
 inherits this week's thinking instead of an undifferentiated wall.
+
+---
+
+## Paste a whole reply
+
+Copy a reply that gives a scene name and then each anchor under its own label
+(`QUALITY`, `SUBJECT`, `POSE`, `SCENE`, `CAMERA`, `ABSOLUTE`), and press
+**Paste** - or hover the node and press `Ctrl+V`. Each anchor lands in its own
+section, sections the reply does not mention are left alone, the node takes the
+scene's name (so a Series Lab chip follows it), and every box is fitted to its
+text. Text in code boxes is taken as it is; without code boxes a block runs to
+the next label. Commentary around the blocks is ignored.
+
+For a whole series in one node, see the [Series Book](series-book.md).
 
 ---
 
@@ -135,7 +190,7 @@ A preset replaces a section. A snippet joins one.
 
 That is the whole distinction, and it exists because of what the reader below
 will and will not tell you. The reader describes what a photograph shows and
-stops there - deliberately, so that four readings of four references do not
+stops there - deliberately, so that separate readings of separate references do not
 repeat and contradict one another. It follows that it can never give you
 anything the picture does not contain: a film stock you want but did not shoot,
 a time of day you are moving the scene to, a shot size it could not make out.
@@ -159,7 +214,8 @@ described.
 
 The panel shows the phrases filed under the section you opened it from, matched
 on the section title. `Camera Anchor`, `Camera Details` and `camera` all reach
-the camera shelf; `Model Anchor` reaches the subject shelf, on the same aliases
+the camera shelf; `Model Anchor` reaches the subject shelf and `Pose Anchor` the
+pose shelf, on the same aliases
 the reader uses to pick its question. Tick **all sections** to see the rest.
 
 ### Groups
@@ -189,7 +245,8 @@ The shipped groups are:
 | camera | shot, lens, height, facing, focus |
 | quality | grain, contrast, cast, saturation, edge, stock |
 | scene | time, weather, source |
-| subject | gaze, hands, hair, prop |
+| subject | hair, prop |
+| pose | gaze, hands |
 
 The group is shown in yellow before each name, so running an eye down the list
 shows which phrases compete with one another before you read a single one.
@@ -277,9 +334,9 @@ Hugging Face cache; `Qwen3-VL-4B-Instruct` is a good place to start.
 ## Why one layer at a time
 
 Image-to-prompt tools describe a whole picture at once. That is not how a prompt
-is built. The quality of a photograph, the person in it, the place it was taken
-and the way it was shot are four separate decisions, and they usually come from
-four different references.
+is built. The quality of a photograph, the person in it, what that person is
+doing, the place it was taken and the way it was shot are five separate
+decisions, and they usually come from different references.
 
 ![Four layers, four references](images/prompt-composer/02-layers.png)
 
@@ -289,8 +346,17 @@ the frame stands, how strongly nearness enlarges, the height it was taken from,
 how far round the subject the camera stands, where the subject is cut, how the
 space divides around them, where sharpness sits - and told to leave the subject,
 the setting and the light alone. The one called `Subject Anchor` is asked the
-opposite. Four references, four sections, one prompt assembled from the parts
-you actually wanted from each.
+opposite.
+
+The person is split in two. `Subject Anchor` reads how they look and what they
+wear - build, hair, face, skin, every garment from head to feet - as if they
+were standing still for a fitting. `Pose Anchor` reads only what the body is
+doing: the position and where the weight rests, the line of the torso, the turn
+of the head, where the eyes look, the expression, each arm and hand, each leg
+and foot. Kept apart, a pose can come from one picture and the clothes from
+another, and changing what someone is doing no longer means rewriting what
+they are wearing. One reference per section, one prompt assembled from the
+parts you actually wanted from each.
 
 The questions matter more than the model. Each one names the words its layer may
 use and the words it may not, which is what stops a camera reading from drifting
@@ -311,12 +377,11 @@ text in that section.
 ![Choosing a layer](images/prompt-composer/03-layers-menu.png)
 
 The question is picked from the section's name, so a workflow already laid out
-as quality / subject / scene / camera opens ready to use. The menu groups the
-four under `Read only`; `The whole picture` and `Custom...` sit outside that
-heading because the restriction does not apply to them. Beside the menu, four
-stacked bars show which of the four this reading takes and that the other three
-are being left to their own sections, and the same mark sits on the picture
-itself.
+as quality / subject / pose / scene / camera opens ready to use. The menu groups
+the five under `Read only`; `The whole picture` and `Custom...` sit outside that
+heading because the restriction does not apply to them. Beside the menu, five
+stacked bars show which of the five this reading takes and that the others are
+being left to their own sections, and the same mark sits on the picture itself.
 
 Under the strip is a row of chips, one for each section, headed `read into`.
 They decide where the answers land. The section holding the picture starts as
@@ -375,12 +440,12 @@ the scene - a wall, a railing, the thing it picked out to judge how strongly
 nearness enlarges. It is obvious when it happens and takes a moment to delete,
 but it is worth a glance before the reading goes into an anchor.
 
-And the layers are worth using as intended. Reading all four off a single image
-is a description of that image, and the result will look like it. Reading the
-quality from one, the subject from another, the place from a third and the
-camera from a fourth is composition - four decisions you made, assembled. The
-button that reads one layer and leaves the other three alone is there so the
-second is as easy as the first.
+And the layers are worth using as intended. Reading all of them off a single
+image is a description of that image, and the result will look like it. Reading
+the quality from one, the clothes from another, the pose from a third, the place
+from a fourth and the camera from a fifth is composition - decisions you made,
+assembled. The button that reads one layer and leaves the others alone is there
+so the second is as easy as the first.
 
 What the reader leaves out is the snippet library's job. It describes the
 photograph in front of it and nothing else, so the shot size you want instead,

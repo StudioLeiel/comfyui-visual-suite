@@ -57,18 +57,49 @@ import builtins as _bi
 
 _STORE = getattr(_bi, "_LEIEL_TIMER", None)
 if _STORE is None:
-    _STORE = {"t": None, "count": 0, "src": "-"}
+    _STORE = {"t": None, "count": 0, "src": "-", "wall": None, "pnginfo": None}
     try:
         _bi._LEIEL_TIMER = _STORE
     except Exception:
         pass
 
 
-def _mark_start(src):
+def _mark_start(src, extra_data=None):
     _STORE["t"] = time.perf_counter()
+    _STORE["wall"] = time.time()
     _STORE["count"] += 1
     _STORE["src"] = src
+    # the run's own png info, which every saver of this run writes out - the
+    # render time is put in it as each picture is saved (see _note_time)
+    info = extra_data.get("extra_pnginfo") if isinstance(extra_data, dict) else None
+    _STORE["pnginfo"] = info if isinstance(info, dict) else None
     return _STORE["t"]
+
+
+# The render time in the picture itself.
+#
+# Every render made with this pack installed carries how long it took, in the
+# PNG's own text, under "leiel_render" - whether or not the elapsed chip is in
+# its name, and whether or not this node is in the graph:
+#   {"seconds": 41.83, "started": <unix time>, "saved": <unix time>}
+# seconds runs from the moment ComfyUI started the run - model loading,
+# sampling and decoding - to the moment the file is named, just before it is
+# written. It is put in the run's png info as the saver asks for a file name,
+# and the saver writes that info into the file a moment later; ComfyUI's Save
+# Image, Visual Save Image and the Image Viewer all do it in that order.
+# The Visual Series Report reads it; anything else can too.
+RENDER_KEY = "leiel_render"
+
+
+def _note_time():
+    info = _STORE.get("pnginfo")
+    e = _elapsed()
+    if not isinstance(info, dict) or e is None:
+        return
+    now = time.time()
+    info[RENDER_KEY] = {"seconds": round(e, 2),
+                        "started": round(_STORE.get("wall") or (now - e), 2),
+                        "saved": round(now, 2)}
 
 
 def _elapsed(prompt=None):
@@ -78,6 +109,87 @@ def _elapsed(prompt=None):
     if e < 0 or e > 6 * 3600:
         return None
     return e
+
+
+# The render time, filled in when the picture is saved.
+#
+# This node runs as soon as its inputs are ready - with the Series Lab wired
+# in, right after the LoRAs are applied and before the sampler has started -
+# so a time read here measured model loading and little else. When every node
+# taking this node's names is a known saver, the elapsed chip is written as a
+# mark instead and filled in as the file is written: model load, sampling and
+# decode, all of it. ComfyUI's own savers name their files through
+# folder_paths.get_save_image_path, which is wrapped below to fill the mark
+# in; Visual Save Image fills it itself. Any other consumer gets the time as
+# it stands when this node runs.
+_ELAPSED_SAVERS = {"LeielSaveImage", "LeielImageViewer", "SaveImage",
+                   "SaveAnimatedWEBP", "SaveAnimatedPNG"}
+_ELAPSED_MARK = re.compile(r"LEIELEL(\d)F")
+
+
+def _fill_elapsed(prefix):
+    if not isinstance(prefix, str) or "LEIELEL" not in prefix:
+        return prefix
+    e = _elapsed()
+    if e is None:
+        return _ELAPSED_MARK.sub("na", prefix)
+    return _ELAPSED_MARK.sub(lambda m: "%.*f" % (int(m.group(1)), e), prefix)
+
+
+def _wrap_save_path():
+    try:
+        import folder_paths
+        orig = getattr(folder_paths, "get_save_image_path", None)
+        if orig is None or getattr(orig, "_leiel_elapsed", False):
+            return
+
+        def get_save_image_path(filename_prefix, *a, **kw):
+            try:
+                filename_prefix = _fill_elapsed(filename_prefix)
+            except Exception:
+                pass
+            try:
+                _note_time()
+            except Exception:
+                pass
+            return orig(filename_prefix, *a, **kw)
+
+        get_save_image_path._leiel_elapsed = True
+        folder_paths.get_save_image_path = get_save_image_path
+    except Exception:
+        pass
+_ELAPSED_SPEC = re.compile(r"^\.(\d)f$")
+
+
+def _savers_only(prompt, unique_id):
+    if not isinstance(prompt, dict) or unique_id is None:
+        return False
+    me = str(unique_id)
+    kinds = []
+    for node in prompt.values():
+        if not isinstance(node, dict):
+            continue
+        for v in (node.get("inputs") or {}).values():
+            if isinstance(v, list) and len(v) == 2 and str(v[0]) == me:
+                kinds.append(str(node.get("class_type") or ""))
+                break
+    return bool(kinds) and all(k in _ELAPSED_SAVERS for k in kinds)
+
+
+def _elapsed_text(spec):
+    """The elapsed chip's text: a mark for the saver to fill in, or the time
+    now. None when there is no start time."""
+    spec = spec or ".1f"
+    m = _ELAPSED_SPEC.match(spec)
+    if _STORE.get("defer") and m and _STORE["t"] is not None:
+        return "LEIELEL%sF" % m.group(1)
+    e = _elapsed()
+    if e is None:
+        return None
+    try:
+        return format(e, spec)
+    except Exception:
+        return "%.1f" % e
 
 
 def _anchor_status():
@@ -105,7 +217,11 @@ def _install_exec_hook():
             def make(orig_fn):
                 def patched(self, *a, **kw):
                     try:
-                        _mark_start("prompt start (auto)")
+                        # execute(prompt, prompt_id, extra_data, ...)
+                        extra = kw.get("extra_data")
+                        if extra is None and len(a) > 2:
+                            extra = a[2]
+                        _mark_start("prompt start (auto)", extra)
                     except Exception:
                         pass
                     return orig_fn(self, *a, **kw)
@@ -118,6 +234,7 @@ def _install_exec_hook():
 
 
 _install_exec_hook()
+_wrap_save_path()
 
 
 # ----------------------------------------------------------------------
@@ -327,7 +444,7 @@ def _parse_lora_text(txt):
     '<lora:retrovintage:1.0> <lora:Elise_v2:0.95>' is what a prompt-style
     loader writes. 'canon1D(1.0), Elise_v2(0.9)' is what the Series Lab
     sends: the LoRAs of the render actually on its way out. A bare
-    'canon1D, m87' with no strength also reads, and none is invented in that
+    'canon1D, filmgrain' with no strength also reads, and none is invented in that
     case - a chip asking for name(strength) prints just the name rather than
     a made-up 1.0.
     """
@@ -342,7 +459,7 @@ def _parse_lora_text(txt):
         if out:
             return out
         # 'canon1D(1.0), Elise_v2(0.9)' - the Series Lab's shape. The bracket
-        # is optional: a bare 'canon1D, m87' still reads, with no strength.
+        # is optional: a bare 'canon1D, filmgrain' still reads, with no strength.
         for piece in re.split(r"[,\n]+", text):
             piece = piece.strip()
             if not piece:
@@ -409,15 +526,11 @@ def _resolve_token(body, idx, prompt, missing_log):
         fmt = body[5:] if ":" in body else "%H%M%S"
         return datetime.datetime.now().strftime(fmt or "%H%M%S")
     if low.startswith("elapsed"):
-        e = _elapsed(prompt)
-        if e is None:
-            missing_log.append("elapsed (no start time recorded)")
-            return None
         spec = body.split(":", 1)[1] if ":" in body else ".1f"
-        try:
-            return format(e, spec)
-        except Exception:
-            return "%.1f" % e
+        txt = _elapsed_text(spec)
+        if txt is None:
+            missing_log.append("elapsed (no start time recorded)")
+        return txt
     if low.startswith("loras"):
         sep = body.split(":", 1)[1] if ":" in body else "_"
         loras = _collect_loras(idx)
@@ -520,6 +633,19 @@ def _find_entry(idx, chip):
     return None
 
 
+def _lead_code(v):
+    """The leading code of a name: every word from the start that carries a
+    digit - "12 C-12 The Cathedral" gives "12 C-12". A name with no such
+    word stays whole."""
+    out = []
+    for w in str(v or "").split():
+        if any(ch.isdigit() for ch in w):
+            out.append(w)
+        else:
+            break
+    return " ".join(out) if out else str(v or "")
+
+
 def _resolve_chip(chip, idx, prompt, missing, ext_loras=None, ext_texts=None):
     try:
         kind = chip.get("kind", "widget")
@@ -532,6 +658,8 @@ def _resolve_chip(chip, idx, prompt, missing, ext_loras=None, ext_texts=None):
             if not v:
                 missing.append(f"{chip.get('label', 'input')} - nothing on that wire")
                 return None
+            if fmt == "code":
+                v = _lead_code(v)
             return f"{pre}{v}{suf}"
 
         if kind == "text":
@@ -553,14 +681,10 @@ def _resolve_chip(chip, idx, prompt, missing, ext_loras=None, ext_texts=None):
         elif kind == "time":
             core = datetime.datetime.now().strftime(fmt or "%H%M%S")
         elif kind == "elapsed":
-            e = _elapsed(prompt)
-            if e is None:
+            core = _elapsed_text(fmt or ".1f")
+            if core is None:
                 missing.append("elapsed - " + _anchor_status())
                 return None
-            try:
-                core = format(e, fmt or ".1f")
-            except Exception:
-                core = "%.1f" % e
         elif kind == "loras":
             loras = ext_loras or _collect_loras(idx)
             if not loras:
@@ -704,7 +828,7 @@ def _as_text(value):
     return None
 
 
-def _next_sequence(folder, digits):
+def _next_sequence(folder, digits, lead=""):
     """The next running number for the folder these images are going into.
 
     An image viewer sorts by name, and a name that starts with the date and
@@ -715,6 +839,11 @@ def _next_sequence(folder, digits):
     Counted as the highest number already at the front of a name in that
     folder, plus one, rather than as a count of the files. Counting files
     hands the same number out twice as soon as one is deleted.
+
+    lead is whatever the name carries before the number - "12 C-12_" when a
+    scene code comes first. The number is read right after it, never off the
+    very front, or the scene's own number would be taken for the count and
+    every render would get the same one.
     """
     start = 1
     try:
@@ -731,7 +860,12 @@ def _next_sequence(folder, digits):
         # The folder is made by the save node, so a folder that is not there
         # yet is simply an empty one.
         return start
+    lead_k = str(lead or "").lower()
     for name in names:
+        if lead_k:
+            if not name.lower().startswith(lead_k):
+                continue
+            name = name[len(lead_k):]
         m = re.match(r"(\d+)", name)
         if not m:
             continue
@@ -760,10 +894,9 @@ class LeielFilenameStudio:
             },
             "optional": {
                 # There was a run_after socket here, for wiring this node
-                # behind the sampler so an elapsed chip measured the render
-                # rather than the moment before it. The timer anchor does that
-                # on its own now, and a socket that no longer changes anything
-                # is worse than no socket: it reads as a step someone forgot.
+                # behind the decode so an elapsed chip measured the render.
+                # The time is filled in as the file is written now (see
+                # _ELAPSED_SAVERS), which needs no wire at all.
                 # Takes either shape: prompt-style <lora:name:strength> tags,
                 # or the plain "name, name" list the Series Lab sends.
                 "lora_text": ("STRING", {"forceInput": True}),
@@ -801,6 +934,7 @@ class LeielFilenameStudio:
               lora_text=None, prompt=None, extra_pnginfo=None,
               unique_id=None, **wired):
         import json
+        _STORE["defer"] = _savers_only(prompt, unique_id)
         try:
             idx = _build_index(prompt, extra_pnginfo)
             missing = []
@@ -857,7 +991,8 @@ class LeielFilenameStudio:
             mark = _SEQ_RE.search(filename)
             if mark:
                 digits = int(mark.group(1))
-                seq_note = "%0*d" % (digits, _next_sequence(folder, digits))
+                seq_note = "%0*d" % (digits, _next_sequence(
+                    folder, digits, filename[:mark.start()]))
                 filename = _SEQ_RE.sub(seq_note, filename)
 
             if len(filename) > max_filename_chars:
@@ -877,6 +1012,11 @@ class LeielFilenameStudio:
             if any(c.get("kind") == "elapsed"
                    for c in (layout.get("file") or []) + (layout.get("folder") or [])):
                 report.append("  timer    : " + _anchor_status())
+                report.append("  elapsed  : " + (
+                    "filled in by the saver as the picture is written - the whole render"
+                    if _STORE.get("defer") else
+                    "taken when this node ran - the names also go to a node that is not a "
+                    "known saver, so the time could not wait for the file"))
             if ext_loras:
                 report.append("  lora_text: " +
                               ", ".join(f"{n}({s})" for n, s in ext_loras))

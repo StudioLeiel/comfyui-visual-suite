@@ -28,6 +28,13 @@ to the name costs a click.
 
 ---
 
+## Colour
+
+The node is framed in the colour of the series open in the
+[Series Book](series-book.md), and its boxes are tinted with it, as the other
+nodes of the suite are. The FILE box keeps its own green. With no book on the
+canvas the node keeps its plain dark look.
+
 ## The options
 
 ![Every option in the workflow](images/filename-manager/03-options.png)
@@ -44,7 +51,14 @@ Two groups are not from the graph:
   while the graph is running — a size chosen at random, a label computed
   downstream — and cannot be read off the canvas, because the widget showing
   them is drawn after execution. Wire them in and they become chips like any
-  other. One socket opens the next, up to four.
+  other. One socket opens the next, up to four. A wired chip has a small `full`
+  switch: press it and it turns gold and reads `code`, keeping only the code
+  at the front of the name - every word from the
+  start that carries a number. `12 C-12 The Cathedral of the White Flame`
+  becomes `12 C-12`, `S1E1V2 A Day of the Queen` becomes `S1E1V2`. Long scene
+  names can then stay whole in the folder and short in the file name, so
+  pictures gathered from many folders still say which scene they came from.
+  A name with no number stays whole.
 
 `ReScan` rereads the workflow. Values follow the graph live, including nodes
 being bypassed and LoRA Manager toggles, but a rescan is there for when
@@ -78,11 +92,42 @@ so the folder reads in the order it was made, in any image viewer.
 The number is the highest already at the front of a name in that folder, plus
 one. Counted rather than remembered, so it survives a restart; taken from the
 highest rather than from how many files are there, so deleting one in the
-middle cannot hand the same number out twice.
+middle cannot hand the same number out twice. When something comes before the
+number - a scene code, `12 C-12_0001_` - the count is read right after it,
+among names that start the same way, so the scene's own number is never
+taken for the count.
 
 Its format field is the digit count, 4 by default. A `seq` chip dropped in the
 folder box is ignored — a number there would make a new folder for every
 render, and the report says so.
+
+### The `elapsed` chip
+
+The render time, in seconds, counted from the moment ComfyUI starts the run -
+model loading, sampling and decoding all included.
+
+This node runs as soon as its inputs are ready, which with the Series Lab
+wired in is before the sampler has even started. A time read then would be a
+few seconds of loading and nothing more. So the chip is written as a mark,
+and the time goes in at the moment the file is written - nothing to wire.
+That works with [Visual Save Image](save-image.md), the
+[Image Viewer](image-viewer.md) saving for itself, and ComfyUI's own Save
+Image and animated savers. If the names also go to a node that is none of
+these, the time is the one at which this node ran; the report says which
+happened.
+
+Its format is the decimals, `.1f` by default.
+
+**The time is in the picture too.** With this pack installed, every render
+carries its render time in the PNG's own text, under `leiel_render` - seconds
+from the start of the run to the save, and the clock time it started and was
+saved. That happens whether or not the chip is in the name, and whether or not
+this node is in the graph: the chip is for reading the time in a file name,
+the PNG text is for tools that add it up - the
+[Visual Series Report](series-report.md) does. Pictures saved with ComfyUI's
+Save Image, [Visual Save Image](save-image.md) and the
+[Image Viewer](image-viewer.md) all carry it; a run queued without a workflow,
+through the API, has no PNG text to put it in.
 
 ---
 

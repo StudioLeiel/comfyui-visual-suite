@@ -3,3 +3,13 @@ Copyright 2026 Studio Leiel
 
 This product includes software developed by Studio Leiel
 (https://github.com/StudioLeiel).
+
+The Visual Series Layout ships two typefaces, both under the SIL Open Font
+License 1.1 (web/series_layout/fonts/ and fonts/desktop/, with their licence texts):
+  Cormorant Garamond - Copyright 2015 The Cormorant Project Authors
+  Inter - Copyright 2016 The Inter Project Authors
+
+The film export of the Visual Series Layout bundles mp4-muxer 5.2.2
+(web/series_layout/lib/mp4_muxer.js, unchanged), under the MIT License
+(web/series_layout/lib/LICENSE-mp4-muxer.txt):
+  mp4-muxer - Copyright (c) 2023 Vanilagy

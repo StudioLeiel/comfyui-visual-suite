@@ -17,6 +17,45 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
+/* The colour of the series on the Series Book, so every node of the suite
+   wears the same one: the series named, when the Book shows it, else the
+   series open in the Book. Empty when no Book is on the canvas. */
+function suiteTone(name) {
+  const want = String(name || "").trim().toLowerCase();
+  let cur = "", only = "", count = 0;
+  const nodes = (app.graph && (app.graph._nodes || app.graph.nodes)) || [];
+  for (const n of nodes) {
+    if ((n.comfyClass || n.type) !== "LeielSeriesBook") continue;
+    for (const w of n.widgets || []) {
+      if (!w.element) continue;
+      for (const box of w.element.querySelectorAll(".lsb-pbox")) {
+        const nm = box.querySelector(".lsb-gname");
+        const gt = box.querySelector(".lsb-gtone");
+        const tone = box.style.getPropertyValue("--sg").trim() || (gt && gt.style.getPropertyValue("--gt").trim()) || "";
+        if (!nm || !tone) continue;
+        if (want && nm.textContent.trim().toLowerCase() === want) return tone;
+        if (!cur && box.classList.contains("cur")) cur = tone;
+        count++; only = tone;
+      }
+    }
+  }
+  return cur || (count === 1 ? only : "");
+}
+/* Puts the colour on the node's frame, and follows it as the Book changes. */
+function wearTone(root, nameOf) {
+  const put = () => {
+    if (!root.isConnected) return;
+    let name = "";
+    try { name = nameOf ? nameOf() || "" : ""; } catch (e) { /* not ready yet */ }
+    const tone = suiteTone(name);
+    if (root.style.getPropertyValue("--sg").trim() === tone && root.classList.contains("tinted") === !!tone) return;
+    if (tone) { root.style.setProperty("--sg", tone); root.classList.add("tinted"); }
+    else { root.style.removeProperty("--sg"); root.classList.remove("tinted"); }
+  };
+  put();
+  return setInterval(put, 400);
+}
+
 /* Active LoRA list pushed back from the backend after each run.
    LoraManager registers many LoRAs but only a few are enabled; the
    lora_text input is the only place that truth exists.            */
@@ -527,6 +566,16 @@ function chipBypassed(chip) {
   return !!n && (n.mode === 2 || n.mode === 4);
 }
 
+/* The leading code of a name: every word from the start that carries a
+   digit - "12 C-12 The Cathedral of the White Flame" gives "12 C-12",
+   "S1E0 The Realm" gives "S1E0". A name with no such word stays whole. */
+function leadCode(v) {
+  const words = String(v || "").trim().split(/\s+/);
+  const out = [];
+  for (const w of words) { if (/\d/.test(w)) out.push(w); else break; }
+  return out.length ? out.join(" ") : String(v || "");
+}
+
 function previewChip(chip, node, zone, namesOnly) {
   /* A bundle is several settings of one node kept together, so the name says
      which node they came from: Krea2T[strength(0.5)_text_scale(1.8)]. It is
@@ -560,7 +609,7 @@ function previewChip(chip, node, zone, namesOnly) {
     case "input": {
       const cached = (TEXT_CACHE[String(node?.id)] || {})[String(chip.n)];
       if (!cached) return null;
-      core = cached;
+      core = chip.fmt === "code" ? leadCode(cached) : cached;
       break;
     }
     case "date":    core = today(); break;
@@ -644,6 +693,10 @@ const CSS = `
 .leiel-palbox{border:1px solid var(--border-color,#444);border-radius:5px;
   background:#1b1b1b;padding:4px 5px;flex:0 0 200px;display:flex;
   flex-direction:column;gap:2px;overflow:hidden;min-height:0;}
+/* in the colour of the series, as the Series Layout and Report */
+.leiel-wrap.tinted{background:color-mix(in srgb,var(--sg) 7%,#121315);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--sg) 62%,#2a2c31);border-radius:10px;padding:8px;}
+.leiel-wrap.tinted .leiel-palbox,.leiel-wrap.tinted .leiel-zone:not([data-zone="file"]){background:color-mix(in srgb,var(--sg) 5%,#17181b);border-color:color-mix(in srgb,var(--sg) 24%,#2c2e33);}
+.leiel-wrap.tinted .leiel-prev{background:color-mix(in srgb,var(--sg) 4%,#141414);border-color:color-mix(in srgb,var(--sg) 22%,#333)}
 .leiel-palbox h4{margin:0;font-size:10px;opacity:.6;letter-spacing:.5px;
   font-weight:600;flex:0 0 auto;}
 .leiel-pal{flex:1 1 0;min-height:0;overflow-y:auto;display:flex;flex-wrap:wrap;
@@ -791,6 +844,13 @@ ${CAT_CSS}
 .leiel-chip .x:hover{opacity:1;color:#f88;}
 .leiel-chip .mv,.leiel-chip .fm{cursor:pointer;opacity:.4;font-size:9px;}
 .leiel-chip .mv:hover,.leiel-chip .fm:hover{opacity:1;color:#7ab8ff;}
+/* the wired chip's whole-name / code-only switch: a small pill that reads
+   what it is set to - plain while it is the whole name, gold for the code */
+.leiel-chip .fm.cd{opacity:.85;font-size:7.5px;line-height:10px;padding:0 4px;border-radius:5px;
+  border:1px solid #ffffff40;color:#d8d4e6;letter-spacing:.2px;margin:0 1px;}
+.leiel-chip .fm.cd:hover{opacity:1;color:#fff;border-color:#ffffff80;}
+.leiel-chip .fm.cd.on{opacity:1;color:#2a2210;background:#f0cf86;border-color:#f0cf86;font-weight:700;}
+.leiel-chip .fm.cd.on:hover{color:#2a2210;background:#ffdf9a;}
 .leiel-add{font-size:10px;padding:1px 5px;border-radius:8px;border:1px solid #555;
   background:#262626;cursor:pointer;}
 /* F and N wear the colours of the two boxes they send to, wherever they
@@ -904,6 +964,14 @@ app.registerExtension({
         want = Math.min(MAX_TEXT, want);
 
         let changed = false;
+        /* run_after was taken out: the render time is now filled in as the
+           file is written. A socket left from a version that still had it
+           goes, unless something is wired into it. */
+        const ra = (node.inputs || []).findIndex(x => x.name === "run_after");
+        if (ra >= 0) {
+          const inp = node.inputs[ra];
+          if (inp.link === null || inp.link === undefined) { node.removeInput(ra); changed = true; }
+        }
         for (let i = 1; i <= want; i++) {
           /* "*" rather than "STRING": the Python side declares these sockets
              with the wildcard type, so a FLOAT or an INT can be wired straight
@@ -934,6 +1002,7 @@ app.registerExtension({
 
       const root = document.createElement("div");
       root.className = "leiel-wrap";
+      wearTone(root);
       root.innerHTML = `
         <div class="leiel-bar">
           <button class="leiel-btn leiel-view" title="How the palette is laid out">flat</button>
@@ -1343,6 +1412,11 @@ app.registerExtension({
                 ? `<span class="fm ub" title="Split this bundle back into separate chips">&#8942;</span>`
                 : "") +
               (isLora ? `<span class="fm" title="Toggle name only / name+strength">#</span>` : "") +
+              (c.kind === "input"
+                ? `<span class="fm cd${c.fmt === "code" ? " on" : ""}" title="${c.fmt === "code"
+                    ? "Code only - the number at the front of the name. Click for the whole name"
+                    : "Whole name. Click to keep only the code at the front - 12 C-12"}">${c.fmt === "code" ? "code" : "full"}</span>`
+                : "") +
               `<span class="mv" data-mv="1">&#9654;</span>` +
               `<span class="x">&#10005;</span>`;
 
@@ -1387,6 +1461,13 @@ app.registerExtension({
             const fm = el.querySelector(".fm:not(.ub)");
             if (fm) fm.addEventListener("click", e => {
               e.stopPropagation();
+              if (c.kind === "input") {
+                /* the whole wired name, or only its code at the front */
+                c.fmt = c.fmt === "code" ? "" : "code";
+                touch();
+                renderZones();
+                return;
+              }
               c.fmt = (c.fmt === "name") ? "" : "name";
               c.label = c.kind === "loras"
                 ? (c.fmt === "name" ? "LoRA all (names)" : "LoRA all")

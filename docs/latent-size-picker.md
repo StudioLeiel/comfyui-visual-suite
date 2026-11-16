@@ -77,6 +77,13 @@ whole thing.
 Orientation is worked out from each size's own aspect ratio, so nothing has to
 be tagged or maintained.
 
+**Per prompt, from a Series Book.** Each prompt in a
+[Series Book](series-book.md) can ask for a frame - portrait, landscape or
+square. When the [Series Lab](series-lab.md) renders it, `resolution_preset` is
+set to that shape for the one render and put back afterwards, so a run left on
+`random` mixes sizes freely but never gives a scene the wrong shape. A picker on
+`custom`, or one a recipe sets itself, is left alone.
+
 ---
 
 ## Your own sizes

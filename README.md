@@ -1,8 +1,23 @@
 # Visual Suite (Studio Leiel)
 
-Seven nodes for ComfyUI, built for people who spend their day in the graph
+Eleven nodes for ComfyUI, built for people who spend their day in the graph
 rather than passing through it. They share one design language: the same palette, the
 same chips, the same `?` button that opens a manual on the node itself.
+
+## A sample workflow to start from
+
+`example_workflows/Visual Suite - Sample Series (Krea 2).json` puts the nodes
+together on Krea 2 Turbo, with a five-scene sample series, *The Keeper's
+Letter*, already in the Series Book. In ComfyUI it is listed under the
+templates of this pack; drop it on the canvas or open it from there. A note in
+the workflow lists the three model files it needs and the five steps from a
+first render to a laid-out series.
+
+The same series is there as text too, in
+`example_workflows/The Keeper's Letter - Series Pack.md` - the series note,
+each scene's frame, note and caption, and its anchors - in the form the
+Series Book's **Paste All** reads. Paste it into an empty Series Book to start
+from the sample series, or use it as a model for a pack of your own.
 
 ## The nodes
 
@@ -11,7 +26,7 @@ same chips, the same `?` button that opens a manual on the node itself.
 A prompt editor: named sections you can switch off, reorder, mark up and reuse.
 
 Use it however you like: with a single section it is simply a free text input,
-and you can split it into quality, subject, scene and camera - or any parts of
+and you can split it into quality, subject, pose, scene and camera - or any parts of
 your own - only if that helps. Nothing requires a particular layout.
 
 A prompt usually arrives as one long string with nothing in it to hold on to, so
@@ -24,10 +39,27 @@ what you meant. None of the styling reaches the model — it is metadata, the
 output is plain text — so annotate as freely as you like.
 
 And when you want it, a reader fills a section from a reference image, one layer
-at a time: quality from one picture, subject from another, scene from a third,
-camera from a fourth. That part needs `transformers`; nothing else here does.
+at a time: quality from one picture, clothes from another, a pose from a third,
+scene and camera from others. That part needs `transformers`; nothing else here does.
 
 ![Visual Prompt Composer](docs/images/prompt-composer/01-overview.png)
+
+### [Visual Series Book](docs/series-book.md)
+
+A whole series of prompts in one node, built from shared capsules.
+
+A series is mostly the same words: the quality line and the person carried
+through every scene, the pose, place and camera changing. Here each piece of
+writing is kept once, as a capsule, and a prompt is a list of them - edit the
+Subject in one scene and every scene using it follows. Paste a whole reply and
+it becomes a new scene, named and split into its capsules - one button, on the
+bar under the book, so the writing itself mostly stays folded away. Search and
+replace across every prompt at once. Below the book sits the full Prompt
+Composer, on whichever prompt is open, for the times a prompt needs editing by
+hand.
+
+![Visual Series Book](docs/images/series-book/01-overview.png)
+
 
 ### [Visual Series Lab](docs/series-lab.md)
 
@@ -39,6 +71,10 @@ you are looking at, and you cannot change your mind without cancelling by hand.
 Here every render says which prompt, which LoRAs and which settings made it,
 while it happens — and a recipe can be pulled out, added, or given a bigger
 count mid-run, with nothing already rendered repeated.
+
+Starting takes three steps — click a prompt, `+ ADD TO QUEUE` and drag the
+recipe into the queue box, `RUN ALL`. The rest — settings to sweep, a Series
+Book's capsules, trigger words — waits until you want it.
 
 ![Visual Series Lab](docs/images/series-lab/01-overview.png)
 
@@ -69,6 +105,107 @@ optional JPEG or WebP copies beside the PNG. Give the Filename Manager a `seq`
 chip and that walk is in the order the renders were made.
 
 ![Visual Save Image](docs/images/save-image/01-overview.png)
+
+### [Visual Image Viewer](docs/image-viewer.md)
+
+A folder of pictures inside the graph — thumbnails, a large view, 100%, and
+two renders side by side.
+
+Checking renders usually means leaving ComfyUI for a file browser that shows
+them small, in the wrong order, and often balks at the long names a render
+gets. This node lays a folder out as thumbnails on the canvas: click one to
+see it large, step with the arrows, hold Space to go round the folder without
+stopping, press `*` to look at a hand at 100%. Folders inside folders are
+laid out in groups, path and all. Turn on FOLLOW and every picture a save
+node writes is shown the moment it lands.
+
+![Visual Image Viewer](docs/images/image-viewer/01-overview.png)
+
+**Compare.** Most of the work of choosing a render is setting it against
+another one — the same scene with another LoRA, the same seed with the
+enhancer on — and looking closely. Press `C` to pin a picture, step to the
+next, and the two stand side by side. Zoom in and drag, and both follow, to
+the same place in both pictures: the same hand, the same eye, at 100%.
+
+- `L` lets them go their own ways — each zooms and moves on its own, so one
+  face can be lined up against the other half and half, or a close-up set
+  against the whole frame.
+- `W` lays one over the other with a line to drag across, for the small
+  changes a side-by-side hides.
+- `X` swaps them; `C` ends it. The keys sit on screen while you compare.
+
+No second window to line up by hand, no leaving the graph.
+
+**Picks, copying and deleting.** `P` marks the picture on screen as a pick, and
+`★ Picks` narrows the folder to those — the keepers of a day of renders, in
+one place. `Delete` takes a picture out of sight into a `_deleted` folder
+beside it, and `Ctrl+Z` brings it back. **Deleted** opens the bin of the
+folder on show, where each picture can be looked at again, restored or let
+go; nothing is gone until you empty it. **Copy picks** gathers
+the keepers into one folder — a series folder in `input`, ready for the
+upscale.
+
+**The prompt.** `I` shows what the picture on screen was rendered with,
+read back from the PNG — a Series Lab render rebuilt anchor by anchor, the
+swept capsule marked — with a button to copy it. No other viewer can do
+this: only ComfyUI knows.
+
+![Comparing two renders](docs/images/image-viewer/05-compare.png)
+
+### [Visual Series Report](docs/series-report.md)
+
+What a series has made so far, counted.
+
+Every pick and every deletion made in the Image Viewer is a verdict on a recipe,
+and a week later what is left of four hundred verdicts is an impression. The
+report keeps them: each render under the LoRAs, sampler and options that made
+it, split three ways - picked, left as it is, deleted - and each scene with the
+picks it has so far. Click a scene or a bar and everything else is counted
+inside it, which is how a sampler is compared on one scene rather than across
+the whole series. It reads the recipe written in each PNG, looks at no pixels
+and changes no file.
+
+![Visual Series Report](docs/images/series-report/01-overview.png)
+
+
+### [Visual Series Layout](docs/series-layout.md)
+
+The series laid out — as spreads to print, frames to post and a short film.
+
+A series that has been written, rendered and picked is still a folder of
+files. Whether it works as a story — whether the rhythm of wide and close
+holds, whether a cut is missing, whether two cuts belong side by side — only
+shows when it is seen the way it will be read: in order, at size, with its
+words. Everything that takes is already in the graph. The Series Book has the
+title, the note and, for every cut, a number, a name and a caption; the Image
+Viewer has the picks. This node puts them together. Nothing is typed twice and
+no model is involved: the words are the book's, the pictures are your picks.
+
+![Visual Series Layout](docs/images/series-layout/01-overview.png)
+
+**Print.** Spreads of two pages, in magazine, A4, square or landscape: an
+opener, a cut across a spread, a cut facing its words, two cuts framed inside
+the margins, the words set on the picture, a closing page that lists every
+cut. Each cut takes the layout its shape suggests, and any of it can be
+changed — the pick, the layout, the side, where the words sit. Every pick
+chosen for a cut shares its place on the page.
+
+**Web.** The same series as single frames for a feed, in 4:5, 1:1, 9:16 and
+16:9, each scaled from its short side so the type keeps its proportion.
+
+**Motion.** The picks become a film: a title, each picture moving slowly with
+its caption, a fade to black at the end, set to music. A timeline in the manner
+of an editor — shots as wide as their time on screen over the music's waveform,
+lengths dragged at their edges, a playhead to scrub. Markers find the accents
+of the music without a model, and **Fit cuts** moves every cut onto the
+nearest one — the difference between pictures shown and a film. Encoded frame
+by frame in the browser to MP4, in every size at once.
+
+**Out of the graph.** A PDF, pages as JPEG or PNG, a print package with every
+picture at full size, and an InDesign document with its pictures linked and
+its type in paragraph styles — so a layout made on the canvas carries on in
+the studio. A post text from the series' own words, a logo on the closing
+page, and the whole layout saved as a `.layout` file to open again.
 
 ### [Visual Latent Size Picker](docs/latent-size-picker.md)
 
@@ -138,7 +275,7 @@ web/<name>/       its frontend, served from /extensions/comfyui-visual-suite/<na
 ```
 
 Each node is imported separately. If one fails - a ComfyUI frontend change, a
-bad edit - it is skipped with a message in the console and the other six still
+bad edit - it is skipped with a message in the console and the others still
 load. The console line at startup says how many came up.
 
 Nodes that keep state (prompt presets, series favourites, custom size lists)
@@ -157,9 +294,13 @@ it. The ids are invisible unless you read the workflow JSON.
 | Display name | Class id |
 | --- | --- |
 | Visual Prompt Composer (Studio Leiel) | `LeielPromptComposer` |
+| Visual Series Book (Studio Leiel) | `LeielSeriesBook` |
 | Visual Series Lab (Studio Leiel) | `VisualSeriesLabSetup` |
 | Visual Filename Manager (Studio Leiel) | `LeielFilenameStudio` |
 | Visual Save Image (Studio Leiel) | `LeielSaveImage` |
+| Visual Image Viewer (Studio Leiel) | `LeielImageViewer` |
+| Visual Series Report (Studio Leiel) | `LeielSeriesReport` |
+| Visual Series Layout (Studio Leiel) | `LeielSeriesLayout` |
 | Visual Latent Size Picker (Studio Leiel) | `RandomLatentSizePicker` |
 | Visual Node Bag (Studio Leiel) | `VisualNodeBag` |
 | Visual Crop (Studio Leiel) | `VisualCrop_StudioLeiel` |

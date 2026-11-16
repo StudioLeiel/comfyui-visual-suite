@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-visual-suite"
-version = "1.4.0"
-description = "Seven visual nodes for ComfyUI: prompt composer with image reading, series lab, filename manager, save image with folder browsing, latent size picker, node bag and image crop."
+version = "1.5.0"
+description = "Eleven visual nodes for ComfyUI: prompt composer with image reading, series book, series lab, filename manager, save image with folder browsing, image viewer, series report, series layout for print, web and film, latent size picker, node bag and image crop."
 license = { text = "Apache-2.0" }
 requires-python = ">=3.8"
 dependencies = []
@@ -16,6 +16,10 @@ keywords = [
     "workflow",
     "ui",
     "editorial",
+    "viewer",
+    "layout",
+    "indesign",
+    "video",
 ]
 
 [project.urls]

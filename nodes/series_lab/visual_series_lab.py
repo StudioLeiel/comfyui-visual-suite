@@ -25,6 +25,7 @@ carry the configuration for this render.
 
 import json
 import os
+from urllib.parse import quote as _quote
 
 from . import lab_core as core
 
@@ -38,6 +39,82 @@ except Exception:                                    # pragma: no cover
 # a time as they are used, so this is a ceiling and not a row of empty holes -
 # raised from six, which a single series of scenes filled up in an afternoon.
 MAX_PROMPTS = 10
+
+# Prompts from a Series Book arrive on the one "series" wire rather than on
+# sockets, and the shelf numbers them past every socket so a recipe can name
+# either kind with the same field: BOOK_SLOT_BASE + the prompt's own id in the
+# book. The id never changes when prompts are reordered or renamed, so a
+# recipe queued an hour ago still finds the scene it was built for.
+BOOK_SLOT_BASE = 1000
+
+
+KIND_ORDER = ("trigger", "quality", "subject", "outfit", "pose", "scene", "camera",
+              "absolute")
+
+
+def _book_swap(series, pid, swap):
+    """A book prompt with capsules put in place of the ones of their kind.
+
+    The capsule sweep: the same scene rendered once per camera, per light, per
+    pose - or per combination of them, a pose from one series with a camera
+    from another. The prompt's own parts are joined exactly as the book joins
+    them, with each capsule standing where its kind stands - or, when the
+    prompt has nothing of that kind, where that kind belongs. A kind the swap
+    does not name keeps the prompt's own part.
+
+    `swap` is {"caps": [{"kind", "cap"}, ...]}, or a single {"kind", "cap"}
+    as recipes queued before combinations sent it."""
+    if not isinstance(series, dict) or not isinstance(swap, dict):
+        return None
+    prompts = series.get("prompts") or []
+    caps = series.get("caps") or {}
+    p = next((q for q in prompts if isinstance(q, dict) and q.get("id") == pid), None)
+    if not p or not isinstance(p.get("parts"), list) or not isinstance(caps, dict):
+        return None
+    wanted = swap.get("caps") if isinstance(swap.get("caps"), list) else [swap]
+    parts = [dict(x) for x in p["parts"] if isinstance(x, dict)]
+    used = 0
+    for one in wanted:
+        if not isinstance(one, dict):
+            continue
+        cap = caps.get(str(one.get("cap")))
+        if not isinstance(cap, dict):
+            continue
+        kind = str(one.get("kind") or cap.get("kind") or "")
+        mine = {"kind": kind, "body": cap.get("body")}
+        at = next((i for i, x in enumerate(parts) if x.get("kind") == kind), -1)
+        if at >= 0:
+            parts[at] = mine
+        else:
+            rank = KIND_ORDER.index(kind) if kind in KIND_ORDER else len(KIND_ORDER)
+            at = next((i for i, x in enumerate(parts)
+                       if x.get("kind") in KIND_ORDER
+                       and KIND_ORDER.index(x.get("kind")) > rank), len(parts))
+            parts.insert(at, mine)
+        used += 1
+    if not used:
+        return None
+    sep = str(series.get("sep") if series.get("sep") is not None else "\n\n")
+    skip = series.get("skip_empty", True)
+    bodies = [x.get("body") for x in parts if x.get("body") is not None]
+    if skip:
+        bodies = [b for b in bodies if b]
+    return sep.join(bodies)
+
+
+def _from_book(series, pid, name):
+    """The text of one prompt in a Series Book, by id and failing that by name."""
+    prompts = series.get("prompts") if isinstance(series, dict) else None
+    if not isinstance(prompts, list):
+        return None
+    for p in prompts:
+        if isinstance(p, dict) and p.get("id") == pid:
+            return str(p.get("text") or "")
+    if name:
+        for p in prompts:
+            if isinstance(p, dict) and str(p.get("name") or "") == name:
+                return str(p.get("text") or "")
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -150,6 +227,129 @@ def _triggers_for(lora_rel):
         except Exception:
             continue
     return []
+
+
+# --------------------------------------------------------------------------
+# example pictures
+#
+# Beside the one preview a LoRA keeps, the downloaders file the model page's
+# sample pictures: their web addresses in the metadata file, and - when LoRA
+# Manager has been told to fetch them - copies on disk in a folder named after
+# the file's hash. The hover card shows these as a strip under the preview.
+# --------------------------------------------------------------------------
+
+EXAMPLE_MAX = 16
+VIDEO_EXTS = (".mp4", ".webm", ".mov", ".gif")
+
+
+def _meta_for(lora_rel):
+    """The metadata file beside a LoRA, read, with its folder and base name."""
+    import folder_paths
+    try:
+        model_path = folder_paths.get_full_path("loras", lora_rel)
+    except Exception:
+        model_path = None
+    if not model_path:
+        return None, None
+    folder = os.path.dirname(str(model_path))
+    base = os.path.splitext(os.path.basename(str(model_path)))[0]
+    for name in (base + ".metadata.json", base + ".civitai.info",
+                 base + ".info.json", base + ".json"):
+        path = os.path.join(folder, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh), str(model_path)
+        except Exception:
+            continue
+    return None, str(model_path)
+
+
+def _web_images(meta):
+    """Sample picture addresses out of LoRA Manager or Civitai metadata."""
+    if not isinstance(meta, dict):
+        return []
+    lists = []
+    civ = meta.get("civitai")
+    if isinstance(civ, dict) and isinstance(civ.get("images"), list):
+        lists.append(civ["images"])
+    if isinstance(meta.get("images"), list):
+        lists.append(meta["images"])
+    out = []
+    for lst in lists:
+        for im in lst:
+            url = im.get("url") if isinstance(im, dict) else im
+            kind = str(im.get("type") or "") if isinstance(im, dict) else ""
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                continue
+            if kind == "video" or url.split("?")[0].lower().endswith(VIDEO_EXTS):
+                continue
+            if url not in out:
+                out.append(url)
+    return out
+
+
+def _example_roots():
+    """Where LoRA Manager keeps downloaded example pictures, if it says."""
+    import folder_paths
+    roots = []
+    candidates = []
+    try:
+        custom = os.path.join(os.path.dirname(folder_paths.__file__), "custom_nodes")
+        for d in os.listdir(custom):
+            if "lora" in d.lower() and "manager" in d.lower():
+                candidates.append(os.path.join(custom, d, "settings.json"))
+    except Exception:
+        pass
+    try:
+        user = folder_paths.get_user_directory()
+        for sub in ("", "default", "ComfyUI-Lora-Manager", "lora-manager"):
+            candidates.append(os.path.join(user, sub, "settings.json"))
+    except Exception:
+        pass
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                cfg = json.load(fh)
+        except Exception:
+            continue
+        val = cfg.get("example_images_path") if isinstance(cfg, dict) else None
+        if isinstance(val, str) and val and os.path.isdir(val) and val not in roots:
+            roots.append(val)
+    return roots
+
+
+def _local_examples(meta):
+    """Downloaded example pictures, as absolute paths."""
+    sha = str((meta or {}).get("sha256") or "").lower() if isinstance(meta, dict) else ""
+    if not sha:
+        return []
+    out = []
+    for root in _example_roots():
+        folder = os.path.join(root, sha)
+        if not os.path.isdir(folder):
+            continue
+        for name in sorted(os.listdir(folder)):
+            if os.path.splitext(name)[1].lower() in IMG_EXTS and \
+                    os.path.splitext(name)[1].lower() != ".gif":
+                out.append(os.path.join(folder, name))
+        if out:
+            break
+    return out
+
+
+def _examples_for(lora_rel):
+    """Every sample picture of a LoRA: local copies first, then web ones."""
+    meta, _ = _meta_for(lora_rel)
+    local = _local_examples(meta)
+    pics = ["/visual_series_lab/example?lora=" + _quote(lora_rel) + "&i=" + str(i)
+            for i in range(len(local))]
+    if not local:
+        pics += _web_images(meta)
+    return pics[:EXAMPLE_MAX]
 
 
 # --------------------------------------------------------------------------
@@ -351,6 +551,29 @@ def _register_routes():
         except Exception as exc:
             return web.json_response({"words": [], "error": str(exc)})
 
+    @routes.get("/visual_series_lab/examples")
+    async def _examples(request):
+        try:
+            rel = unquote(request.query.get("lora", ""))
+            if not rel:
+                return web.json_response({"images": []})
+            return web.json_response({"images": _examples_for(rel)})
+        except Exception as exc:
+            return web.json_response({"images": [], "error": str(exc)})
+
+    @routes.get("/visual_series_lab/example")
+    async def _example(request):
+        try:
+            rel = unquote(request.query.get("lora", ""))
+            i = int(request.query.get("i", "-1"))
+            meta, _ = _meta_for(rel)
+            local = _local_examples(meta)
+            if not (0 <= i < len(local)):
+                return web.Response(status=404)
+            return web.FileResponse(local[i])
+        except Exception:
+            return web.Response(status=404)
+
     @routes.get("/visual_series_lab/thumb")
     async def _thumb(request):
         try:
@@ -470,8 +693,9 @@ class VisualSeriesLabSetup:
             # prompt - one more thing behaving differently from everything
             # else was not worth the socket.
             "optional": dict(
-                [("prompt%d" % i, ("STRING", {"forceInput": True}))
-                 for i in range(1, MAX_PROMPTS + 1)]
+                [("series", ("LEIEL_SERIES",))]
+                + [("prompt%d" % i, ("STRING", {"forceInput": True}))
+                   for i in range(1, MAX_PROMPTS + 1)]
             ),
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -479,7 +703,7 @@ class VisualSeriesLabSetup:
     # No file name is produced here: naming is a matter of taste and the
     # file manager nodes already do it far more flexibly.
     RETURN_TYPES = ("MODEL", "CONDITIONING", "STRING", "STRING", "STRING",
-                    "STRING")
+                    "STRING", "STRING")
     # "this render's" rather than "currently in use": every one of these
     # describes the single render on its way out, and saying so leaves no
     # room to read them as a list of everything the queue holds. And "name"
@@ -488,9 +712,13 @@ class VisualSeriesLabSetup:
     # screen. Without the word, someone meeting the node for the first time
     # reads them as the prompt text and the LoRA files themselves and wires
     # them somewhere expecting to get those.
+    # LoRA names first, the order a Filename Manager takes them in
+    # (lora_text, then text_1, text_2), so the wires run straight across;
+    # then the series before the prompt, the wider name before the one
+    # inside it.
     RETURN_NAMES = ("model", "conditioning",
-                    "this render's prompt name", "this render's lora names",
-                    "status", "filename")
+                    "this render's lora names", "this render's series name",
+                    "this render's prompt name", "status", "filename")
     FUNCTION = "run"
     CATEGORY = "Studio Leiel"
     DESCRIPTION = "Run a queue of LoRA and option recipes, one render per queue"
@@ -551,6 +779,13 @@ class VisualSeriesLabSetup:
             slot = 0
         if 1 <= slot <= MAX_PROMPTS:
             base = kwargs.get("prompt%d" % slot)
+        elif slot >= BOOK_SLOT_BASE:
+            if current.get("swap"):
+                base = _book_swap(kwargs.get("series"), slot - BOOK_SLOT_BASE,
+                                  current.get("swap"))
+            if base is None:
+                base = _from_book(kwargs.get("series"), slot - BOOK_SLOT_BASE,
+                                  str(current.get("prompt_name") or ""))
         if base is None:
             # Nothing on that socket. An older recipe, or a wire pulled out
             # since it was queued - render the rest rather than fail.
@@ -579,9 +814,20 @@ class VisualSeriesLabSetup:
         # for filing and for reading on screen, and the text is already going
         # out as conditioning.
         prompt_name = str(current.get("prompt_name") or "")
+        # With the prompt's number in its series in front - "03 Watching It
+        # Burn" - so the folders and files made from it line up in the order
+        # of the book. A prompt on a socket has no number and goes as it is.
+        prompt_no = str(current.get("prompt_no") or "").strip()
+        if prompt_no and prompt_name:
+            prompt_name = "%s %s" % (prompt_no, prompt_name)
 
-        return (patched_model, cond, prompt_name,
-                _lora_names_text(loras), status, filename)
+        # The series the prompt belongs to in a Series Book, beside the other
+        # names. Empty for a prompt on a socket. The face moves any wire
+        # already on status or filename to their new places.
+        series_name = str(current.get("series_name") or "")
+
+        return (patched_model, cond, _lora_names_text(loras),
+                series_name, prompt_name, status, filename)
 
     # ---- the two places this node touches ComfyUI ------------------------
     def _resolve(self, name):

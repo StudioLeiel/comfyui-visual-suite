@@ -28,6 +28,7 @@ they are missing.
 
 import base64
 import io
+import hashlib
 import json
 import os
 import threading
@@ -146,7 +147,7 @@ TAIL = (
 # was cutting the answer off at the waist, which is exactly where the shoes
 # are. Same rules, more room.
 SUBJECT_TAIL = TAIL.replace(
-    "three or four sentences", "five or six sentences")
+    "three or four sentences", "six to eight sentences")
 
 # A standing instruction, sent as the system turn rather than folded into the
 # question. The same sentence carries much further from there: asked inside the
@@ -161,7 +162,7 @@ SUBJECT_TAIL = TAIL.replace(
 # instead of rephrasing it.
 SYSTEM = (
     "You are reading one photograph for a single named layer of a prompt, and "
-    "for nothing else. Four separate readings are taken from this same image "
+    "for nothing else. Several separate readings are taken from this same image "
     "and joined together afterwards, so anything you mention that belongs to "
     "another layer is repeated or contradicted downstream, and an image model "
     "will build it twice.\n"
@@ -269,49 +270,70 @@ BUILTIN_PRESETS = {
     "subject": {
         "label": "Subject Details",
         "question": (
-            "Layer: the main subject, and only the subject.\n"
+            "Layer: how the main subject looks - their appearance and what "
+            "they wear, and only that. How they are standing, sitting or "
+            "moving belongs to another layer.\n"
+            "Every garment, colour, cloth and position named in these "
+            "instructions only shows the kind of word wanted. None of them "
+            "is a guess at this picture, and an answer that repeats one "
+            "without having seen it there is wrong.\n"
             "Describe: build and proportions; hair - its length, colour and "
-            "how it is arranged; the face, and what the expression is doing; "
-            "the skin; posture and the line of the body; what the hands are "
-            "doing.\n"
-            "Then the clothing, worked through garment by garment from the "
-            "head down to the feet: headwear, then whatever covers the upper "
-            "body including anything worn open over another piece, then what "
-            "is at the waist, then what covers the lower body, then the "
-            "footwear, then anything carried or worn on the hands, wrists, "
-            "ears or neck. Take them one at a time and in that order, and for "
-            "each one say four things: what garment it is, what colour it is, "
-            "what it appears to be made of, and how it is cut - where it ends "
-            "on the body, how close or loose it sits, and what fastens or "
-            "holds it. Name each piece with the narrowest word that fits what "
-            "you can see - a cardigan rather than a top, a trench coat rather "
-            "than a coat, ankle boots rather than shoes. Where one garment "
-            "covers both the upper and the lower body, report it once as the "
-            "single piece it is rather than splitting it in two.\n"
-            "The colour of a piece is the particular shade in front of you, "
-            "said with its depth and which way it leans: ink black, charcoal, "
-            "warm ivory, dusty rose, faded indigo. A colour named on its own, "
-            "as black or white or blue and nothing more, is the family and not "
-            "the shade, and is worth another look before it is written down.\n"
+            "how it is arranged; the face - its shape and features; the "
+            "skin - what its surface is doing where it can be seen: the "
+            "pores, fine lines, freckles, the faint changes of tone across "
+            "it, and how light sits on it.\n"
+            "Then the clothing, in two steps.\n"
+            "First, count the pieces that are actually there. Look from the "
+            "head down to the feet and note each separate piece of clothing "
+            "once. A dress, a jumpsuit or a coat is one piece however much "
+            "of the body it covers, and is never reported again under "
+            "another part of the body. Headwear means a hat, a cap, a scarf "
+            "or a band worn on the head and nothing else: a collar that rises "
+            "up the neck belongs to the garment it is part of. A piece that "
+            "cannot be seen is not there, and no piece is invented to give a "
+            "part of the body something to wear.\n"
+            "Then describe the pieces you counted, outermost first, giving "
+            "each one its own sentence that begins with the garment itself - "
+            "its length, its colour, its name - and never with a part of the "
+            "body, so never 'The upper body is covered by...'. For each piece "
+            "say: what it is, named as exactly as a stylist would name it on "
+            "a call sheet rather than by a general word; its colour; what it "
+            "is made of; where its hem or lower edge falls, "
+            "chosen from the waist, the hip, mid-thigh, just above the knee, "
+            "the knee, mid-calf, the ankle or the floor; how close or loose "
+            "it sits; whether it is worn closed or open, and what fastens "
+            "it - only a fastening that can be seen; and the details on it "
+            "that can be seen, such as the collar, lapels, epaulettes, belts, "
+            "buckles, cuffs, pockets, pleats, ribbing, embroidery, or a "
+            "lining showing where it falls open.\n"
+            "The colour of a piece is the hue you actually see, with a word "
+            "for its depth or the way it leans added to it - deep, pale, "
+            "bright, muted, warm, cool, faded, dusty. Look at each piece's "
+            "own colour before writing it: the hue comes from the picture "
+            "every time, and a bare family name with nothing added is worth "
+            "another look.\n"
             "What a piece is made of is the name of the cloth: silk satin, "
-            "jersey, chiffon, wool crepe, tweed, denim, corduroy, leather, "
-            "loosely knitted wool. Where the cloth cannot be named, say how it "
-            "is built instead - how it is woven or knitted, how heavy it hangs, "
-            "how much light sits on its surface - rather than calling it soft "
-            "or flowing and leaving it there. The same holds for the footwear: "
-            "leather, suede, patent, canvas.\n"
-            "The "
-            "footwear gets the same four things as everything else: shoes are "
-            "part of the clothing and are reported whenever the feet are in "
-            "the picture, however small they are.\n"
+            "jersey, chiffon, gabardine, wool crepe, tweed, denim, corduroy, "
+            "leather, ribbed knit, loosely knitted wool. Where the cloth "
+            "cannot be named, say how it is built instead - how it is woven "
+            "or knitted, how heavy it hangs, how much light sits on its "
+            "surface - rather than calling it soft or flowing and leaving it "
+            "there. The same holds for the footwear and for anything worn on "
+            "the legs - leather, suede, patent, canvas, sheer or opaque "
+            "hosiery.\n"
+            "The footwear is part of the clothing and is reported whenever "
+            "the feet are in the picture, however small they are; tights, "
+            "stockings and socks are pieces of their own, and where they end "
+            "on the leg is reported like any hem. After the "
+            "clothing, anything carried, or worn at the hands, wrists, ears "
+            "or neck, each described the same way.\n"
             "Where the subject sits on, rides, leads or holds an animal or a "
             "machine - a horse, a bicycle, a motorcycle, a car, a boat - that "
             "animal or machine is part of the subject and is described with "
             "them: what it is, its size against them, the colour and finish "
             "of its surfaces, its shape and the parts of it that can be seen, "
-            "where the subject is in contact with it, and the saddle, bridle, "
-            "reins, harness, seat, bars or wheels on it and the materials "
-            "those are made of.\n"
+            "and the saddle, bridle, reins, harness, seat, bars or wheels on "
+            "it and the materials those are made of.\n"
             "Refer with: the subject, their hair, face, eyes, mouth, jaw, "
             "neck, shoulders, arms, hands, the garments they wear and the "
             "fabrics those are made of, the animal or machine they are on, "
@@ -319,22 +341,100 @@ BUILTIN_PRESETS = {
             "wheels and panels, and its tack or fittings.\n"
             "Omit: everything behind, beside or beneath them - no wall, "
             "floor, ground, furniture, architecture, landscape, plant, sky or "
-            "weather. Say nothing about light, shadow or colour temperature "
-            "on them. Say nothing about the camera, the distance, the framing "
-            "or what is in focus. Where the body rests against something "
-            "that is not an animal or a machine they are on - a railing, a "
-            "chair, a wall - describe "
-            "the posture alone and not what it is resting on. These words do "
-            "not appear in your answer: "
-            "light, lit, sunlight, daylight, shadow, glow, bright, dark, "
+            "weather. Say nothing about light or shadow falling on them from "
+            "the place, or colour temperature. Say nothing about the camera, "
+            "the distance, the framing or what is in focus. Say nothing "
+            "about the pose: how the body is placed or turned, where the "
+            "arms, hands, legs and feet are, which way the head turns or the "
+            "eyes look, what the expression is doing, or how anything is "
+            "being held. Describe the person as if they were standing still "
+            "for a fitting. These words do not appear in your answer: "
+            "smooth, flawless, even-toned, porcelain, perfect, "
+            "sunlight, daylight, shadow, glow, "
             "wall, floor, ground, ceiling, railing, window, door, sky, cloud, "
             "grass, tree, leaf, leaves, flower, water, room, street, "
             "background, camera, lens, frame, focus, blur, sharp.\n"
             "Where part of the subject is hidden, leave it out of the "
-            "description entirely and carry on with what is visible. Where a "
-            "garment is in the picture but one of its four things cannot be "
+            "description entirely and carry on with what is visible. Where "
+            "a piece is in the picture but one of its details cannot be "
             "made out, report the ones that can and pass over the rest."
             + SUBJECT_TAIL
+        ),
+    },
+    "pose": {
+        "label": "Pose Details",
+        "question": (
+            "Layer: the pose - how the body is placed and what it is doing, "
+            "and only that. What the person looks like and what they wear "
+            "belong to another layer.\n"
+            "Every position, hand placement and movement named in these "
+            "instructions only shows the kind of word wanted. None of them "
+            "is a guess at this picture, and an answer that repeats one "
+            "without having seen it there is wrong.\n"
+            "Before writing anything, find every place where the body touches "
+            "something other than the ground under the feet: an elbow or a "
+            "forearm propped on something, a back or a shoulder against "
+            "something, a hip perched on something, a hand gripping or "
+            "resting on something, a foot raised onto something. Each of "
+            "these is part of the pose and gets its own words, because a "
+            "pose described without what it leans on is a different pose.\n"
+            "Describe, in this order: the whole position - standing, "
+            "walking, sitting, leaning, crouching or lying, and where the "
+            "weight rests; the line of the body - first which of these the "
+            "torso is: held upright, bent forward, tipped back, or leaning "
+            "its weight against something - judged from the line between "
+            "the shoulders and the hips against the vertical, and then how "
+            "it turns or twists and how the hips and shoulders sit against "
+            "each other; the head - how it tilts and which way it turns; the "
+            "eyes - first look at the pupils and decide whether they are "
+            "looking straight into the lens, since a direct look is the "
+            "easiest thing to miss when the head is tilted, and only then, "
+            "if they are not, say where they look instead and whether they "
+            "are raised or lowered; the expression - what the mouth, the brows and the "
+            "eyes are doing at this moment; each arm in turn, from the "
+            "shoulder to the hand, and what each hand is doing - resting, "
+            "holding, touching, hanging - and how the fingers lie; then each "
+            "leg in turn, and where each foot is placed. Where the body is "
+            "caught in the middle of a movement, say which movement and how "
+            "far through it.\n"
+            "Tell the arms apart, and the legs, by what each one is doing and "
+            "where it ends up - 'one arm ..., the other ...' - and never by "
+            "left or right. Which side is which is easy to get wrong in a "
+            "photograph and changes nothing in the picture; where the hand "
+            "actually is changes everything. So find each hand in the "
+            "picture first, then say where it has come to: at the face, the "
+            "chin or the jaw; on the hair or the head; at the neck or the "
+            "chest; at the waist or the hip; in a pocket; on the thigh or in "
+            "the lap; on or over the edge of something; reaching into the "
+            "air; or hanging free beside the body. The legs the same way: "
+            "how far apart the feet are set, which leg carries the weight, "
+            "and whether a knee is bent, turned in or turned out.\n"
+            "Where a part of the body rests on, holds or touches something, "
+            "say which part, where on the body, and how - propped, pressing, "
+            "leaning, gripping, barely touching - and say how high the thing "
+            "is against the body: at the waist, at the shoulder, at the "
+            "elbow. This is the one place this layer names a thing outside "
+            "the body: name it in a single plain word - a wall, a ledge, a "
+            "railing, a table, a chair, a step, a doorframe - and say "
+            "nothing more about it; what it is made of, its colour and its "
+            "condition belong to another layer.\n"
+            "Refer with: the body, the head, the neck, the shoulders, the "
+            "torso, the hips, the arms, elbows, wrists, hands and fingers, "
+            "the legs, knees, ankles and feet, the eyes, the brows, the "
+            "mouth, the gaze, the lens (only as the place the eyes are "
+            "looking), the weight, one, the other, forward, back, up, down.\n"
+            "Omit: how the person looks - no hair colour or length, no face "
+            "shape, no skin, no build. Omit the clothing completely - name "
+            "no garment, cloth, colour or fastening, even where a hand rests "
+            "on one; a hand at the hip is at the hip, a hand in a pocket is "
+            "in a pocket. Omit the place, the light and the camera. These "
+            "words do not appear in your answer: dress, gown, coat, jacket, "
+            "shirt, blouse, skirt, trousers, jeans, boots, shoes, fabric, "
+            "silk, leather, wool, colour, hair, skin, light, lit, sunlight, "
+            "shadow, glow, sky, background, camera, frame, focus, blur, "
+            "sharp.\n"
+            "Where part of the body is hidden or outside the picture, leave "
+            "it out and carry on with what can be seen." + TAIL
         ),
     },
     "scene": {
@@ -449,7 +549,7 @@ BUILTIN_PRESETS = {
     "all": {
         "label": "The whole picture",
         "question": (
-            "Describe this image as a photograph: the subject, the setting, "
+            "Describe this image as a photograph: the subject, their pose, the setting, "
             "the light, the camera work and the photographic quality. Describe "
             "only what is visible, and guess no numbers." + TAIL
         ),
@@ -472,6 +572,13 @@ NAME_HINTS = [
     ("lens", "camera"),
     ("framing", "camera"),
     ("composition", "camera"),
+    # Checked last, so a word that merely contains these letters and also
+    # names another layer goes to that layer first.
+    ("pose", "pose"),
+    ("posture", "pose"),
+    ("gesture", "pose"),
+    ("action", "pose"),
+    ("movement", "pose"),
 ]
 
 PRESET_FILENAME = "reader_questions.json"
@@ -611,6 +718,28 @@ def _questions_path():
     return path
 
 
+# Built-in questions that have since been replaced. A saved file holding one of
+# these word for word was never edited by anyone - it is a copy of what the
+# pack shipped at the time - so the current built-in is served instead. A
+# question that was changed, even by a letter, is the user's and always wins.
+RETIRED_QUESTIONS = {
+    # subject, counting garments, but with examples a small reader copied
+    "b627a71f2af80bde5c99cf361d5390ad07aa32c7bde36055f11118916dbb1b63",
+    # subject, after the pose split but before it counted the garments first
+    "ea881a0512af29d02512cbb1e7f3e148c7b3389a2c6121e0d054fc6c7ca99657",
+    # subject, before the pose layer took posture, gaze and hands out of it
+    "78b5ae9c11a1ef8c32798bb6b571b1c630c15b48850ca3806eca42d022983aad",
+}
+
+
+def _is_retired(question):
+    try:
+        digest = hashlib.sha256(str(question).encode("utf-8")).hexdigest()
+    except Exception:
+        return False
+    return digest in RETIRED_QUESTIONS
+
+
 def load_questions():
     path = _questions_path()
     merged = {k: dict(v) for k, v in BUILTIN_PRESETS.items()}
@@ -620,6 +749,8 @@ def load_questions():
                 saved = json.load(handle)
             for key, entry in (saved or {}).items():
                 if isinstance(entry, dict) and entry.get("question"):
+                    if _is_retired(entry["question"]):
+                        continue
                     merged[key] = {
                         "label": entry.get("label") or key,
                         "question": entry["question"],

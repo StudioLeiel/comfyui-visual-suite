@@ -273,61 +273,61 @@
       "text": "The light comes from behind the space, running towards the camera and lifting the edges of everything it passes."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "gaze",
       "name": "Into the lens",
       "text": "The eyes meet the lens directly and hold it."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "gaze",
       "name": "Away from the lens",
       "text": "The head is turned away from the lens, the eyes settled on something outside the frame."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "gaze",
       "name": "Eyes lowered",
       "text": "The eyes are lowered, the lids heavy and the gaze resting a little below the horizontal."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "gaze",
       "name": "Eyes closed",
       "text": "The eyes are closed and the face is at rest."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "gaze",
       "name": "Caught looking back",
       "text": "The head is turned back over one shoulder toward the lens, caught in the act of looking round."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "hands",
       "name": "Hands empty",
       "text": "Both hands are open and at rest, the fingers uncurled and the palms free."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "hands",
       "name": "One hand raised",
       "text": "One arm is lifted and the hand has arrived at the height of the face, the wrist relaxed."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "hands",
       "name": "Hands at the sides",
       "text": "Both arms hang easy at the sides, the hands loose."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "hands",
       "name": "A hand at the hip",
       "text": "One hand rests at the hip, the fingers lying flat and the weight carried elsewhere."
     },
     {
-      "kind": "subject",
+      "kind": "pose",
       "group": "hands",
       "name": "Correct hands",
       "text": "The hands are correct and gracefully formed, five fingers each, in natural proportion to the frame."
