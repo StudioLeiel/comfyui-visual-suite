@@ -1,0 +1,661 @@
+{
+  "format": "leiel.drawer",
+  "version": 1,
+  "items": [
+    {
+      "id": "st-01",
+      "kind": "quality",
+      "name": "Soft Side Light, Film",
+      "tags": [
+        "Starter",
+        "Daylight"
+      ],
+      "text": "Medium-format film photograph on Kodak Portra 400, an editorial for a European fashion magazine. Soft diffused daylight from one side, wrapping gently around the figure; the far side holding a quiet, transparent shadow. Skin with natural texture and soft sheen, highlights soft and never clipped. Fine, even film grain. Calm, natural colour.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-02",
+      "kind": "quality",
+      "name": "Golden Hour, Low Sun",
+      "tags": [
+        "Starter",
+        "Daylight"
+      ],
+      "text": "Medium-format film photograph on Kodak Portra 400, an editorial for a European fashion magazine. Low golden evening sun from the side, raking warm light across the face, hair and fabric; the shadow side holding warm reflected light. Highlights soft, never clipped; shadows warm and transparent. Fine, even film grain, a gentle haze softening the distance. Warm, glowing, natural colour.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-03",
+      "kind": "quality",
+      "name": "Overcast, Even and Quiet",
+      "tags": [
+        "Starter",
+        "Daylight"
+      ],
+      "text": "Medium-format film photograph on Kodak Portra 400, an editorial for a European fashion magazine. Soft, even light from a pale overcast sky, no hard shadows, the figure lit gently from above and in front, colours muted and true. Highlights soft, never clipped; shadows cool and transparent. Fine, even film grain. Quiet, wistful, natural colour.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-04",
+      "kind": "quality",
+      "name": "Night, Warm Lamps",
+      "tags": [
+        "Starter",
+        "Night"
+      ],
+      "text": "Medium-format film photograph on Kodak Portra 800, an editorial for a European fashion magazine. Night; warm light from nearby lamps falling softly on one side of the figure, the other side holding cool blue from the night, lights in the distance melting into soft round bokeh. Highlights soft, never clipped; shadows deep and transparent, never black. Fine film grain. Hushed, intimate, natural colour.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-05",
+      "kind": "quality",
+      "name": "Studio Softbox, Clean",
+      "tags": [
+        "Starter",
+        "Studio"
+      ],
+      "text": "Medium-format digital photograph, an editorial for a European fashion magazine. One large softbox high and in front with a soft fill from the opposite side, light falling off gently into the background. Clean, even skin with true texture, crisp fabric detail, highlights soft and controlled. Clean, refined, neutral colour.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-06",
+      "kind": "quality",
+      "name": "Hard Flash, Night",
+      "tags": [
+        "Starter",
+        "Night",
+        "Flash"
+      ],
+      "text": "35mm film photograph, a fashion editorial shot at night with a direct on-camera flash: the figure lit hard and bright from the front with a crisp shadow just behind, everything beyond the flash falling into dark ambient colour. Grain visible, colours punchy. Spontaneous, bold, a little raw.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-07",
+      "kind": "outfit",
+      "name": "Cream Knit, Wide Trousers",
+      "tags": [
+        "Starter",
+        "Autumn",
+        "Casual"
+      ],
+      "text": "A chunky cream cable-knit wool sweater worn slightly oversized, high-waisted wide-leg trousers in warm camel wool that pool over the shoes, and brown leather loafers.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-08",
+      "kind": "outfit",
+      "name": "White Shirt, Blue Jeans",
+      "tags": [
+        "Starter",
+        "Casual",
+        "Summer"
+      ],
+      "text": "A crisp oversized white cotton shirt with the sleeves rolled to the elbow, tucked loosely into straight light-blue jeans, and white canvas sneakers.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-09",
+      "kind": "outfit",
+      "name": "Black Slip Dress",
+      "tags": [
+        "Starter",
+        "Evening"
+      ],
+      "text": "A bias-cut black silk slip dress falling to the ankle, thin straps, the fabric catching the light along its folds, and fine black strappy sandals.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-10",
+      "kind": "outfit",
+      "name": "Long Camel Coat",
+      "tags": [
+        "Starter",
+        "Winter",
+        "Tailored"
+      ],
+      "text": "A long double-breasted camel wool coat worn open over a black ribbed turtleneck and black tailored trousers, and black leather ankle boots.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-11",
+      "kind": "outfit",
+      "name": "Linen Summer Dress",
+      "tags": [
+        "Starter",
+        "Summer"
+      ],
+      "text": "A loose ivory linen midi dress with thin straps and a softly gathered skirt that moves in the breeze, and flat tan leather sandals.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-12",
+      "kind": "outfit",
+      "name": "Trench Coat, City",
+      "tags": [
+        "Starter",
+        "Autumn",
+        "Tailored"
+      ],
+      "text": "A classic beige cotton trench coat belted at the waist, its collar turned up, over a fine grey knit and dark straight trousers, and black loafers.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-13",
+      "kind": "outfit",
+      "name": "Navy Satin Suit",
+      "tags": [
+        "Starter",
+        "Evening",
+        "Tailored"
+      ],
+      "text": "A navy silk-satin double-breasted suit with wide lapels and wide-leg trousers, worn with nothing but fine gold jewellery, and pointed black heels.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-14",
+      "kind": "outfit",
+      "name": "Duffle Coat, Winter Layers",
+      "tags": [
+        "Starter",
+        "Winter",
+        "Casual"
+      ],
+      "text": "A long black wool duffle coat with horn toggles worn open over a chunky cream turtleneck, light-blue straight jeans, a long hand-knitted wool scarf, and black leather lace-up winter boots.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-15",
+      "kind": "pose",
+      "name": "Mid-Stride, Toward Camera",
+      "tags": [
+        "Starter",
+        "Movement"
+      ],
+      "text": "walking toward the camera mid-stride, one foot lifted from the ground, arms loose and swinging naturally, the clothes moving with the step, looking just past the lens",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-16",
+      "kind": "pose",
+      "name": "Looking Back Over Shoulder",
+      "tags": [
+        "Starter",
+        "Movement"
+      ],
+      "text": "walking away from the camera, then turning to look back over one shoulder, the body still facing away, the face caught in three-quarter view, a faint smile",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-17",
+      "kind": "pose",
+      "name": "Standing, Arms Folded",
+      "tags": [
+        "Starter",
+        "Still"
+      ],
+      "text": "standing with the weight on one hip, arms folded loosely, one foot crossed in front of the other, head tilted slightly, looking straight into the lens, calm",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-18",
+      "kind": "pose",
+      "name": "Seated Low, Elbows on Knees",
+      "tags": [
+        "Starter",
+        "Still"
+      ],
+      "text": "sitting low with knees apart, forearms resting on the knees, hands loosely joined, leaning a little forward, looking straight into the lens",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-19",
+      "kind": "pose",
+      "name": "Laughing, Head Back",
+      "tags": [
+        "Starter",
+        "Joy"
+      ],
+      "text": "caught laughing out loud, head tipped back, eyes creased, one hand rising toward the face, the shoulders lifted with the laugh",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-20",
+      "kind": "pose",
+      "name": "Wind in the Hair",
+      "tags": [
+        "Starter",
+        "Movement",
+        "Exterior"
+      ],
+      "text": "standing with the face turned into the wind, hair blown back and across the face, one hand lifted to hold it, eyes half closed against the breeze",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-21",
+      "kind": "pose",
+      "name": "Seated, Chin on Arm",
+      "tags": [
+        "Starter",
+        "Still"
+      ],
+      "text": "sitting sideways on a chair, one arm resting along the chair back, chin on the forearm, looking away into the distance, lost in thought",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-22",
+      "kind": "pose",
+      "name": "Back to Camera",
+      "tags": [
+        "Starter",
+        "Still"
+      ],
+      "text": "standing with the back to the camera, looking away into the distance, the face not visible, the shoulders relaxed, the whole figure still",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-23",
+      "kind": "scene",
+      "name": "Paris Street Corner, Morning",
+      "tags": [
+        "Starter",
+        "City",
+        "Daylight"
+      ],
+      "text": "a quiet Paris street corner in the early morning, cream stone Haussmann facades with wrought-iron balconies, a café with its chairs still stacked on the terrace, wet cobblestones, a few parked scooters, no other people",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-24",
+      "kind": "scene",
+      "name": "Empty Room, Peeling Plaster",
+      "tags": [
+        "Starter",
+        "Interior"
+      ],
+      "text": "a bare old room with peeling lime-plaster walls in faded colours, worn wooden floorboards, tall half-open shutters letting in a slice of afternoon light, nothing else in the room",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-25",
+      "kind": "scene",
+      "name": "Seaside Cliff, Grass and Sea",
+      "tags": [
+        "Starter",
+        "Exterior",
+        "Nature"
+      ],
+      "text": "a high grassy clifftop above the sea, wind-flattened grass and small wildflowers, the cliffs dropping away to a deep blue-green sea with white surf far below, a headland in soft haze",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-26",
+      "kind": "scene",
+      "name": "Summer Field, Tall Grass",
+      "tags": [
+        "Starter",
+        "Exterior",
+        "Nature",
+        "Summer"
+      ],
+      "text": "a wide summer field of tall dry golden grass reaching to the waist, a few wildflowers, a line of trees far behind, open sky",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-27",
+      "kind": "scene",
+      "name": "Snowy Village Lane",
+      "tags": [
+        "Starter",
+        "Exterior",
+        "Winter"
+      ],
+      "text": "a narrow lane in a small mountain village in deep winter, low old houses with thick snow on their roofs, the lane plowed between banks of snow, wooden utility poles, light snow falling",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-28",
+      "kind": "scene",
+      "name": "Grand Hotel Staircase",
+      "tags": [
+        "Starter",
+        "Interior",
+        "Evening"
+      ],
+      "text": "the sweeping marble staircase of an old grand hotel, a red carpet runner held by brass rods, polished brass handrails, tall mirrors and a crystal chandelier glowing above, the hall empty",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-29",
+      "kind": "scene",
+      "name": "Seamless Studio Backdrop",
+      "tags": [
+        "Starter",
+        "Studio"
+      ],
+      "text": "a photo studio with a seamless paper backdrop in warm grey curving smoothly from the wall into the floor, nothing else in the frame",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-30",
+      "kind": "scene",
+      "name": "Rainy City Night",
+      "tags": [
+        "Starter",
+        "City",
+        "Night"
+      ],
+      "text": "a city street at night after rain, the wet asphalt mirroring red and amber shop signs and streetlights, a closed bakery and a lit bus shelter, no other people",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-31",
+      "kind": "camera",
+      "name": "Eye Level, Medium",
+      "tags": [
+        "Starter",
+        "Portrait"
+      ],
+      "text": "Camera at eye level a few steps away with an 80mm lens at f/2.8, focus on the eyes, framed from the top of the head to the waist, the figure a little off-centre, the background soft behind.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-32",
+      "kind": "camera",
+      "name": "Full Length, Feet on the Ground",
+      "tags": [
+        "Starter",
+        "Full Length"
+      ],
+      "text": "Camera at waist height a few metres away with a 50mm lens at f/4, the whole figure in the frame from the top of the head to the feet, a band of ground visible beneath the feet, the background soft.",
+      "thumb": null,
+      "added": 0,
+      "rev": 4
+    },
+    {
+      "id": "st-33",
+      "kind": "camera",
+      "name": "Low Angle, Looking Up",
+      "tags": [
+        "Starter",
+        "Full Length"
+      ],
+      "text": "Camera low near the ground with a 35mm lens, looking up at the figure, the whole figure in frame against the sky or ceiling, the legs long, the head near the top of the frame.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-34",
+      "kind": "camera",
+      "name": "Close Portrait",
+      "tags": [
+        "Starter",
+        "Portrait"
+      ],
+      "text": "Camera close at eye level with an 85mm lens at f/2, focus on the eyes, framed from just above the head to the shoulders, the face filling most of the frame, the clothes seen only at the collar and shoulders, the background melting away.",
+      "thumb": null,
+      "added": 0,
+      "rev": 3
+    },
+    {
+      "id": "st-35",
+      "kind": "camera",
+      "name": "Wide, Figure Small",
+      "tags": [
+        "Starter",
+        "Wide"
+      ],
+      "text": "Camera far back with a 35mm lens at f/8, the figure small in the lower third of the frame, the place around the figure filling the rest, plenty of empty space, everything sharp.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-36",
+      "kind": "camera",
+      "name": "Over the Shoulder, Behind",
+      "tags": [
+        "Starter",
+        "Wide"
+      ],
+      "text": "Camera close behind the figure and a little to one side at standing eye level with a 50mm lens, her own shoulder and hair large and soft at one edge of the frame, looking past her into the space she faces, the space beyond in focus.",
+      "thumb": null,
+      "added": 0,
+      "rev": 3
+    },
+    {
+      "id": "st-37",
+      "kind": "camera",
+      "name": "Telephoto From Across the Street",
+      "tags": [
+        "Starter",
+        "Candid"
+      ],
+      "text": "A long 200mm lens from far away, the figure caught unaware, the background compressed and soft, leaves or a railing blurred in the near foreground.",
+      "thumb": null,
+      "added": 0,
+      "rev": 3
+    },
+    {
+      "id": "st-38",
+      "kind": "camera",
+      "name": "Top Down, Overhead",
+      "tags": [
+        "Starter",
+        "Graphic"
+      ],
+      "text": "Camera directly overhead looking straight down with a 35mm lens, the figure and the ground beneath flattened into a graphic composition.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-39",
+      "kind": "absolute",
+      "name": "One Person Only",
+      "tags": [
+        "Starter",
+        "Fix"
+      ],
+      "text": "Exactly one person in the picture, shown once - no second figure and no second view of her. Skin clean and even.",
+      "thumb": null,
+      "added": 0,
+      "rev": 3
+    },
+    {
+      "id": "st-40",
+      "kind": "absolute",
+      "name": "Hands Natural",
+      "tags": [
+        "Starter",
+        "Fix"
+      ],
+      "text": "Both hands relaxed and natural, five fingers on each, nothing held unless named.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-41",
+      "kind": "absolute",
+      "name": "Ears Bare",
+      "tags": [
+        "Starter",
+        "Fix"
+      ],
+      "text": "Both ears bare skin with nothing attached.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-42",
+      "kind": "absolute",
+      "name": "No Text Anywhere",
+      "tags": [
+        "Starter",
+        "Fix"
+      ],
+      "text": "Every surface plain, bare of any lettering, logos or badges.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-43",
+      "kind": "absolute",
+      "name": "Friends Faceless",
+      "tags": [
+        "Starter",
+        "Fix",
+        "Group"
+      ],
+      "text": "The other people appear only from behind, as hands, or as soft blurred silhouettes, faces never shown.",
+      "thumb": null,
+      "added": 0
+    },
+    {
+      "id": "st-s01",
+      "kind": "subject",
+      "name": "Woman, Mid-Twenties, Dark Hair",
+      "tags": [
+        "Starter",
+        "Woman"
+      ],
+      "text": "A woman in her mid-twenties, a European luxury top model, tall and slender with long limbs. Fair skin with natural texture, grey-green eyes. Dark brown hair, barely any makeup.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s02",
+      "kind": "subject",
+      "name": "Woman, Late Twenties, Mediterranean",
+      "tags": [
+        "Starter",
+        "Woman"
+      ],
+      "text": "A woman in her late twenties, a European luxury top model, tall and slender. Olive skin with a soft natural glow. Long dark wavy hair, barely any makeup.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s03",
+      "kind": "subject",
+      "name": "Woman, Twenties, East Asian",
+      "tags": [
+        "Starter",
+        "Woman"
+      ],
+      "text": "A woman in her mid-twenties, a luxury fashion model, tall and slender with long limbs. Clear porcelain skin with natural texture. Straight black hair, barely any makeup.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s04",
+      "kind": "subject",
+      "name": "Woman, Twenties, Black",
+      "tags": [
+        "Starter",
+        "Woman"
+      ],
+      "text": "A woman in her early twenties, a luxury fashion model, tall and slender with long limbs. Deep brown skin, clear and luminous. Natural black hair, barely any makeup.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s05",
+      "kind": "subject",
+      "name": "Woman, Twenties, South Asian",
+      "tags": [
+        "Starter",
+        "Woman"
+      ],
+      "text": "A woman in her mid-twenties, a luxury fashion model, tall and slender. Warm brown skin with a soft sheen. Long thick black hair, barely any makeup.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s06",
+      "kind": "subject",
+      "name": "Woman, Fifties, Silver Hair",
+      "tags": [
+        "Starter",
+        "Woman",
+        "Mature"
+      ],
+      "text": "A woman in her early fifties, a luxury fashion model, tall and slim, fine lines at the eyes. Fair skin with natural texture and character. Short silver-grey hair, barely any makeup.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s07",
+      "kind": "subject",
+      "name": "Man, Early Thirties",
+      "tags": [
+        "Starter",
+        "Man"
+      ],
+      "text": "A man in his early thirties, a luxury fashion model, tall and lean with broad shoulders, a short trimmed beard. Light olive skin with natural texture. Short dark hair pushed back.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    },
+    {
+      "id": "st-s08",
+      "kind": "subject",
+      "name": "Man, Twenties, Clean-Shaven",
+      "tags": [
+        "Starter",
+        "Man"
+      ],
+      "text": "A man in his mid-twenties, a luxury fashion model, tall and slender, clean-shaven. Clear skin with natural texture. Dark hair cut short at the sides, a little longer on top.",
+      "thumb": null,
+      "added": 0,
+      "rev": 2
+    }
+  ]
+}
