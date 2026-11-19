@@ -54,6 +54,8 @@ const PDF_DONE_URL = "/leiel_layout/pdf_done";
 const MUSIC_URL = "/leiel_layout/music";
 const MUSIC_LIST_URL = "/leiel_layout/music_list";
 const MUSIC_FORGET_URL = "/leiel_layout/music_forget";
+const MUSIC_SHELF_URL = "/leiel_layout/music_shelf";
+const MUSIC_RENAME_URL = "/leiel_layout/music_rename";
 const VIDEO_PART_URL = "/leiel_layout/video_part";
 const VIDEO_DONE_URL = "/leiel_layout/video_done";
 const LOGO_URL = "/leiel_layout/logo";
@@ -316,6 +318,8 @@ function esc(s) {
 }
 
 const ICON = {
+  note: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>`,
+  layout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M12 4.5v15M3.5 12h8.5"/></svg>`,
   left: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>`,
   right: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>`,
   full: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`,
@@ -325,6 +329,8 @@ const ICON = {
   // the Series Book's own save mark, a disk
   save: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 3.5a1 1 0 0 1 1-1h7.6l2.4 2.4v7.6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/><path d="M5 2.5v3.2h5V2.5M5 13.5V9.5h6v4"/></svg>`,
   type: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5h11v2M9.5 5v14M7 19h5M14 12v-1.5h6V12M17 10.5V19M15.5 19h3"/></svg>`,
+  undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 4 10l4 4"/><path d="M4 10h10a6 6 0 0 1 0 12h-3"/></svg>`,
+  redo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 6l4 4-4 4"/><path d="M20 10H10a6 6 0 0 0 0 12h3"/></svg>`,
 };
 
 // ------------------------------------------------------------ the layout
@@ -417,7 +423,16 @@ function buildSheets(book, st, G) {
   const cuts = pickedCuts(book, st);
   const cover = coverOf(book, st, cuts);
   const all = G.cat === "web" ? webSheets(book, st, G, cuts, cover) : printSheets(st, cuts, cover);
-  return all.filter(sh => !(st.off && st.off[sh.id]));
+  const out = all.filter(sh => !(st.off && st.off[sh.id]));
+  // how the pictures of a cut share their place, where the page says
+  for (const sh of out) {
+    const key = `${G.cat}:${sh.id}`;
+    const sp = st.split && st.split[key];
+    if (sp) sh.split = sp;
+    const sw = st.splitW && st.splitW[key];
+    if (sw) sh.splitW = sw;
+  }
+  return out;
 }
 
 function printSheets(st, cuts, cover) {
@@ -510,8 +525,99 @@ function hasWords(sh, G) {
    way of sharing the box is tried - side by side, one above the other, one
    picture large with the others beside or under it, grids - and the one
    that cuts the least off the pictures, given their shapes, is used. */
-function gridCells(n, x, y, w, h, gap, ratios) {
+/* The ways several picks can share one place, by how many there are: each a
+   tree of rows (h) and columns (v) whose leaves are the picks in order, with
+   the share each part takes to begin with. The page chooses one, or Auto
+   takes the one that cuts the least off the pictures; the lines between the
+   parts are dragged to change the shares. Five picks and more: a row, a
+   stack, or Auto's grid. */
+const AH = (...k) => ({ d: "h", k }), AV = (...k) => ({ d: "v", k });
+const ARRANGE = {
+  2: [
+    { id: "row", label: "Side by side", t: AH(0, 1) },
+    { id: "col", label: "Stacked", t: AV(0, 1) },
+    { id: "l1", label: "Large and small", t: AH(0, 1), w: { r: [0.64, 0.36] } },
+    { id: "t1", label: "Large over small", t: AV(0, 1), w: { r: [0.64, 0.36] } },
+  ],
+  3: [
+    { id: "row", label: "In a row", t: AH(0, 1, 2) },
+    { id: "col", label: "Stacked", t: AV(0, 1, 2) },
+    { id: "l1", label: "One left, two right", t: AH(0, AV(1, 2)), w: { r: [0.6, 0.4] } },
+    { id: "r1", label: "Two left, one right", t: AH(AV(0, 1), 2), w: { r: [0.4, 0.6] } },
+    { id: "t1", label: "One over two", t: AV(0, AH(1, 2)), w: { r: [0.58, 0.42] } },
+    { id: "b1", label: "Two over one", t: AV(AH(0, 1), 2), w: { r: [0.42, 0.58] } },
+  ],
+  4: [
+    { id: "grid", label: "Grid", t: AV(AH(0, 1), AH(2, 3)) },
+    { id: "row", label: "In a row", t: AH(0, 1, 2, 3) },
+    { id: "col", label: "Stacked", t: AV(0, 1, 2, 3) },
+    { id: "l1", label: "One large, three beside", t: AH(0, AV(1, 2, 3)), w: { r: [0.66, 0.34] } },
+    { id: "t1", label: "One large, three under", t: AV(0, AH(1, 2, 3)), w: { r: [0.62, 0.38] } },
+  ],
+};
+function arrangeOf(n, id) {
+  if (n >= 2 && n <= 4) return (ARRANGE[n] || []).find(a => a.id === id) || null;
+  if (id === "row") return { id: "row", label: "In a row", t: AH(...Array.from({ length: n }, (_, i) => i)) };
+  if (id === "col") return { id: "col", label: "Stacked", t: AV(...Array.from({ length: n }, (_, i) => i)) };
+  return null;
+}
+/* The cells of an arrangement in a box, and the lines between its parts. */
+function treeCells(a, W, x, y, w, h, gap, divs) {
+  const out = [];
+  const walk = (node, path, x, y, w, h) => {
+    if (typeof node === "number") { out[node] = { x, y, w, h }; return; }
+    const m = node.k.length, along = node.d === "h" ? w : h;
+    const avail = Math.max(1e-6, along - gap * (m - 1));
+    let ws = (W && W[path]) || (a.w && a.w[path]) || null;
+    if (!ws || ws.length !== m) ws = Array(m).fill(1 / m);
+    const sum = ws.reduce((p, q) => p + q, 0) || 1;
+    let pos = node.d === "h" ? x : y;
+    node.k.forEach((kid, i) => {
+      const size = avail * ws[i] / sum;
+      if (node.d === "h") walk(kid, `${path}.${i}`, pos, y, size, h);
+      else walk(kid, `${path}.${i}`, x, pos, w, size);
+      pos += size;
+      if (i < m - 1) {
+        if (divs) divs.push({ path, i, d: node.d, at: pos + gap / 2, box: { x, y, w, h }, avail, ws: ws.map(v => v / sum) });
+        pos += gap;
+      }
+    });
+  };
+  walk(a.t, "r", x, y, w, h);
+  return out;
+}
+/* How much an arrangement cuts off the pictures - the smaller the better. */
+function cutScore(cells, rs) {
+  let sc = 0;
+  cells.forEach((c, i) => { sc += Math.abs(Math.log((c.w / c.h) / rs[i])); });
+  return sc;
+}
+/* The arrangement a page uses: its own, or the one Auto finds. */
+function resolveArrange(n, mode, x, y, w, h, gap, rs) {
+  const own = mode && arrangeOf(n, mode);
+  if (own) return own;
+  if (n < 2 || n > 4) return null;
+  let best = null, score = Infinity;
+  for (const a of ARRANGE[n]) {
+    const sc = cutScore(treeCells(a, null, x, y, w, h, gap), rs);
+    if (sc < score - 1e-9) { score = sc; best = a; }
+  }
+  return best;
+}
+let DIVS = null;      // while the stage is drawn: the lines between pictures that can be dragged
+function gridCells(n, x, y, w, h, gap, ratios, mode, W, tag) {
   if (n <= 1) return [{ x, y, w, h }];
+  const rs0 = ratios && ratios.length === n ? ratios : Array(n).fill(w / h / n);
+  const a = resolveArrange(n, mode, x, y, w, h, gap, rs0);
+  if (a) {
+    const divs = DIVS && tag ? [] : null;
+    // the shares dragged on the page belong to the arrangement they were dragged in
+    const own = W && W._a === a.id ? W : null;
+    const cells = treeCells(a, own, x, y, w, h, gap, divs);
+    if (divs) for (const d of divs) DIVS.push({ ...d, arr: a.id, tag });
+    return cells;
+  }
+
   const rs = ratios && ratios.length === n ? ratios : Array(n).fill(w / h / n);
   const rowsOf = (counts) => {
     // rows of equal height, each row split evenly
@@ -686,10 +792,14 @@ function photoContain(ctx, k, img, pick, x, y, w, h, alignTop) {
 
 /* Every chosen picture of a cut in a box: one fills it, several share it. */
 function photoSet(ctx, k, G, img, picks, x, y, w, h) {
-  const cells = gridCells(picks.length, x, y, w, h, gapOf(G), picks.map(ratio));
+  const cells = gridCells(picks.length, x, y, w, h, gapOf(G), picks.map(ratio), G.split, G.splitW, G.splitTag);
   picks.forEach((p, i) => photoCover(ctx, k, img(p), cells[i].x, cells[i].y, cells[i].w, cells[i].h));
   return cells;
 }
+
+/* Which words a page carries: its title, its text, both or neither. */
+function showsTitle(G) { return G.show !== "text" && G.show !== "none"; }
+function showsText(G) { return G.show !== "title" && G.show !== "none"; }
 
 function cutLabel(cut) {
   return cut.label || cut.no;
@@ -697,21 +807,22 @@ function cutLabel(cut) {
 
 function cornerLabel(ctx, k, G, cut, x, y, align, withCaption) {
   const pt = 6.5 * G.f * G.sx;
-  const label = cutLabel(cut);
-  const rest = withCaption ? (cut.caption || cut.title) : "";
+  const label = showsTitle(G) ? cutLabel(cut) : "";
+  const rest = withCaption && showsText(G) ? (cut.caption || cut.title) : "";
+  if (!label && !rest) return;
   if (REC) {
     const w = 200 * G.f;
     recText(align === "right" ? x - w : x, y - pt * PT * KASC, w, pt * PT * 2, pt * PT * KASC,
-      [para("Label", rest ? `${label}  ${rest}` : label, G.bf, 400, false, pt, pt * 1.3 * PT, 0.04, ON_PHOTO, align)]);
+      [para("Label", rest && label ? `${label}  ${rest}` : label || rest, G.bf, 400, false, pt, pt * 1.3 * PT, 0.04, ON_PHOTO, align)]);
   }
   ctx.fillStyle = ON_PHOTO;
   ctx.textAlign = "left";
   setFont(ctx, k, stack(G.bf), pt, 500, false);
   setTrack(ctx, k, pt, 0.12);
-  const lw = ctx.measureText(label).width / k;
+  const lw = label ? ctx.measureText(label).width / k : 0;
   setTrack(ctx, k, pt, 0);
   setFont(ctx, k, stack(G.bf), pt, 400, false);
-  const gap = rest ? 3 * G.f : 0;
+  const gap = rest && label ? 3 * G.f : 0;
   const rw = rest ? ctx.measureText(rest).width / k : 0;
   const x0 = align === "right" ? x - (lw + gap + rw) : x;
   setFont(ctx, k, stack(G.bf), pt, 500, false);
@@ -774,22 +885,24 @@ function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
   const T = { title: 22 * f * ts, cap: 11.5 * f * xs, body: 8.5 * f * xs, extra: 8 * f * xs };
   const lead = { title: T.title * 1.08 * PT, cap: T.cap * 1.42 * PT, body: T.body * 1.6 * PT, extra: T.extra * 1.55 * PT };
 
+  // what the page shows: the number and title, the words under them, or both
+  const showT = showsTitle(G), showX = showsText(G);
   setFont(ctx, k, stack(G.tf, true), T.title, 500, false);
-  const titleL = clip(wrapText(ctx, k, cut.title, width), 3);
+  const titleL = showT ? clip(wrapText(ctx, k, cut.title, width), 3) : [];
   setFont(ctx, k, stack(G.tf, true), T.cap, 500, true);
-  const capL = cut.caption ? clip(wrapText(ctx, k, cut.caption, Math.min(width, 130 * f)), 4) : [];
+  const capL = showX && cut.caption ? clip(wrapText(ctx, k, cut.caption, Math.min(width, 130 * f)), 4) : [];
   setFont(ctx, k, stack(G.bf), T.body, 400, false);
-  let bodyL = cut.body ? wrapText(ctx, k, cut.body, Math.min(width, 128 * f)) : [];
+  let bodyL = showX && cut.body ? wrapText(ctx, k, cut.body, Math.min(width, 128 * f)) : [];
   setFont(ctx, k, stack(G.bf), T.extra, 400, false);
-  const extraL = extra ? clip(wrapText(ctx, k, extra, Math.min(width, 128 * f)), 8) : [];
+  const extraL = showX && extra ? clip(wrapText(ctx, k, extra, Math.min(width, 128 * f)), 8) : [];
 
   const extraH = extraL.length ? linesHeight(extraL, lead.extra) : 0;
   const extraFirst = bottom - extraH;
   const limit = extraL.length ? extraFirst - T.extra * PT - 9 * f : bottom;
 
-  const head = 11 * f * Math.max(1, ts) + linesHeight(titleL, lead.title) + 6 * f
-    + (capL.length ? 9 * f + linesHeight(capL, lead.cap) : 0);
-  const bodyGap = 9 * f;
+  const head = (showT ? 11 * f * Math.max(1, ts) + linesHeight(titleL, lead.title) + 6 * f : 0)
+    + (capL.length ? (showT ? 9 * f : 0) + linesHeight(capL, lead.cap) : 0);
+  const bodyGap = showT || capL.length ? 9 * f : 0;
   const room = limit - top - head - (bodyL.length ? bodyGap : 0);
   let bodyH = bodyL.length ? linesHeight(bodyL, lead.body) : 0;
   while (bodyL.length && bodyH > room) {
@@ -807,20 +920,21 @@ function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
     const kp = 7 * f * xs, al = G.al;
     const ruleR = { color: G.c.accent, weight: 0.25, offset: 6 * f - 0.25,
       left: al === "right" ? Math.max(0, width - 10 * f) : 0, right: al === "right" ? 0 : Math.max(0, width - 10 * f) };
-    const paras = [
+    const paras = showT ? [
       para("Number", String(cutLabel(cut)).toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22, G.c.accent, al),
       para("Title", cut.title, G.tf, 500, false, T.title, lead.title, 0, G.c.ink, al,
         11 * f * Math.max(1, ts) - lead.title, { rule: ruleR }),
-    ];
-    if (capL.length) paras.push(para("Caption", cut.caption, G.tf, 500, true, T.cap, lead.cap, 0, G.c.soft, al, 15 * f - lead.cap,
-      { indent: Math.max(0, width - 130 * f) }));
-    String(cut.body || "").split(/\n+/).map(t => t.trim()).filter(Boolean).forEach((t, i) => {
+    ] : [];
+    if (capL.length) paras.push(para("Caption", cut.caption, G.tf, 500, true, T.cap, lead.cap, 0, G.c.soft, al,
+      showT ? 15 * f - lead.cap : null, { indent: Math.max(0, width - 130 * f) }));
+    if (bodyL.length) String(cut.body || "").split(/\n+/).map(t => t.trim()).filter(Boolean).forEach((t, i) => {
       paras.push(para("Body", t, G.bf, 400, false, T.body, lead.body, 0, G.c.soft, al,
-        i === 0 ? (capL.length ? 0 : 6 * f) + bodyGap + T.body * PT * 0.4 - lead.body : lead.body * 0.1,
+        i === 0 ? (paras.length ? (capL.length ? 0 : 6 * f) + bodyGap + T.body * PT * 0.4 - lead.body : null) : lead.body * 0.1,
         { indent: Math.max(0, width - 128 * f) }));
     });
-    const top0 = y0 - kp * PT * KASC;
-    recText(x, top0, width, limit - top0, kp * PT * KASC, paras);
+    const first = showT ? kp * PT * KASC : capL.length ? T.cap * PT * KASC : T.body * PT * KASC;
+    const top0 = y0 - first;
+    if (paras.length) recText(x, top0, width, limit - top0, first, paras);
     if (extraL.length) {
       const et = extraFirst - T.extra * PT * KASC;
       recText(x, et, width, bottom - et, T.extra * PT * KASC, [para("Foot", extra, G.bf, 400, false, T.extra, lead.extra, 0, G.c.ink, al, null,
@@ -831,17 +945,21 @@ function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
   const rec = REC;
   REC = null;
   try {
-  kicker(ctx, k, G, cutLabel(cut), x, y0);
-  ctx.fillStyle = G.c.ink;
-  setFont(ctx, k, stack(G.tf, true), T.title, 500, false);
-  let by = drawLines(ctx, k, titleL, x, y0 + 11 * f * Math.max(1, ts), lead.title);
-  ctx.fillStyle = G.c.accent;
-  rule(ctx, k, x, by + 6 * f, width, 10 * f);
-  by += 6 * f;
+  // with no title, the first line of the words sits where the number would
+  let by = capL.length ? y0 - 9 * f * (showT ? 1 : 0) : y0 - bodyGap - T.body * PT * 0.4;
+  if (showT) {
+    kicker(ctx, k, G, cutLabel(cut), x, y0);
+    ctx.fillStyle = G.c.ink;
+    setFont(ctx, k, stack(G.tf, true), T.title, 500, false);
+    by = drawLines(ctx, k, titleL, x, y0 + 11 * f * Math.max(1, ts), lead.title);
+    ctx.fillStyle = G.c.accent;
+    rule(ctx, k, x, by + 6 * f, width, 10 * f);
+    by += 6 * f;
+  }
   if (capL.length) {
     ctx.fillStyle = G.c.soft;
     setFont(ctx, k, stack(G.tf, true), T.cap, 500, true);
-    by = drawLines(ctx, k, capL, x, by + 9 * f, lead.cap);
+    by = drawLines(ctx, k, capL, x, showT ? by + 9 * f : y0, lead.cap);
   }
   if (bodyL.length) {
     ctx.fillStyle = G.c.soft;
@@ -861,12 +979,14 @@ function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
 /* Number, title and caption under a framed picture. */
 function smallWords(ctx, k, G, cut, x, y, width) {
   const f = G.f, tp = 13 * f * G.st, cp = 10 * f * G.sx;
-  if (REC) {
+  const showT = showsTitle(G), showX = showsText(G) && !!cut.caption;
+  if (REC && (showT || showX)) {
     const kp = 7 * f * G.sx;
-    const paras = [para("Number", String(cutLabel(cut)).toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22, G.c.accent, "left"),
-      para("Small title", cut.title, G.tf, 500, false, tp, tp * 1.08 * PT, 0, G.c.ink, "left", 7 * f * Math.max(1, G.st) - tp * 1.08 * PT)];
-    if (cut.caption) paras.push(para("Small caption", cut.caption, G.tf, 500, true, cp, cp * 1.42 * PT, 0, G.c.soft, "left", 6 * f - cp * 1.42 * PT));
-    recText(x, y - kp * PT * KASC, width, 60 * f, kp * PT * KASC, paras);
+    const paras = showT ? [para("Number", String(cutLabel(cut)).toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22, G.c.accent, "left"),
+      para("Small title", cut.title, G.tf, 500, false, tp, tp * 1.08 * PT, 0, G.c.ink, "left", 7 * f * Math.max(1, G.st) - tp * 1.08 * PT)] : [];
+    if (showX) paras.push(para("Small caption", cut.caption, G.tf, 500, true, cp, cp * 1.42 * PT, 0, G.c.soft, "left", showT ? 6 * f - cp * 1.42 * PT : null));
+    const first = showT ? kp * PT * KASC : cp * PT * KASC;
+    recText(x, y - first, width, 60 * f, first, paras);
   }
   const rec = REC;
   REC = null;
@@ -874,22 +994,31 @@ function smallWords(ctx, k, G, cut, x, y, width) {
 }
 function smallWordsDraw(ctx, k, G, cut, x, y, width, tp, cp) {
   const f = G.f;
-  kicker(ctx, k, G, cutLabel(cut), x, y);
-  ctx.fillStyle = G.c.ink;
-  setFont(ctx, k, stack(G.tf, true), tp, 500, false);
-  const by = drawLines(ctx, k, clip(wrapText(ctx, k, cut.title, width), 2), x, y + 7 * f * Math.max(1, G.st), tp * 1.08 * PT);
-  if (cut.caption) {
+  const showT = showsTitle(G), showX = showsText(G);
+  let by = y - 6 * f;
+  if (showT) {
+    kicker(ctx, k, G, cutLabel(cut), x, y);
+    ctx.fillStyle = G.c.ink;
+    setFont(ctx, k, stack(G.tf, true), tp, 500, false);
+    by = drawLines(ctx, k, clip(wrapText(ctx, k, cut.title, width), 2), x, y + 7 * f * Math.max(1, G.st), tp * 1.08 * PT);
+  }
+  if (showX && cut.caption) {
     ctx.fillStyle = G.c.soft;
     setFont(ctx, k, stack(G.tf, true), cp, 500, true);
     drawLines(ctx, k, clip(wrapText(ctx, k, cut.caption, width), 3), x, by + 6 * f, cp * 1.42 * PT);
   }
 }
 
+/* The size of the series title: larger on the cover, the opener. */
+const COVER_TITLE = 1.4;
+function titlePt(G) {
+  return (G.cat === "web" ? 30 : 34) * G.f * G.st * (G.cover ? COVER_TITLE : 1);
+}
 function titleBlock(ctx, k, G, book, x, y, width, light) {
   const f = G.f;
   kicker(ctx, k, G, book.no ? `Series ${book.no}` : "Series", x, y, light ? ON_PHOTO : null);
   ctx.fillStyle = light ? ON_PHOTO : G.c.ink;
-  const pt = (G.cat === "web" ? 30 : 34) * f * G.st;
+  const pt = titlePt(G);
   setFont(ctx, k, stack(G.tf, true), pt, 500, false);
   return drawLines(ctx, k, clip(wrapText(ctx, k, book.series, width), 4), x, y + 15 * f + pt * PT * 0.6, pt * 1.06 * PT);
 }
@@ -907,7 +1036,7 @@ function aligned(G, x, w, fn) {
   try { return fn(); } finally { ALIGN = before; }
 }
 function titleHeight(G) {
-  const pt = (G.cat === "web" ? 30 : 34) * G.f * G.st;
+  const pt = titlePt(G);
   return 15 * G.f + pt * PT * 0.6 + pt * 1.06 * PT;
 }
 
@@ -933,15 +1062,19 @@ function titleArea(ctx, k, G, book, x, w, top, bottom, light, withNote) {
   if (G.al === "right") ALIGN = x + w;
   try {
     const f = G.f;
-    const pt = (G.cat === "web" ? 30 : 34) * f * G.st;
+    const pt = titlePt(G);
+    // what the page shows: the title, the note, or both
+    const showT = showsTitle(G);
+    const showN = showsText(G) && (withNote || !showT);
+    if (!showT && !showN) return;
     setFont(ctx, k, stack(G.tf, true), pt, 500, false);
-    const tl = clip(wrapText(ctx, k, book.series, w), 4);
-    const titleH = 15 * f + pt * PT * 0.6 + linesHeight(tl, pt * 1.06 * PT);
+    const tl = showT ? clip(wrapText(ctx, k, book.series, w), 4) : [];
+    const titleH = showT ? 15 * f + pt * PT * 0.6 + linesHeight(tl, pt * 1.06 * PT) : 0;
     const npt = 8.5 * f * G.sx, nlead = npt * 1.6 * PT;
     setFont(ctx, k, stack(G.bf), npt, 400, false);
     const nw = Math.min(w, 140 * f);
-    let nl = withNote && book.note ? wrapText(ctx, k, book.note, nw) : [];
-    const gap = 13 * f;
+    let nl = showN && book.note ? wrapText(ctx, k, book.note, nw) : [];
+    const gap = showT ? 13 * f : 0;
     const room = bottom - top - titleH - gap;
     while (nl.length && linesHeight(nl, nlead) > room) nl = clip(nl, nl.length - 1);
     const H = titleH + (nl.length ? gap + linesHeight(nl, nlead) : 0);
@@ -950,22 +1083,26 @@ function titleArea(ctx, k, G, book, x, w, top, bottom, light, withNote) {
         : top + (bottom - top - H) * 0.42;
     if (REC) {
       const kp = 7 * f * G.sx, yy = Math.max(top, y0), al = G.al;
-      const paras = [para("Number", (book.no ? `Series ${book.no}` : "Series").toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22,
+      const paras = showT ? [para("Number", (book.no ? `Series ${book.no}` : "Series").toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22,
         light ? ON_PHOTO : G.c.accent, al),
       para("Series title", book.series, G.tf, 500, false, pt, pt * 1.06 * PT, 0, light ? ON_PHOTO : G.c.ink, al,
-        15 * f + pt * PT * 0.6 - pt * 1.06 * PT)];
+        15 * f + pt * PT * 0.6 - pt * 1.06 * PT)] : [];
       if (nl.length) {
         String(book.note).split(/\n+/).map(t => t.trim()).filter(Boolean).forEach((t, i) => {
-          paras.push(para("Note", t, G.bf, 400, false, npt, nlead, 0, light ? "#ebe6dc" : G.c.soft, al, i === 0 ? gap - nlead : nlead * 0.1,
-            { indent: Math.max(0, w - nw) }));
+          paras.push(para("Note", t, G.bf, 400, false, npt, nlead, 0, light ? "#ebe6dc" : G.c.soft, al,
+            i === 0 ? (showT ? gap - nlead : null) : nlead * 0.1, { indent: Math.max(0, w - nw) }));
         });
       }
-      recText(x, yy - kp * PT * KASC, w, bottom - (yy - kp * PT * KASC), kp * PT * KASC, paras);
+      const first = showT ? kp * PT * KASC : npt * PT * KASC;
+      if (paras.length) recText(x, yy - first, w, bottom - (yy - first), first, paras);
     }
     const rec = REC;
     REC = null;
-    let by;
-    try { by = titleBlock(ctx, k, G, book, x, Math.max(top, y0), w, light); } finally { REC = rec; }
+    // with no title the note's first line sits where the title's number would
+    let by = Math.max(top, y0) - gap;
+    if (showT) {
+      try { by = titleBlock(ctx, k, G, book, x, Math.max(top, y0), w, light); } finally { REC = rec; }
+    } else REC = rec;
     const rec2 = REC;
     REC = null;
     try {
@@ -1026,7 +1163,10 @@ function closingDraw(ctx, k, G, list, x, top, step, per, colW) {
 
 /* One sheet at k pixels a unit. pics: pick id -> image. */
 function drawSheet(ctx, k, sh, G0, book, st, pics, preview) {
-  const G = { ...G0, tp: (st.pos && st.pos[sh.id]) || G0.tp, al: (st.align && st.align[sh.id]) || "left" };
+  const G = { ...G0, tp: (st.pos && st.pos[sh.id]) || G0.tp, al: (st.align && st.align[sh.id]) || "left",
+    show: (st.show && st.show[`${G0.cat}:${sh.id}`]) || "both",
+    split: (st.split && st.split[`${G0.cat}:${sh.id}`]) || "", splitW: (st.splitW && st.splitW[`${G0.cat}:${sh.id}`]) || null,
+    splitTag: `${G0.cat}:${sh.id}`, cover: sh.t === "A" || sh.t === "A2" };
   const img = (pick) => { LASTPICK = pick || null; return pick ? pics.get(String(pick.id)) || null : null; };
   FOCUS = (st.focus && st.focus[focusKey(G)]) || null;
   const { pw, ph, M, f } = G;
@@ -1144,11 +1284,13 @@ function drawWeb(ctx, k, sh, G, book, img, extraOf) {
       // the cover above, the title under it
       const ch = ph * (tall ? 0.62 : 0.66);
       photoCover(ctx, k, img(sh.cover), 0, 0, pw, ch);
-      aligned(G, M.outer + 4 * f, pw - M.outer * 2 - 8 * f, () =>
+      if (!showsTitle(G)) titleArea(ctx, k, { ...G, tp: "top" }, book, M.outer + 4 * f, pw - M.outer * 2 - 8 * f, ch + 4 * f, ph - M.bottom, false, true);
+      else aligned(G, M.outer + 4 * f, pw - M.outer * 2 - 8 * f, () =>
         titleBlock(ctx, k, G, book, M.outer + 4 * f, ch + 12 * f, pw - M.outer * 2 - 8 * f, false));
     } else {
       photoCover(ctx, k, img(sh.cover), 0, 0, pw, ph);
-      aligned(G, M.outer, pw - M.outer * 2 - 2 * f, () =>
+      if (!showsTitle(G)) titleArea(ctx, k, { ...G, tp: "bottom" }, book, M.outer, Math.min(pw - M.outer * 2, 170 * f), M.top, ph - M.bottom, true, true);
+      else aligned(G, M.outer, pw - M.outer * 2 - 2 * f, () =>
         titleBlock(ctx, k, G, book, M.outer, ph - M.bottom - titleHeight(G), pw - M.outer * 2, true));
     }
   } else if (sh.t === "A2") {
@@ -1240,7 +1382,7 @@ function placements(sh, G) {
   const gap = gapOf(G);
   const add = (pick, cut, w, h, fit) => { if (pick) out.push({ pick, cut, w, h, fit }); };
   const set = (c, x, y, w, h) => {
-    const cells = gridCells(c.picks.length, x, y, w, h, gap, c.picks.map(ratio));
+    const cells = gridCells(c.picks.length, x, y, w, h, gap, c.picks.map(ratio), sh.split, sh.splitW);
     c.picks.forEach((p, i) => add(p, c, cells[i].w, cells[i].h, "cover"));
   };
   if (G.cat === "web") {
@@ -1327,7 +1469,7 @@ const MOTION_SIZES = [
   { id: "wide", tag: "16x9", label: "YouTube · X · websites", note: "16:9 · 1920 × 1080" },
 ];
 const MOVES = [
-  { id: "auto", label: "Auto", hint: "Chosen by the shape of the picture: a pan where the frame cuts it, a slow zoom where it fits" },
+  { id: "auto", label: "Auto", hint: "Chosen by the shape of the picture: a pan where the frame cuts it, a slow zoom where it fits - taking turns where it is cut only a little" },
   { id: "still", label: "Still", hint: "The picture does not move" },
   { id: "in", label: "In", hint: "A slow zoom in" },
   { id: "out", label: "Out", hint: "A slow zoom out" },
@@ -1360,8 +1502,36 @@ function motionDefaults(st) {
   mu.fade = [2, 3, 5, 8].includes(Number(mu.fade)) ? Number(mu.fade) : 3;
   mu.vol = mu.vol == null ? 0.9 : Math.max(0, Math.min(1, Number(mu.vol)));
   mu.loop = !!mu.loop;
+  // the length of a picture shot that has none of its own
+  m.len = Number(m.len) >= 1 && Number(m.len) <= 20 ? Math.round(Number(m.len) * 100) / 100 : 4;
   return m;
 }
+
+/* A shot's move as a small mark at the head of its place on the timeline:
+   gold where it was set, pale where Auto chose it. */
+const MOVE_MARK = {
+  still: '<rect x="3.5" y="3.5" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>',
+  in: '<path d="M6 1.5h2.5V4M8.5 1.5 5.8 4.2M4 8.5H1.5V6M1.5 8.5l2.7-2.7"/>',
+  out: '<path d="M1.8 5.8h2.4v2.4M4.2 5.8 1.5 8.5M8.2 4.2H5.8V1.8M5.8 4.2l2.7-2.7"/>',
+  left: '<path d="M8.5 5h-7M4 2.5 1.5 5 4 7.5"/>',
+  right: '<path d="M1.5 5h7M6 2.5 8.5 5 6 7.5"/>',
+  up: '<path d="M5 8.5v-7M2.5 4 5 1.5 7.5 4"/>',
+  down: '<path d="M5 1.5v7M2.5 6 5 8.5 7.5 6"/>',
+};
+/* In: arrows out to the corners, the picture growing; Out: arrows in from
+   them, the picture drawing back. */
+const MOVE_NAME = { still: "Still", in: "In", out: "Out", left: "\u2190", right: "\u2192", up: "\u2191", down: "\u2193" };
+function moveMark(s) {
+  const d = MOVE_MARK[s.move];
+  if (!d) return "";
+  const auto = !s.moveSet || s.moveSet === "auto";
+  return `<span class="mvk${auto ? " auto" : ""}" title="Move: ${MOVE_NAME[s.move]}${auto ? " (Auto)" : ""}"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg></span>`;
+}
+
+const PV_PLAY = '<svg viewBox="0 0 10 10"><path d="M3 2v6l5-3z" fill="currentColor"/></svg>';
+/* The piece playing shows pause: pressed, it pauses there. */
+const PV_ON = '<svg viewBox="0 0 10 10"><rect x="2.4" y="2" width="1.9" height="6" rx=".4" fill="currentColor"/><rect x="5.7" y="2" width="1.9" height="6" rx=".4" fill="currentColor"/></svg>';
+const PV_STOP = '<svg viewBox="0 0 10 10"><rect x="2.5" y="2.5" width="5" height="5" rx="0.6" fill="currentColor"/></svg>';
 
 /* The shots of the film, in order, each with its move, length and pass. */
 function frameOf(set, G) {
@@ -1381,17 +1551,24 @@ function motionShots(book, st, G) {
   for (const s of shots) {
     if (m.off[s.id]) continue;
     const set = m.set[s.id] || {};
+    /* By the shape of the picture against the frame: a pan along the side the
+       frame cuts, a slow zoom where it fits. Where it is cut only a little -
+       a portrait picture in a tall frame - pans and zooms take turns, so a
+       film in one size does not slide sideways from shot to shot. */
     const auto = () => {
       if (!s.pick) return "still";
       const r = ratio(s.pick) / frameR;
-      n++;
-      if (r > 1.25) return n % 2 ? "right" : "left";
-      if (r < 0.8) return n % 2 ? "up" : "down";
-      return n % 2 ? "in" : "out";
+      const i = n++;
+      const turn = (a, b) => ["", "in", "", "out"][i % 4] || (i % 4 === 0 ? a : b);
+      if (r > 1.8) return i % 2 ? "left" : "right";
+      if (r < 0.55) return i % 2 ? "down" : "up";
+      if (r > 1.15) return turn("right", "left");
+      if (r < 0.87) return turn("up", "down");
+      return i % 2 ? "out" : "in";
     };
     const move = set.move && set.move !== "auto" ? set.move : (s.kind === "end" ? "still" : auto());
     out.push({ ...s, move, moveSet: set.move || "auto",
-      dur: Number(set.dur) >= 1 && Number(set.dur) <= 20 ? Math.round(Number(set.dur) * 100) / 100 : (s.kind === "pick" ? 4 : 5),
+      dur: Number(set.dur) >= 1 && Number(set.dur) <= 20 ? Math.round(Number(set.dur) * 100) / 100 : (s.kind === "pick" ? m.len : 5),
       pass: PASSES.some(p => p.id === set.pass) ? set.pass : "fade",
       cap: s.kind === "pick" ? (set.cap == null ? !!s.first : !!set.cap) : false,
       cpos: CAP_POS.includes(set.cpos) ? set.cpos : "bc",
@@ -1761,10 +1938,18 @@ const CSS = `
 .vly-seg button:hover{color:var(--ink)}
 .vly-seg button.on{background:var(--gold);color:#1a1408}
 .vly-div{width:1px;height:20px;background:var(--line);margin:0 2px}
+.vly-live{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;cursor:pointer;flex:0 0 auto;
+  background:#14161a;border:1px solid #3a3e46;color:#8b9098;font:700 9.5px system-ui,sans-serif;letter-spacing:.8px}
+.vly-live i{width:6px;height:6px;border-radius:50%;background:#5a5f68}
+.vly-live:hover{border-color:#5a5f68;color:#c9ccd2}
+.vly-live.on{border-color:#5fc08a;color:#c9f2d9;background:#15281e}
+.vly-live.on i{background:#5fc08a}
 .vly-ibtn{display:inline-flex;align-items:center;gap:6px;background:#121315;border:1px solid #33363c;color:#c9ccd2;
   border-radius:7px;padding:5px 8px;font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap}
 .vly-ibtn.done{border-color:#7fbf8f;color:#9fe0b0}
 .vly-ibtn:hover{border-color:#5a5f68;color:#fff;background:#0c0d0f}
+.vly-ibtn:disabled{opacity:.35;cursor:default}
+.vly-ibtn:disabled:hover{border-color:#33363c;color:#c9ccd2;background:#121315}
 .vly-ibtn.fonts{flex:0 1 auto;min-width:60px;overflow:hidden}
 .vly-ibtn.fonts svg,.vly-ibtn.fonts .sw{flex:0 0 auto}
 .vly-ibtn .sw{width:12px;height:12px;border-radius:3px;border:2px solid #8a7a5a;flex:0 0 auto}
@@ -1884,8 +2069,24 @@ const CSS = `
 .vly-pos9 button.on{background:var(--gold)}
 .vly-shotrow .mhint{margin-left:auto;font-size:10.5px;color:#5f646c}
 .vly-canvas.frameable{cursor:grab}
+.vly-canvas.splitx{cursor:col-resize}
+.vly-canvas.splity{cursor:row-resize}
+.vly-tseg.split button.ic{padding:3px 5px;display:inline-flex;align-items:center}
+.vly-tseg.split svg{display:block;width:26px;height:auto}
+.vly-tseg.split svg rect{fill:#6b6f77}
+.vly-tseg.split svg rect.big{fill:#9aa0a9}
+.vly-tseg.split button.on svg rect{fill:#e8c977}
+.vly-tseg.split button.on svg rect.big{fill:#fff3cf}
 .vly-canvas.frameable.dragging{cursor:grabbing}
 .vly-pop .lgrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vly-pop .slrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vly-pop .slrow .sln-n{width:58px;height:28px;box-sizing:border-box;background:#120e09;border:1px solid #4a3b25;border-radius:7px;
+  color:#f3e6c8;font:inherit;font-size:12.5px;text-align:center;padding:0 4px}
+.vly-pop .slrow .sln-n:focus{outline:none;border-color:#d9b45a}
+.vly-pop .slrow .u{font-size:11.5px;color:#a8987c;margin-left:-4px}
+.vly-pop .slrow .pbtn[disabled]{opacity:.4;cursor:default}
+.vly-pop .kb2{font-size:8.5px;font-weight:700;letter-spacing:.8px;padding:1px 6px;margin-left:6px;border-radius:999px;
+  border:1px solid #6a5530;color:#d9b45a;vertical-align:1px}
 .vly-pop .lgp{display:inline-flex;align-items:center;justify-content:center;height:34px;min-width:60px;padding:4px 8px;border-radius:5px;
   box-shadow:inset 0 0 0 1px #00000030}
 .vly-pop .lgp img{max-height:26px;max-width:120px;display:block}
@@ -1955,6 +2156,10 @@ const CSS = `
 .vly-tl .etip{position:absolute;top:4px;right:6px;padding:2px 6px;border-radius:4px;background:#000000c0;color:#f3d27a;
   font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;display:none;z-index:4}
 .vly-tl .vly-mshot.sizing .etip{display:block}
+.vly-tl .mvk{position:absolute;top:3px;left:4px;width:13px;height:13px;border-radius:3px;background:#000000b8;z-index:3;
+  color:#f3d27a;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.vly-tl .mvk.auto{color:#c9ccd2}
+.vly-tl .mvk svg{width:9px;height:9px;display:block}
 .vly-tl .pass{position:absolute;top:3px;right:5px;width:12px;height:12px;border-radius:3px;background:#000000b8;z-index:3;pointer-events:auto}
 .vly-tl .pass::after{content:"";position:absolute;inset:3px}
 .vly-tl .pass.p-fade::after{background:#f3d27a;clip-path:polygon(0 100%,100% 0,100% 100%)}
@@ -1973,6 +2178,9 @@ const CSS = `
 .vly-mshot .mdel{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;border:0;padding:0;
   background:#000000b0;color:#fff;font-size:12px;line-height:18px;cursor:pointer;opacity:0;transition:opacity .12s}
 .vly-mshot:hover .mdel{opacity:1}
+/* on the timeline the corners above are the move and the pass: the
+   button sits at the foot of the picture instead */
+.vly-tl .vly-mshot .mdel{top:38px;right:4px;width:16px;height:16px;line-height:16px;font-size:11px}
 .vly-mshot .mdel:hover{background:#c0473a}
 .vly-strip .mlen{color:var(--gold);font-weight:600;margin-left:6px;letter-spacing:.3px}
 .vly-mrestore{background:transparent;border:0;color:#e0b85a;font:inherit;font-size:10.5px;font-weight:700;cursor:pointer;margin-left:10px;letter-spacing:.4px}
@@ -1995,14 +2203,166 @@ const CSS = `
 .vly-music .mu-lib:hover{border-color:#e8c977;color:#fff3cf}
 .vly-music .mu-lib.on{background:#2a2113;border-color:#e8c977}
 .vly-music .mu-list{display:flex;flex-direction:column;border-top:1px solid var(--line);max-height:220px;overflow-y:auto}
-.vly-music .mu-it{display:grid;grid-template-columns:14px minmax(0,1fr) auto 22px;align-items:center;gap:8px;padding:6px 4px;
+.vly-music.drop{outline:2px dashed var(--gold);outline-offset:-4px;background:#2a211333}
+.vly-music .mu-mode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0 6px;border-top:1px solid var(--line)}
+.vly-music .mu-mode .hint{font-size:10.5px;color:#5f646c}
+.vly-music .mu-pv{width:22px;height:22px;border-radius:50%;border:1px solid #a8883f;background:transparent;color:#e8c977;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto}
+.vly-music .mu-pv svg{width:10px;height:10px;display:block}
+.vly-music .mu-pv:hover{border-color:#e8c977;color:#fff3cf;background:#2a2113}
+.vly-music .mu-pv.on{background:#e8c977;border-color:#e8c977;color:#241703}
+.vly-music .mu-pt{font-size:10.5px;color:var(--gold);font-style:normal;font-variant-numeric:tabular-nums;min-width:0}
+.vly-music .mu-it .mu-pv{width:20px;height:20px;justify-self:center}
+.vly-music .mu-it{display:grid;grid-template-columns:22px 18px 18px minmax(0,1fr) auto 40px 60px 22px 22px;align-items:center;gap:8px;padding:6px 4px;
   border-bottom:1px solid #1d1f23;cursor:pointer;font-size:11.5px;color:#b9bcc2}
 .vly-music .mu-it:hover{background:#00000030;color:#f1ede5}
 .vly-music .mu-it .dot{width:6px;height:6px;border-radius:50%;background:#2c2f34;justify-self:center}
-.vly-music .mu-it.cur{color:var(--gold)}
+.vly-music .mu-it.playing,.vly-music .mu-it.playing:hover{color:var(--gold)}
 .vly-music .mu-it.cur .dot{background:var(--gold)}
 .vly-music .mu-it .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vly-music .mu-it .sz{color:#5f646c;font-size:10.5px;font-variant-numeric:tabular-nums}
+.vly-music .mu-it .du{color:#8a8e95;font-size:10.5px;font-variant-numeric:tabular-nums;text-align:right}
+.vly-music .mu-mk{width:16px;height:16px;border-radius:4px;border:1px solid #3a3d43;background:transparent;color:transparent;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;padding:0;justify-self:center}
+.vly-music .mu-mk svg{width:10px;height:10px;display:block}
+.vly-music .mu-mk:hover{border-color:#a8883f;color:#6a5a33}
+.vly-music .mu-mk.on{background:#e8c977;border-color:#e8c977;color:#241703}
+.vly-music .mu-st{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:1px 7px 1px 5px;border-radius:9px;
+  background:#2a2113;color:var(--gold);font-size:10px;font-style:normal;vertical-align:1px}
+.vly-music .mu-st svg{width:11px;height:11px;display:block}
+.vly-music .pvm button.ic{padding:3px 7px;display:inline-flex;align-items:center}
+.vly-music .pvm button.ic svg{width:15px;height:15px;display:block}
+.vly-music .mu-mode .mk{font-size:10.5px;color:var(--gold)}
+.vly-music .mu-now{display:inline-flex;align-items:baseline;gap:8px;max-width:300px;min-width:0;font-size:11.5px;color:var(--gold)}
+.vly-music .mu-now .nn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.vly-music .mu-now .nt{flex:0 0 auto;font-size:10.5px;color:#a8883f;font-variant-numeric:tabular-nums}
+.vly-music .mu-now .nt .mu-pt{color:var(--gold)}
+.vly-music .mu-now.idle,.vly-music .mu-now.paused .nn{color:#8a8e95}
+.vly.player .vly-top,.vly.player .vly-side,.vly.player .vly-desk,.vly.player .vly-tools,.vly.player .vly-coverpick,
+.vly.player .vly-extra,.vly.player .vly-strip,.vly.player .vly-note{display:none!important}
+.vly.player .vly-music>.vly-h,.vly.player .vly-music .mu-row,.vly.player .vly-music .mu-info{display:none}
+.vly.player .vly-music .mu-mode{border-top:0;padding-top:2px}
+.vly.player .vly-body{grid-template-columns:minmax(0,1fr)}
+.vly.player .vly-music .mu-list{max-height:none}
+.vly.player .vly-music .mu-mode>.lab2{color:var(--gold)}
+.vly-music .mp-head{display:flex;flex-direction:column;gap:14px;padding:2px 2px 12px}
+.vly-music .mp-top{display:flex;align-items:center;gap:12px}
+.vly-music .mp-top .lab2{color:var(--gold)}
+.vly-music .mp-where{font-size:11px;color:#8a8e95;margin-right:auto}
+.vly-music .mp-main{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:22px;
+  padding:14px 16px;border:1px solid color-mix(in srgb,var(--sg) 30%,#2c2f34);border-radius:12px;
+  background:color-mix(in srgb,var(--sg) 13%,#1a1c1f)}
+/* the display: a black window set into the body, the gold lit inside it */
+.vly-music .mp-now{background:#050607;border:1px solid #000;border-radius:8px;padding:12px 16px 11px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.035),0 1px 0 rgba(255,255,255,.05)}
+.vly-music .mp-tr{display:flex;align-items:center;gap:10px}
+.vly-music .mp-tr button{width:36px;height:36px;border-radius:50%;border:0;background:transparent;color:#d6d8dc;cursor:pointer;padding:0;
+  display:inline-flex;align-items:center;justify-content:center}
+.vly-music .mp-tr button svg{width:18px;height:18px;display:block}
+.vly-music .mp-tr button:hover{color:#fff3cf;background:#2a2113}
+.vly-music .mp-tr button.pp{width:50px;height:50px;border:1px solid #a8883f;color:#e8c977}
+.vly-music .mp-tr button.pp svg{width:20px;height:20px}
+.vly-music .mp-tr button.pp.on,.vly-music .mp-tr button.pp:hover{background:#e8c977;border-color:#e8c977;color:#241703}
+.vly-music .mp-now{min-width:0;display:flex;flex-direction:column;gap:7px}
+.vly-music .mp-title{font-size:15px;font-weight:500;color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vly-music .mp-now.idle .mp-title,.vly-music .mp-now.paused .mp-title{color:#b9bcc2}
+.vly-music .mp-side{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:max-content}
+.vly-music .mp-row2{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vly-music .mp-side .pvm{display:flex}
+.vly-music .mu-fl{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:1px 7px 1px 5px;border-radius:9px;
+  border:1px solid #6a5a33;color:var(--gold);font-size:10px;vertical-align:1px}
+.vly-music .mu-fl svg{width:11px;height:11px;display:block}
+.vly-music .mp-here{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:7px;border:1px solid #2c2f34;
+  background:#121315;color:#d6d8dc;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+.vly-music .mp-here svg{width:13px;height:13px}
+.vly-music .mp-here i{font-style:normal;color:var(--gold);font-variant-numeric:tabular-nums;min-width:28px}
+.vly-music .mp-here:hover{border-color:var(--gold);color:#fff3cf}
+.vly-music .mp-film{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:7px;border:1px solid #a8883f;
+  background:transparent;color:#e8c977;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+.vly-music .mp-film svg{width:13px;height:13px}
+.vly-music .mp-film:hover:not(:disabled){background:#e8c977;color:#241703}
+.vly-music .mp-film.on{background:#2a2418;border-color:#6a5a33;color:var(--gold);cursor:default}
+.vly-music .mp-film:disabled:not(.on){border-color:#2c2f34;color:#5f646c;cursor:default}
+.vly-music .mp-eqb{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:7px;border:1px solid #2c2f34;
+  background:#121315;color:#8a8e95;font:inherit;font-size:10.5px;letter-spacing:.06em;cursor:pointer}
+.vly-music .mp-eqb svg{width:12px;height:12px}
+.vly-music .mp-eqb:hover{color:var(--ink);border-color:#3a3d43}
+.vly-music .mp-eqb.on{background:#2a2418;border-color:#6a5a33;color:var(--gold)}
+.vly-music .mp-vol{display:flex;align-items:center;gap:6px;color:#8a8e95}
+.vly-music .mp-vol svg{width:14px;height:14px;flex:0 0 auto}
+.vly-music .mp-vol input.mp-volr{width:70px;-webkit-appearance:none;appearance:none;height:12px;background:transparent;cursor:pointer;margin:0}
+.vly-music .mp-volr::-webkit-slider-runnable-track{height:2px;border-radius:1px;background:linear-gradient(to right,#e8c977 var(--v,100%),#3a3d43 var(--v,100%))}
+.vly-music .mp-volr::-moz-range-track{height:2px;border-radius:1px;background:#3a3d43}
+.vly-music .mp-volr::-moz-range-progress{height:2px;border-radius:1px;background:#e8c977}
+.vly-music .mp-volr::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#e8c977;border:0;margin-top:-4px}
+.vly-music .mp-volr::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:#e8c977;border:0}
+.vly-music .mp-eq{display:block;width:100%;height:22px;color:var(--gold)}
+.vly-music .mp-bar{display:flex;align-items:center;gap:10px;font-size:10.5px;color:#8a8e95;font-variant-numeric:tabular-nums}
+.vly-music .mp-bar .mu-pt{color:var(--gold);min-width:30px}
+.vly-music .mp-bar .t1{min-width:30px;text-align:right}
+.vly-music .mp-track{flex:1;height:14px;display:flex;align-items:center;cursor:pointer;position:relative}
+.vly-music .mp-track::before{content:"";position:absolute;left:0;right:0;top:6px;height:3px;border-radius:2px;background:#2c2f34}
+.vly-music .mp-track i{position:relative;display:block;height:3px;border-radius:2px;background:var(--gold)}
+.vly-music .mp-track:hover::before{background:#3a3d43}
+.vly-music .mp-tabs{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vly-music .mp-tabs .mk,.vly-music .mp-tabs .hint{margin-left:auto;font-size:10.5px}
+.vly-music .mp-tabs .hint{color:#5f646c}
+.vly-music .mp-tabs .mk{color:var(--gold)}
+.vly-music .mp-tabs .mk button{background:transparent;border:0;color:#8a8e95;font:inherit;cursor:pointer;text-decoration:underline;padding:0 0 0 6px}
+.vly-music .mu-back{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:7px;border:1px solid #2c2f34;
+  background:#121315;color:#b9bcc2;font:inherit;font-size:11px;cursor:pointer}
+.vly-music .mu-back svg{width:13px;height:13px}
+.vly-music .mu-back:hover{border-color:var(--gold);color:#fff3cf}
+.vly-music .mu-tr{display:inline-flex;align-items:center;gap:4px}
+.vly-music .mu-tr button{width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:#b9bcc2;cursor:pointer;padding:0;
+  display:inline-flex;align-items:center;justify-content:center}
+.vly-music .mu-tr button svg{width:14px;height:14px;display:block}
+.vly-music .mu-tr button:hover{color:#fff3cf;background:#2a2113}
+.vly-music .mu-tr button.pp{border:1px solid #a8883f;color:#e8c977}
+.vly-music .mu-tr button.pp.on{background:#e8c977;border-color:#e8c977;color:#241703}
+.vly-music .mu-tabs{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.vly-music .mu-mode .mk,.vly-music .mu-mode .hint{margin-left:auto}
+.vly-music .mu-tab{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:12px;border:1px solid #2c2f34;
+  background:#121315;color:var(--mute);font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+.vly-music .mu-tab b{font-weight:600;color:#5f646c;font-variant-numeric:tabular-nums}
+.vly-music .mu-tab svg{width:12px;height:12px;display:block;flex:0 0 auto}
+.vly-music .mu-tab:hover{color:var(--ink);border-color:#3a3d43}
+.vly-music .mu-tab.on{background:#2a2418;border-color:#6a5a33;color:var(--gold)}
+.vly-music .mu-tab.on b{color:#a8883f}
+.vly-music .mu-tab.over{border-color:var(--gold);background:#3a2e17;color:#fff3cf}
+.vly-music .mu-tab.add{border-style:dashed;color:#8a8e95}
+.vly-music .mu-tab .mu-fdx{display:inline-flex;width:14px;height:14px;border-radius:50%;align-items:center;justify-content:center;margin-right:-4px;color:#a8883f}
+.vly-music .mu-tab .mu-fdx svg{width:9px;height:9px}
+.vly-music .mu-tab .mu-fdx:hover{background:#00000040;color:#fff}
+.vly-music .mu-tab .mu-fdx.armed{background:#c0473a;color:#fff}
+.vly-music .mu-fin{height:24px;border-radius:12px;border:1px solid var(--gold);background:#121315;color:#f1ede5;font:inherit;font-size:11px;
+  padding:0 10px;width:150px;outline:none}
+.vly-music .mu-st2{width:16px;height:16px;border:0;background:transparent;color:#4a4d53;cursor:pointer;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;justify-self:center}
+.vly-music .mu-st2 svg{width:13px;height:13px;display:block}
+.vly-music .mu-st2:hover{color:#a8883f}
+.vly-music .mu-st2.on{color:var(--gold)}
+.vly-music .mu-rin{width:min(100%,420px);height:22px;border-radius:5px;border:1px solid var(--gold);background:#121315;color:#f1ede5;
+  font:inherit;font-size:11.5px;padding:0 7px;outline:none}
+.vly-music .mu-ord{display:inline-flex;gap:2px;opacity:0;justify-self:center}
+.vly-music .mu-it:hover .mu-ord{opacity:1}
+.vly-music .mu-ord button{width:18px;height:18px;border-radius:4px;border:0;background:transparent;color:#8a8e95;cursor:pointer;padding:0;
+  display:inline-flex;align-items:center;justify-content:center}
+.vly-music .mu-ord button svg{width:11px;height:11px;display:block}
+.vly-music .mu-ord button:hover:not(:disabled){color:var(--gold);background:#2c2f34}
+.vly-music .mu-ord button:disabled{opacity:.25;cursor:default}
+.vly-music .mu-fb{width:20px;height:20px;border-radius:5px;border:0;background:transparent;color:#5f646c;cursor:pointer;opacity:0;
+  display:inline-flex;align-items:center;justify-content:center;padding:0}
+.vly-music .mu-fb svg{width:13px;height:13px}
+.vly-music .mu-it:hover .mu-fb,.vly-music .mu-fb.on{opacity:1}
+.vly-music .mu-fb:hover,.vly-music .mu-fb.on{color:var(--gold);background:#2c2f34}
+.vly-music .mu-it.drag{opacity:.45}
+.vly-music .mu-fm{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 4px 8px 66px;border-bottom:1px solid #1d1f23;background:#00000026}
+.vly-music .mu-fm .lab2{margin-right:4px}
+.vly-music .mu-fm .mu-tab{height:22px}
+.vly-music .mu-empty{padding:14px 4px;font-size:11px;color:#5f646c;border-bottom:1px solid #1d1f23}
+.vly-music .mu-mode .mk button{background:transparent;border:0;color:#8a8e95;font:inherit;cursor:pointer;text-decoration:underline;padding:0 0 0 6px}
+.vly-music .mu-mode .mk button:hover{color:#f1ede5}
 .vly-music .mu-del{width:20px;height:20px;border-radius:5px;border:0;background:transparent;color:#5f646c;cursor:pointer;opacity:0;
   display:inline-flex;align-items:center;justify-content:center;padding:0}
 .vly-music .mu-del svg{width:11px;height:11px}
@@ -2311,12 +2671,18 @@ function installTips() {
 }
 
 // ------------------------------------------------------------ the node
+/* Every Layout node on the canvas: the film's music set in one reaches the
+   others laid out on the same series, so a node kept as a music player and
+   the node the film is made in agree. */
+const VLY_ALL = new Set();
+
 function buildLayout(node) {
   injectCss();
   loadFonts();
   const P = node.properties || (node.properties = {});
   function defaults() {
     if (typeof P.vly_series !== "string") P.vly_series = "";
+    if (typeof P.vly_live !== "boolean") P.vly_live = true;
     if (!P.vly_state || typeof P.vly_state !== "object") P.vly_state = {};
     if (P.vly_cat !== "web" && P.vly_cat !== "motion") P.vly_cat = "print";
     if (!P.vly_fmt || typeof P.vly_fmt !== "object") P.vly_fmt = {};
@@ -2336,6 +2702,7 @@ function buildLayout(node) {
     <div class="vly-top">
       <span class="vly-mark">LAYOUT</span>
       <select class="vly-sel ser" title="The series to lay out - every series the Series Book has saved"></select>
+      <button class="vly-live" title="LIVE - follow the Series Book: the series opened there is laid out here. Off - stay on the series chosen here"><i></i>LIVE</button>
       <span class="vly-div"></span>
       <span class="vly-seg cat">
         <button data-c="print" title="Spreads of two pages, for print">PRINT</button>
@@ -2345,7 +2712,10 @@ function buildLayout(node) {
       <select class="vly-sel fmt" title="The size of the page or frame"></select>
       <button class="vly-ibtn fonts" title="Style - colour, typefaces and where the words sit">${ICON.type}<span class="sw"></span><span class="fn"></span></button>
       <span class="vly-sp"></span>
+      <button class="vly-ibtn mp" title="Music player - the node becomes a player of the music kept here; everything else hides until you come back">${ICON.note}</button>
       <button class="vly-ibtn fs" title="Full screen (F or ↓) - ← → step through, Esc or ↑ to come back">${ICON.full}</button>
+      <button class="vly-ibtn ud" title="Undo (Ctrl+Z) - back to the layout as it was before the last change" disabled>${ICON.undo}</button>
+      <button class="vly-ibtn rd" title="Redo (Ctrl+Y or Ctrl+Shift+Z)" disabled>${ICON.redo}</button>
       <button class="vly-ibtn rf" title="Read the book and the picks again">${ICON.refresh}</button>
       <button class="vly-ibtn sv" title="Save the layout as it stands as a .layout file - into output / series / layout / saved, a new file every time">${ICON.save}</button>
       <button class="vly-ibtn op" title="Open a .layout file - saved, or from a package - or drop it on this node">${ICON.open}</button>
@@ -2392,7 +2762,7 @@ function buildLayout(node) {
       <div class="vly-fkeys"><kbd>←</kbd><kbd>→</kbd> step &nbsp;·&nbsp; <kbd>Esc</kbd> back to the node</div>
     </div>`;
   const $ = (s) => root.querySelector(s);
-  const serSel = $(".ser"), fmtSel = $(".fmt"), catSeg = $(".cat"), fontsBtn = $(".fonts");
+  const serSel = $(".ser"), fmtSel = $(".fmt"), catSeg = $(".cat"), fontsBtn = $(".fonts"), liveBtn = $(".vly-live");
   const cutsBox = $(".vly-cuts"), nCuts = $(".nc");
   const desk = $(".vly-desk"), canvas = $(".vly-canvas"), count = $(".vly-count");
   let STG = null, pdrag = null;      // the stage as drawn, and a picture being moved in its frame
@@ -2424,6 +2794,9 @@ function buildLayout(node) {
     st.pos = st.pos || {};
     st.off = st.off || {};
     st.align = st.align || {};
+    st.show = st.show || {};
+    st.split = st.split || {};
+    st.splitW = st.splitW || {};
     // a single pick per cut, as the first layouts kept it
     for (const [no, id] of Object.entries(st.pick)) if (!st.sel[no] && id != null) st.sel[no] = [id];
     if (st.cover === undefined) st.cover = null;
@@ -2600,13 +2973,16 @@ function buildLayout(node) {
 
   async function loadBook(quiet) {
     if (!P.vly_series) { S.book = null; paint(); return; }
+    const asked = P.vly_series;
     let j;
     try {
-      const r = await api.fetchApi(BOOK_URL, { method: "POST", body: JSON.stringify({ series: P.vly_series }) });
+      const r = await api.fetchApi(BOOK_URL, { method: "POST", body: JSON.stringify({ series: asked }) });
       j = await r.json();
     } catch (e) {
       j = { ok: false, error: String(e && e.message || e) };
     }
+    // another series was chosen while this one was read
+    if (asked !== P.vly_series) return;
     if (!j.ok) {
       S.book = null;
       S.sig = "";
@@ -2621,6 +2997,15 @@ function buildLayout(node) {
     S.book = bookWords(j);
     followTone();
     paint();
+    // another series: its history starts here
+    if (HIST.series !== asked) {
+      HIST.series = asked;
+      HIST.undo.length = 0;
+      HIST.redo.length = 0;
+      HIST.cur = snapOf();
+      HIST.t = 0;
+      paintHist();
+    }
   }
 
   // ---- painting
@@ -2634,11 +3019,83 @@ function buildLayout(node) {
     fontsBtn.querySelector(".fn").textContent = `${th.label} \u00b7 ${P.vly_font.title} / ${P.vly_font.body}`;
   }
 
+  /* Undo and redo: every change to the layout - its pages, picks, shots,
+     style - is a step. A step is the whole of what the node keeps, so going
+     back is exact; changes made within a moment of each other, as while
+     typing, are one step. Choosing another series, or another size, is not
+     a step. */
+  const UNDO_KEYS = ["vly_state", "vly_theme", "vly_font", "vly_size", "vly_textpos", "vly_lines", "vly_logo", "vly_tags"];
+  const HIST = { undo: [], redo: [], cur: null, t: 0, busy: false };
+  function snapOf() {
+    const o = {};
+    for (const k of UNDO_KEYS) o[k] = P[k];
+    return JSON.stringify(o);
+  }
+  function record() {
+    if (HIST.busy || S.dead) return;
+    const now = snapOf();
+    if (HIST.cur === null) { HIST.cur = now; paintHist(); return; }
+    if (now === HIST.cur) return;
+    const t = performance.now();
+    if (!(t - HIST.t < 450 && HIST.undo.length)) {
+      HIST.undo.push(HIST.cur);
+      if (HIST.undo.length > 120) HIST.undo.shift();
+    }
+    HIST.redo.length = 0;
+    HIST.cur = now;
+    HIST.t = t;
+    paintHist();
+  }
+  function applySnap(text) {
+    HIST.busy = true;
+    try {
+      const o = JSON.parse(text);
+      for (const k of UNDO_KEYS) {
+        if (o[k] === undefined) delete P[k];
+        else P[k] = JSON.parse(JSON.stringify(o[k]));
+      }
+      HIST.cur = text;
+      HIST.t = 0;
+      LOGO = null;
+      if (isMotion()) mpause();
+      closePop();
+      paint();
+    } finally { HIST.busy = false; }
+    paintHist();
+  }
+  function undo() {
+    record();
+    if (!HIST.undo.length) { say("Nothing to undo"); return; }
+    HIST.redo.push(HIST.cur);
+    applySnap(HIST.undo.pop());
+    say(`Undone - ${HIST.undo.length} more step${HIST.undo.length === 1 ? "" : "s"} back`);
+  }
+  function redo() {
+    record();
+    if (!HIST.redo.length) { say("Nothing to redo"); return; }
+    HIST.undo.push(HIST.cur);
+    applySnap(HIST.redo.pop());
+    say("Redone");
+  }
+  function paintHist() {
+    const u = root.querySelector(".ud"), r = root.querySelector(".rd");
+    if (u) u.disabled = !HIST.undo.length;
+    if (r) r.disabled = !HIST.redo.length;
+  }
+
   function paint() {
     if (S.dead) return;
+    record();
     syncLogo();
     deskHeight();
     paintTop();
+    root.classList.toggle("player", isPlayer());
+    if (isPlayer()) {
+      musicBox.style.display = "";
+      paintMusic();
+      fitNode();
+      return;
+    }
     const book = S.book;
     if (!book) {
       cutsBox.innerHTML = `<div class="vly-cx" style="border-radius:8px">Choose a series saved in the Series Book.</div>`;
@@ -2768,6 +3225,41 @@ function buildLayout(node) {
       const cur = sh.style;
       html += `<span class="vly-tseg cov">` + COVERS[cat].map(c =>
         `<button class="${c.id === cur ? "on" : ""}" data-cov="${c.id}" title="${esc(c.hint)}">${esc(c.label)}</button>`).join("") + `</span>`;
+    }
+    const multi = (sh.cuts || []).find(c => c.picks && c.picks.length > 1);
+    if (multi) {
+      const n = multi.picks.length;
+      const sp = (v.split || {})[`${G.cat}:${sh.id}`] || "";
+      const list = n <= 4 ? ARRANGE[n] : [arrangeOf(n, "row"), arrangeOf(n, "col")];
+      // a small drawing of each arrangement, in the shape of the spread or frame
+      const iw = 26, ih = Math.max(10, Math.round(26 * (G.sheetH / G.sheetW)));
+      const icon = (a) => {
+        const cells = treeCells(a, null, 0, 0, iw, ih, 1.5);
+        return `<svg viewBox="0 0 ${iw} ${ih}" width="${iw}" height="${ih}">` + cells.map((c, i) =>
+          `<rect x="${c.x.toFixed(2)}" y="${c.y.toFixed(2)}" width="${c.w.toFixed(2)}" height="${c.h.toFixed(2)}" rx="0.8"${i === 0 && a.w ? ' class="big"' : ""}/>`).join("") + `</svg>`;
+      };
+      html += `<span class="vly-vsep"></span><span class="lab2">PICKS</span><span class="vly-tseg split">`
+        + `<button class="au${sp ? "" : " on"}" data-split="" title="Auto - the arrangement that cuts the least off the pictures. Drag a line between them to change their sizes">Auto</button>`
+        + list.map(a => `<button class="ic${sp === a.id ? " on" : ""}" data-split="${a.id}" title="${esc((a.label || a.id) + " - drag a line between the pictures on the page to change their sizes; double-click it to even them")}">${icon(a)}</button>`).join("")
+        + `</span>`;
+    }
+    if (sh.t !== "F") {
+      // print and web each keep their own
+      const sw = { show: (v.show || {})[`${G.cat}:${sh.id}`] || "both" };
+      const op = sh.t === "A" || sh.t === "A2";
+      // a picture to the edge carries only a small label in its corner - the
+      // buttons say so, rather than Title and Text that would promise a block
+      const corner = sh.t === "B" || sh.t === "D" || (G.cat === "web" && sh.t === "C" && sh.part === 0);
+      const tg = (id, on, label, title) => `<button class="${on ? "on" : ""}" data-show="${id}" title="${esc(title)}">${label}</button>`;
+      html += `<span class="vly-vsep"></span><span class="lab2">SHOW</span><span class="vly-tseg show">`;
+      if (corner) {
+        html += tg("title", showsTitle(sw), "Number", "The cut's number, small in the corner of the picture - on or off");
+        if (sh.t === "B") html += tg("text", showsText(sw), "Caption", "The caption beside the number, small in the corner - on or off. For the title and note on the picture, choose Text on photo");
+      } else {
+        html += tg("title", showsTitle(sw), "Title", op ? "The series number and title - on or off" : "The number and title of the cut - on or off")
+          + tg("text", showsText(sw), "Text", op ? "The note of the series - on or off" : "The caption and note of the cut - on or off");
+      }
+      html += `</span>`;
     }
     if (hasWords(sh, G)) {
       const own = (v.pos || {})[sh.id] || "";
@@ -2923,12 +3415,13 @@ function buildLayout(node) {
       cv.style.width = `${G.sheetW * scale}px`;
       cv.style.height = `${G.sheetH * scale}px`;
       const stage = cv === canvas;
-      if (stage) HITS = [];
+      if (stage) { HITS = []; DIVS = []; }
       try { drawSheet(cv.getContext("2d"), k, sh, G, S.book, v, pics, true); }
       finally {
         if (stage) {
-          STG = { sh, G, k, pics, hits: HITS.filter(h => h.ox > 0.5 || h.oy > 0.5) };
+          STG = { sh, G, k, pics, hits: HITS.filter(h => h.ox > 0.5 || h.oy > 0.5), divs: DIVS };
           HITS = null;
+          DIVS = null;
           canvas.classList.toggle("frameable", !isMotion() && STG.hits.length > 0);
         }
       }
@@ -2965,11 +3458,57 @@ function buildLayout(node) {
     if (!STG) return;
     const v = view();
     HITS = [];
+    DIVS = [];
     try { drawSheet(canvas.getContext("2d"), STG.k, STG.sh, STG.G, S.book, v, STG.pics, true); }
-    finally { STG.hits = HITS.filter(h => h.ox > 0.5 || h.oy > 0.5); HITS = null; }
+    finally { STG.hits = HITS.filter(h => h.ox > 0.5 || h.oy > 0.5); STG.divs = DIVS; HITS = null; DIVS = null; }
+  }
+  /* The line between two pictures sharing a place, under the pointer. */
+  function divAt(e) {
+    if (!STG || isMotion() || !STG.divs || !STG.divs.length) return null;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width) return null;
+    const u = STG.G.sheetW / r.width;
+    const px = (e.clientX - r.left) * u, py = (e.clientY - r.top) * u;
+    const tol = 5 * u;
+    for (const d of STG.divs) {
+      const b = d.box;
+      if (d.d === "h" ? Math.abs(px - d.at) <= tol && py >= b.y && py <= b.y + b.h
+        : Math.abs(py - d.at) <= tol && px >= b.x && px <= b.x + b.w) return { d, u };
+    }
+    return null;
+  }
+  let ddrag = null, lastDiv = null;
+  function shareMap(tag, arr) {
+    const st = state();
+    st.split = st.split || {};
+    st.splitW = st.splitW || {};
+    st.split[tag] = arr;
+    if (!st.splitW[tag] || st.splitW[tag]._a !== arr) st.splitW[tag] = { _a: arr };
+    return st.splitW[tag];
   }
   canvas.addEventListener("pointerdown", (e) => {
     if (isMotion() || e.button !== 0) return;
+    // a line between pictures first: dragging it shares the place anew
+    const dv = divAt(e);
+    if (dv) {
+      e.preventDefault();
+      e.stopPropagation();
+      // pressed twice on the same line: the pictures either side even again
+      const now = performance.now();
+      const same = lastDiv && lastDiv.tag === dv.d.tag && lastDiv.path === dv.d.path && lastDiv.i === dv.d.i && now - lastDiv.t < 400;
+      lastDiv = { tag: dv.d.tag, path: dv.d.path, i: dv.d.i, t: now };
+      if (same) {
+        lastDiv = null;
+        const sw = shareMap(dv.d.tag, dv.d.arr);
+        delete sw[dv.d.path];
+        paint();
+        return;
+      }
+      canvas.setPointerCapture(e.pointerId);
+      ddrag = { ...dv.d, u: dv.u, x: e.clientX, y: e.clientY, moved: false };
+      canvas.classList.add("dragging");
+      return;
+    }
     const hit = hitAt(e);
     if (!hit) return;
     e.preventDefault();
@@ -2981,8 +3520,25 @@ function buildLayout(node) {
     canvas.classList.add("dragging");
   });
   canvas.addEventListener("pointermove", (e) => {
+    if (ddrag) {
+      const dd = ddrag.d === "h" ? (e.clientX - ddrag.x) * ddrag.u : (e.clientY - ddrag.y) * ddrag.u;
+      const ws = ddrag.ws.slice();
+      const i = ddrag.i, pair = ws[i] + ws[i + 1], min = Math.min(0.12, pair / 3);
+      const a = Math.max(min, Math.min(pair - min, ws[i] + dd / ddrag.avail));
+      ws[i] = Math.round(a * 1000) / 1000;
+      ws[i + 1] = Math.round((pair - a) * 1000) / 1000;
+      shareMap(ddrag.tag, ddrag.arr)[ddrag.path] = ws;
+      ddrag.moved = true;
+      redrawStage();
+      return;
+    }
     if (!pdrag) {
-      if (!isMotion() && STG) canvas.classList.toggle("frameable", !!hitAt(e));
+      if (!isMotion() && STG) {
+        const dv = divAt(e);
+        canvas.classList.toggle("splitx", !!dv && dv.d.d === "h");
+        canvas.classList.toggle("splity", !!dv && dv.d.d === "v");
+        canvas.classList.toggle("frameable", !dv && !!hitAt(e));
+      }
       return;
     }
     const dx = (e.clientX - pdrag.x) * pdrag.u, dy = (e.clientY - pdrag.y) * pdrag.u;
@@ -2995,6 +3551,13 @@ function buildLayout(node) {
     redrawStage();
   });
   const endPDrag = () => {
+    if (ddrag) {
+      const moved = ddrag.moved;
+      ddrag = null;
+      canvas.classList.remove("dragging");
+      if (moved) paint();
+      return;
+    }
     if (!pdrag) return;
     const moved = pdrag.moved;
     pdrag = null;
@@ -3005,6 +3568,15 @@ function buildLayout(node) {
   canvas.addEventListener("pointercancel", endPDrag);
   canvas.addEventListener("dblclick", (e) => {
     if (isMotion()) return;
+    const dv = divAt(e);
+    if (dv) {
+      // the two pictures either side back to their first shares
+      e.stopPropagation();
+      const sw = shareMap(dv.d.tag, dv.d.arr);
+      delete sw[dv.d.path];
+      paint();
+      return;
+    }
     const hit = hitAt(e);
     if (!hit) return;
     e.stopPropagation();
@@ -3130,6 +3702,8 @@ function buildLayout(node) {
         <div class="grp lgg"><span class="lab">LOGO</span><div class="lgrow"></div>
           <input class="lgf" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" style="display:none" />
           <span class="note2">At the foot of the closing page - in print, on the web and at the end of the film.</span></div>
+        <div class="grp sln"><span class="lab">SHOT LENGTH <span class="kb2">MOTION</span></span><div class="slrow"></div>
+          <span class="note2 sli"></span></div>
       </div>
       <div class="opts sizes">
         <div class="grp sz"><span class="lab">TITLE SIZE <b class="v" data-v="title">${pct(P.vly_size.title)}%</b></span>
@@ -3181,6 +3755,7 @@ function buildLayout(node) {
         `<button class="${t.id === P.vly_textpos ? "on" : ""}" data-tp="${t.id}">${esc(t.label)}</button>`).join("");
       pop.querySelector(".pseg.nl").innerHTML = NOTE_LINES.map(t =>
         `<button class="${(P.vly_lines || "all") === t.id ? "on" : ""}" data-nl="${t.id}" title="${esc(t.hint)}">${esc(t.label)}</button>`).join("");
+      fillLen();
       const lg = P.vly_logo || {};
       pop.querySelector(".lgrow").innerHTML = lg.name
         ? `<span class="lgp" style="background:${(THEMES.find(t => t.id === P.vly_theme) || THEMES[0]).paper}"><img src="${api.apiURL(LOGO_URL)}?name=${encodeURIComponent(lg.name)}" /></span>
@@ -3189,6 +3764,31 @@ function buildLayout(node) {
            <button class="pbtn lgc">Change\u2026</button><button class="pbtn lgx">Remove</button>`
         : `<button class="pbtn lgc">Choose a logo\u2026</button><span class="note2">PNG, SVG, JPEG or WebP - a PNG or SVG with a clear background sits best.</span>`;
     };
+    /* The length of every picture shot in the film of this series that has
+       not been given its own - and a button to give it to those too. */
+    function fillLen() {
+      const row = pop.querySelector(".slrow");
+      if (!row) return;
+      if (!S.book) { row.innerHTML = ""; pop.querySelector(".sli").textContent = "Choose a series first."; return; }
+      const m = mstate();
+      const own = Object.entries(m.set).filter(([k, v]) => k.startsWith("p:") && v && v.dur != null).length;
+      row.innerHTML = `<span class="pseg">${[2, 3, 4, 5, 6, 8].map(v =>
+          `<button class="${m.len === v ? "on" : ""}" data-sl="${v}">${v}s</button>`).join("")}</span>
+        <input class="sln-n" type="number" min="1" max="20" step="0.1" value="${m.len}" title="Any length from 1 to 20 seconds" /><span class="u">s</span>
+        <button class="pbtn sla"${own ? "" : " disabled"} title="Give this length to the shots with a length of their own as well">Set every shot</button>`;
+      pop.querySelector(".sli").textContent = own
+        ? `Every picture shot of this film without a length of its own. ${own} shot${own === 1 ? " has" : "s have"} one - Set every shot gives them this length too. The title and closing keep theirs.`
+        : "Every picture shot of this film. A length set on a shot itself stays its own. The title and closing keep theirs.";
+    }
+    const setLen = (v) => {
+      v = Math.round(Math.max(1, Math.min(20, Number(v) || 4)) * 100) / 100;
+      mstate().len = v;
+      fillLen();
+      paint();
+    };
+    pop.addEventListener("change", (e) => {
+      if (e.target.closest(".sln-n")) setLen(e.target.value);
+    });
     let sizeT = 0;
     pop.addEventListener("change", async (e) => {
       const inp = e.target.closest(".lgf");
@@ -3240,6 +3840,16 @@ function buildLayout(node) {
       }
       const nl = e.target.closest("[data-nl]");
       if (nl) { P.vly_lines = nl.dataset.nl; fillOpts(); rewords(); return; }
+      const sl = e.target.closest("[data-sl]");
+      if (sl) { setLen(sl.dataset.sl); return; }
+      if (e.target.closest(".sla")) {
+        const m = mstate();
+        for (const [k, v] of Object.entries(m.set)) if (k.startsWith("p:") && v) delete v.dur;
+        MZ.fitUndo = null;
+        fillLen();
+        paint();
+        return;
+      }
       if (e.target.closest(".lgc")) { pop.querySelector(".lgf").click(); return; }
       if (e.target.closest(".lgx")) { delete P.vly_logo; fillOpts(); paint(); return; }
       const lgs = e.target.closest("[data-lgs]");
@@ -3914,8 +4524,34 @@ function buildLayout(node) {
   root.addEventListener("pointerdown", (e) => {
     if (e.target.closest("button, select, img, textarea, input, .vly-mini, .vly-cut, .vly-full, .vly-coverpick")) e.stopPropagation();
   });
-  root.addEventListener("mouseenter", () => { S.hovered = true; });
-  root.addEventListener("mouseleave", () => { S.hovered = false; });
+  /* ComfyUI keeps its own undo of the whole workflow on Ctrl+Z, read on the
+     page before any node hears the key - and it leaves the key alone while a
+     text field has the focus. So while the pointer is over the node an
+     unseen field holds the focus: Ctrl+Z is then the layout's own, and the
+     workflow is not reloaded under it. A real field being typed in keeps
+     its focus. */
+  const sink = document.createElement("textarea");
+  sink.className = "vly-sink";
+  sink.tabIndex = -1;
+  sink.setAttribute("aria-hidden", "true");
+  sink.style.cssText = "position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;resize:none;border:0;padding:0;margin:0;overflow:hidden";
+  root.appendChild(sink);
+  sink.addEventListener("input", () => { sink.value = ""; });
+  const holdKeys = () => {
+    const a = document.activeElement;
+    const free = !a || a === document.body || a === sink || a.tagName === "CANVAS"
+      || (root.contains(a) && a.tagName === "BUTTON");
+    if (free && S.hovered && !S.dead && root.isConnected && a !== sink) {
+      try { sink.focus({ preventScroll: true }); } catch (e) { /* not focusable now */ }
+    }
+  };
+  root.addEventListener("mouseenter", () => { S.hovered = true; holdKeys(); });
+  root.addEventListener("mouseleave", () => {
+    S.hovered = false;
+    if (document.activeElement === sink) sink.blur();
+  });
+  // a button pressed takes the focus; give it back once the click is done
+  root.addEventListener("click", () => setTimeout(holdKeys, 0));
   // ---- motion
   /* The film of the series: played here with its music, recorded at each
      size asked for and written to a folder. */
@@ -3923,6 +4559,9 @@ function buildLayout(node) {
     pics: new Map(), want: null, bufs: new Map(), recording: false, swapOpen: false };
   const musicBox = $(".vly-music");
   function isMotion() { return P.vly_cat === "motion"; }
+  /* Music player: the node shows only the music list and its player. */
+  function isPlayer() { return !!P.vly_player; }
+  function musicLive() { return isMotion() || isPlayer(); }
   function mstate() { return motionDefaults(state()); }
   function audioCtx() {
     if (!MZ.ac || MZ.ac.state === "closed") MZ.ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -4101,6 +4740,7 @@ function buildLayout(node) {
     const removed = Object.keys(m.off).length;
     const total = motionLength(MZ.shots);
     TL.total = total;
+    TL.room = strip.clientWidth;
     const room = Math.max(300, strip.clientWidth - 8);
     // the whole film fits the width at 1x; + and - (or Alt + the wheel) zoom in
     TL.zoom = Math.max(1, Math.min(12, Number(P.vly_tlzoom) || 1));
@@ -4122,6 +4762,7 @@ function buildLayout(node) {
         return `<div class="vly-mshot${i === MZ.cur ? " cur" : ""}${sel ? " sel" : ""}" data-s="${i}" style="width:${cellW(i).toFixed(1)}px" title="${esc(lab)} · ${s.dur}s">
           <div class="film"><canvas></canvas></div>
           <span class="lb"><b>${String(i + 1).padStart(2, "0")}</b>${esc(lab)} <i>${+s.dur.toFixed(1)}s</i></span>
+          ${moveMark(s)}
           <button class="mdel" data-id="${esc(s.id)}" title="Take this shot out of the film">×</button>
           ${MZ.shots[i + 1] ? `<span class="pass p-${s.pass}" title="To next: ${s.pass === "fade" ? "Fade" : s.pass === "black" ? "Black" : "Cut"}"></span>` : ""}
           <span class="edge" data-edge="${i}" title="Drag for the length of this shot - it snaps to the playhead"></span><span class="etip"></span></div>`;
@@ -4638,18 +5279,532 @@ function buildLayout(node) {
   /* The music used before - every piece chosen here is kept - in the order
      it was first added; the list opens and closes. */
   let musicLib = null, libLoading = false;
+  let ME = null, lastFilm;
+  // favourites and folders of the list, and what is being edited in them
+  let SHELF = { order: [], fav: [], folders: [] }, shelfBusy = null;
+  const SH = { newf: false, rename: null, menu: null, drag: null, mren: null };
   async function loadLib(force) {
     if (libLoading || (musicLib && !force)) return;
     libLoading = true;
     try {
+      if (shelfBusy) await shelfBusy;
       const r = await api.fetchApi(MUSIC_LIST_URL);
       const j = await r.json();
       musicLib = j.ok ? j.list : [];
+      if (j.ok) shelfSet(j.shelf);
     } catch (e) { musicLib = []; }
     libLoading = false;
-    if (isMotion()) paintMusic();
+    if (musicLive()) paintMusic();
   }
   const mb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+  /* Listening to a piece before or after it is set to the film: one at a
+     time, from START AT for the piece in use, from the start for the others.
+     The film playing stops it. */
+  const PV = { audio: null, name: null, t: 0, paused: false, last: null };
+  /* The player's spectrum: the piece listened to runs through an analyser of
+     its own audio context, and a row of thin bars is drawn from it. */
+  const EQ = { ac: null, an: null, src: null, raf: 0, bins: null, lv: null };
+  const EQ_BARS = 56;
+  function eqHook(a) {
+    try {
+      if (!EQ.ac || EQ.ac.state === "closed") {
+        EQ.ac = new (window.AudioContext || window.webkitAudioContext)();
+        EQ.an = EQ.ac.createAnalyser();
+        EQ.an.fftSize = 2048;
+        EQ.an.smoothingTimeConstant = 0.78;
+        EQ.an.connect(EQ.ac.destination);
+        EQ.bins = new Uint8Array(EQ.an.frequencyBinCount);
+      }
+      EQ.ac.resume().catch(() => {});
+      EQ.src = EQ.ac.createMediaElementSource(a);
+      EQ.src.connect(EQ.an);
+    } catch (e) { EQ.src = null; /* plays on without the spectrum */ }
+    eqRun();
+  }
+  function eqUnhook() {
+    if (EQ.src) { try { EQ.src.disconnect(); } catch (e) { /* gone */ } }
+    EQ.src = null;
+  }
+  function eqRun() {
+    if (EQ.raf) return;
+    const step = () => {
+      EQ.raf = 0;
+      const cv = musicBox.querySelector(".mp-eq");
+      if (!cv || S.dead) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = cv.clientWidth, h = cv.clientHeight;
+      if (!w || !h) return;
+      if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      if (!EQ.lv || EQ.lv.length !== EQ_BARS) EQ.lv = new Float32Array(EQ_BARS);
+      const live = !!(EQ.src && PV.audio && !PV.paused);
+      if (live) EQ.an.getByteFrequencyData(EQ.bins);
+      const n = EQ.bins ? EQ.bins.length : 0;
+      const nyq = EQ.ac ? EQ.ac.sampleRate / 2 : 22050;
+      let moving = false;
+      for (let i = 0; i < EQ_BARS; i++) {
+        let v = 0;
+        if (live && n) {
+          // bands spaced on a log scale, 40 Hz to 14 kHz
+          const f0 = 40 * Math.pow(14000 / 40, i / EQ_BARS), f1 = 40 * Math.pow(14000 / 40, (i + 1) / EQ_BARS);
+          const b0 = Math.max(1, Math.floor(f0 / nyq * n)), b1 = Math.max(b0 + 1, Math.ceil(f1 / nyq * n));
+          let m = 0;
+          for (let k = b0; k < b1 && k < n; k++) m = Math.max(m, EQ.bins[k]);
+          v = Math.pow(m / 255, 1.6);
+        }
+        // rise at once, fall slowly - and settle flat when the music stops
+        EQ.lv[i] = v > EQ.lv[i] ? v : EQ.lv[i] * 0.88;
+        if (EQ.lv[i] > 0.01) moving = true;
+      }
+      const gap = 2, bw = Math.max(1, (w - gap * (EQ_BARS - 1)) / EQ_BARS);
+      ctx.fillStyle = getComputedStyle(cv).color;
+      for (let i = 0; i < EQ_BARS; i++) {
+        const bh = Math.max(1.5, EQ.lv[i] * h);
+        ctx.globalAlpha = PV.paused || !PV.audio ? 0.35 : 0.9;
+        ctx.fillRect(i * (bw + gap), h - bh, bw, bh);
+      }
+      ctx.globalAlpha = 1;
+      if (live || moving) EQ.raf = requestAnimationFrame(step);
+    };
+    EQ.raf = requestAnimationFrame(step);
+  }
+  /* The player's own volume - the film keeps the one set in MUSIC. */
+  function pvVol() {
+    const v = Number(P.vly_pvvol);
+    return Math.max(0, Math.min(1, isFinite(v) && P.vly_pvvol != null ? v : (Number(mstate().music.vol) || 1)));
+  }
+  const eqOn = () => P.vly_eq !== false;
+  /* One sound at a time across the canvas: a piece or a film starting in
+     one Layout node pauses whatever plays in the others. */
+  function hushOthers() {
+    for (const o of VLY_ALL) if (o !== ME) { try { o.hush(); } catch (e) { /* a node going */ } }
+  }
+  function pvStop() {
+    eqUnhook();
+    PV.paused = false;
+    if (PV.audio) { try { PV.audio.pause(); } catch (e) { /* gone */ } PV.audio.src = ""; }
+    PV.audio = null;
+    const was = PV.name;
+    PV.name = null;
+    PV.t = 0;
+    if (was && musicLive()) paintMusic();
+  }
+  function pvPlay(name, from) {
+    pvStop();
+    if (MZ.playing) mpause();
+    const a = new Audio(`${api.apiURL(MUSIC_URL)}?name=${encodeURIComponent(name)}`);
+    a.volume = pvVol();
+    PV.audio = a;
+    PV.name = name;
+    PV.last = name;
+    PV.t = from || 0;
+    a.addEventListener("loadedmetadata", () => { if (from && from < a.duration) a.currentTime = from; });
+    a.addEventListener("timeupdate", () => {
+      if (PV.audio !== a) return;
+      PV.t = a.currentTime;
+      for (const el of musicBox.querySelectorAll(".mu-pt")) if (el.dataset.pt === PV.name) el.textContent = clock(PV.t);
+      const here = musicBox.querySelector(".mp-here-t");
+      if (here) here.textContent = clock(PV.t);
+      const bar = musicBox.querySelector(".mp-track i");
+      if (bar) bar.style.width = `${pvFrac() * 100}%`;
+    });
+    a.addEventListener("ended", () => { if (PV.audio === a) pvNext(name); });
+    a.addEventListener("error", () => { if (PV.audio === a) { say(`Could not play ${name}`, true); pvStop(); } });
+    eqHook(a);
+    hushOthers();
+    a.play().catch(() => { if (PV.audio === a) pvStop(); });
+    paintMusic();
+  }
+
+  /* What follows a piece when it ends: nothing, the next in the list, the
+     same again, the list round and round, or any other at random. */
+  const PV_IC = (d, extra) => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/>${extra || ""}</svg>`;
+  const PV_LOOP = "M2.5 8V6.5A2.5 2.5 0 0 1 5 4h8M11 2l2 2-2 2M13.5 8v1.5A2.5 2.5 0 0 1 11 12H3M5 14l-2-2 2-2";
+  const PV_MODES = [
+    { id: "once", label: "Once", title: "Once - stop when the piece ends",
+      icon: PV_IC("M2 8h8.5M7.5 5l3 3-3 3M13.5 4v8") },
+    { id: "all", label: "Play all", title: "Play all - the list through once, from the piece playing",
+      icon: PV_IC("M2 4.5h8M2 8h8M2 11.5h5", '<path d="M10 9.5v4.5l3.5-2.25z" fill="currentColor" stroke="none"/>') },
+    { id: "one", label: "Repeat one", title: "Repeat one - the same piece again and again",
+      icon: PV_IC(PV_LOOP, '<text x="8" y="10.2" text-anchor="middle" font-size="6.2" font-weight="700" font-family="Arial,sans-serif" fill="currentColor" stroke="none">1</text>') },
+    { id: "loop", label: "Repeat all", title: "Repeat all - the list round and round",
+      icon: PV_IC(PV_LOOP) },
+    { id: "shuffle", label: "Shuffle", title: "Shuffle - the pieces at random, without end",
+      icon: PV_IC("M2 4.5h2.2c1.8 0 2.8 1 3.8 3l.6 1.1c1 2 2 3 3.8 3H14M12.3 10l2 1.6-2 1.6M2 11.6h2.2c1.2 0 2-.4 2.7-1.2M9.4 5.6c.7-.8 1.5-1.1 2.6-1.1H14M12.3 2.9l2 1.6-2 1.6") },
+  ];
+  const PV_CHECK = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2 4-4.4"/></svg>';
+  function pvMode() { return PV_MODES.some(m => m.id === P.vly_pvmode) ? P.vly_pvmode : "once"; }
+  /* Marked pieces: when any are marked, listening goes round them only. */
+  function pvMarks() {
+    const have = new Set((musicLib || []).map(m => m.name));
+    return (Array.isArray(P.vly_pvmark) ? P.vly_pvmark : []).filter(n => have.has(n));
+  }
+  function pvMark(name) {
+    const set = new Set(Array.isArray(P.vly_pvmark) ? P.vly_pvmark : []);
+    if (set.has(name)) set.delete(name); else set.add(name);
+    P.vly_pvmark = [...set];
+  }
+  /* Listening keeps to the list shown, and within it to the marked pieces. */
+  function pvMarked() {
+    const shown = new Set(viewNames(muView()));
+    return pvMarks().filter(n => shown.has(n));
+  }
+  function pvList() {
+    const shown = viewNames(muView());
+    const marks = new Set(pvMarked());
+    return marks.size ? shown.filter(n => marks.has(n)) : shown;
+  }
+  function pvNext(name) {
+    const list = pvList();
+    const mode = pvMode();
+    let next = null;
+    if (mode === "one") next = name;
+    else if (list.length) {
+      const i = list.indexOf(name);
+      if (mode === "all") next = i < list.length - 1 ? list[i + 1] : null;
+      else if (mode === "loop") next = list[(i + 1 + list.length) % list.length];
+      else if (mode === "shuffle") {
+        const rest = list.filter(n => n !== name);
+        next = rest.length ? rest[Math.floor(Math.random() * rest.length)] : name;
+      }
+    }
+    if (next) pvPlay(next, 0); else pvStop();
+  }
+  /* What the playing piece will do next, shown after its name. */
+  function pvState() {
+    const m = PV_MODES.find(x => x.id === pvMode());
+    const n = pvMarked().length;
+    const v = muView();
+    const where = v === "all" ? "" : ` \u00b7 ${esc(viewTitle(v))}`;
+    return `<span class="mu-st" title="${m.title}">${m.icon}${m.label}${m.id !== "one" ? where : ""}${n && m.id !== "one" ? ` \u00b7 ${n} marked` : ""}</span>`;
+  }
+  /* Running time of each piece in the list, read once from the file. */
+  const DUR = {};
+  function loadDur() {
+    for (const m of musicLib || []) {
+      if (m.name in DUR) continue;
+      DUR[m.name] = 0;
+      const a = new Audio();
+      a.preload = "metadata";
+      a.addEventListener("loadedmetadata", () => {
+        DUR[m.name] = a.duration || 0;
+        a.src = "";
+        for (const el of musicBox.querySelectorAll(".mu-it")) {
+          if (el.dataset.mname === m.name) { const d = el.querySelector(".du"); if (d) d.textContent = clock(DUR[m.name]); }
+        }
+      });
+      a.addEventListener("error", () => { a.src = ""; });
+      a.src = `${api.apiURL(MUSIC_URL)}?name=${encodeURIComponent(m.name)}`;
+    }
+  }
+
+  /* The transport on the LISTEN line: back, pause or play, forward - over
+     the list shown and its marks, the same list the modes go round. */
+  function pvPause() {
+    if (!PV.audio) return;
+    if (PV.paused) {
+      if (MZ.playing) mpause();
+      PV.paused = false;
+      if (EQ.ac) EQ.ac.resume().catch(() => {});
+      hushOthers();
+      PV.audio.play().catch(() => { if (PV.audio) pvStop(); });
+    } else {
+      PV.audio.pause();
+      PV.paused = true;
+    }
+    paintMusic();
+  }
+  function pvToggle() {
+    if (PV.audio) { pvPause(); return; }
+    const list = pvList();
+    if (!list.length) return;
+    pvPlay(list.includes(PV.last) ? PV.last : list[0], 0);
+  }
+  function pvSkip(dir) {
+    const list = pvList();
+    if (!list.length) return;
+    const cur = PV.name || PV.last;
+    if (dir < 0 && PV.audio && PV.t > 3) { pvPlay(PV.name, 0); return; } // back to its start first
+    let next;
+    if (pvMode() === "shuffle" && dir > 0) {
+      const rest = list.filter(n => n !== cur);
+      next = rest.length ? rest[Math.floor(Math.random() * rest.length)] : list[0];
+    } else {
+      const i = list.indexOf(cur);
+      next = i < 0 ? list[dir > 0 ? 0 : list.length - 1] : list[(i + dir + list.length) % list.length];
+    }
+    pvPlay(next, 0);
+  }
+  const TR_PREV = '<svg viewBox="0 0 16 16"><path d="M3.5 3.5v9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12.5 3.6v8.8L5.6 8z" fill="currentColor"/></svg>';
+  const TR_NEXT = '<svg viewBox="0 0 16 16"><path d="M12.5 3.5v9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.5 3.6v8.8L10.4 8z" fill="currentColor"/></svg>';
+  const TR_PLAY = '<svg viewBox="0 0 16 16"><path d="M5 3v10l8.5-5z" fill="currentColor"/></svg>';
+  const TR_PAUSE = '<svg viewBox="0 0 16 16"><rect x="4" y="3" width="2.8" height="10" rx=".6" fill="currentColor"/><rect x="9.2" y="3" width="2.8" height="10" rx=".6" fill="currentColor"/></svg>';
+  /* The piece playing, or paused, named on the LISTEN line. */
+  function paintNow() {
+    const name = PV.name || PV.last;
+    if (!name) return `<span class="mu-now idle">Nothing playing</span>`;
+    const len = DUR[name] ? ` / ${clock(DUR[name])}` : "";
+    return `<span class="mu-now${PV.name ? "" : " idle"}${PV.paused ? " paused" : ""}" title="${esc(name)}">`
+      + `<span class="nn">${esc(name.replace(/\.[^.]+$/, ""))}</span>`
+      + (PV.name ? `<span class="nt"><i class="mu-pt" data-pt="${esc(name)}">${clock(PV.t)}</i>${len}</span>` : "")
+      + `</span>`;
+  }
+  /* The film's music of the series open - a player reads it from a Layout
+     node of the same series when there is one. */
+  function filmName() {
+    const ser = P.vly_series || "";
+    if (!ser) return "";
+    if (isPlayer()) for (const o of VLY_ALL) if (o !== ME && !o.player() && o.series() === ser) return o.film();
+    return mstate().music.name || "";
+  }
+  async function setFilmEverywhere(name, start) {
+    const ser = P.vly_series || "";
+    for (const o of [...VLY_ALL]) if (o.series() === ser) { try { await o.setFilm(name, start); } catch (e) { /* a node going */ } }
+  }
+  function pvLen() {
+    const name = PV.name || PV.last;
+    return (PV.audio && isFinite(PV.audio.duration) && PV.audio.duration) || (name && DUR[name]) || 0;
+  }
+  function pvFrac() { const L = pvLen(); return PV.name && L ? Math.max(0, Math.min(1, PV.t / L)) : 0; }
+  /* The player's head: the piece large with a bar to seek in, the buttons
+     beside it, the modes, then the tabs - as a music player is laid out. */
+  const EQ_IC = '<svg viewBox="0 0 16 16"><rect x="2" y="7" width="2" height="6" rx=".5" fill="currentColor"/><rect x="5.5" y="3" width="2" height="10" rx=".5" fill="currentColor"/><rect x="9" y="5.5" width="2" height="7.5" rx=".5" fill="currentColor"/><rect x="12.5" y="8.5" width="2" height="4.5" rx=".5" fill="currentColor"/></svg>';
+  const HERE_IC = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5v11"/><path d="M7 5.5l5 2.5-5 2.5z" fill="currentColor"/></svg>';
+  const FILM_IC = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><rect x="2" y="3.5" width="12" height="9" rx="1"/><path d="M5 3.5v9M11 3.5v9M2 6.5h3M2 9.5h3M11 6.5h3M11 9.5h3"/></svg>';
+  const VOL_IC = '<svg viewBox="0 0 16 16"><path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.6a6 6 0 0 1 0 8.8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+  function paintPlayerHead() {
+    const name = PV.name || PV.last;
+    const going = PV.audio && !PV.paused;
+    const L = pvLen();
+    const marked = pvMarked().length;
+    return `<div class="mp-head">
+      <div class="mp-top"><span class="lab2">MUSIC PLAYER</span>
+        <span class="mp-where">${esc(viewTitle(muView()))}${marked ? ` \u00b7 ${marked} marked` : ""}</span>
+        ${PV.name && P.vly_series ? `<button class="mp-here" title="Start the film's music here - the piece playing, from where it is now">${HERE_IC}Start here <i class="mp-here-t">${clock(PV.t)}</i></button>` : ""}
+        ${(() => {
+              const nm = PV.name || PV.last, inFilm = nm && nm === filmName();
+              const can = nm && P.vly_series && !inFilm;
+              return `<button class="mp-film${inFilm ? " on" : ""}"${can ? "" : " disabled"} title="${!nm ? "Play a piece first" : !P.vly_series ? "Open a series to set its film's music" : inFilm ? "This piece is the music of the film" : "Set the piece playing as the music of the film"}">${FILM_IC}${inFilm ? "In the film" : "To the film"}</button>`;
+            })()}
+        <button class="mu-back" title="Back to the layout">${ICON.layout}Layout</button></div>
+      <div class="mp-main">
+        <div class="mp-tr">
+          <button data-tr="prev" title="Previous piece - or back to the start of this one">${TR_PREV}</button>
+          <button class="pp${going ? " on" : ""}" data-tr="pp" title="${going ? "Pause" : PV.paused ? "Play on" : "Play the list shown"}">${going ? TR_PAUSE : TR_PLAY}</button>
+          <button data-tr="next" title="Next piece">${TR_NEXT}</button>
+        </div>
+        <div class="mp-now${PV.name ? "" : " idle"}${PV.paused ? " paused" : ""}">
+          <div class="mp-title" title="${esc(name || "")}">${name ? esc(name.replace(/\.[^.]+$/, "")) : "Nothing playing"}</div>
+          ${eqOn() ? `<canvas class="mp-eq"></canvas>` : ""}
+          <div class="mp-bar"><span class="mu-pt" data-pt="${esc(PV.name || "")}">${PV.name ? clock(PV.t) : "0:00"}</span>
+            <div class="mp-track" title="Click to move in the piece"><i style="width:${pvFrac() * 100}%"></i></div>
+            <span class="t1">${L ? clock(L) : "-:--"}</span></div>
+        </div>
+        <div class="mp-side">
+          <span class="vly-tseg pvm">${PV_MODES.map(m =>
+            `<button class="ic${pvMode() === m.id ? " on" : ""}" data-pvm="${m.id}" title="${m.title}">${m.icon}</button>`).join("")}</span>
+          <div class="mp-row2">
+            <button class="mp-eqb${eqOn() ? " on" : ""}" title="${eqOn() ? "Hide the spectrum" : "Show the spectrum - bars that move with the music"}">${EQ_IC}EQ</button>
+            <span class="mp-vol" title="Volume of the player - the film keeps its own">${VOL_IC}<input class="mp-volr" type="range" min="0" max="1" step="0.02" value="${pvVol()}" style="--v:${Math.round(pvVol() * 100)}%" /></span>
+          </div>
+        </div>
+      </div>
+      <div class="mp-tabs">${paintTabs()}
+        ${marked ? `<span class="mk">Only the ${marked} marked pieces play<button class="mu-mkx" title="Unmark all - every piece plays again">Unmark all</button></span>`
+          : `<span class="hint">tick pieces to play those only</span>`}</div>
+    </div>`;
+  }
+  function paintTransport() {
+    const going = PV.audio && !PV.paused;
+    return `<span class="mu-tr">`
+      + `<button data-tr="prev" title="Previous piece - or back to the start of this one">${TR_PREV}</button>`
+      + `<button class="pp${going ? " on" : ""}" data-tr="pp" title="${going ? "Pause" : PV.paused ? "Play on" : "Play the list shown"}">${going ? TR_PAUSE : TR_PLAY}</button>`
+      + `<button data-tr="next" title="Next piece">${TR_NEXT}</button></span>`;
+  }
+
+  /* Favourites and folders: kept with the music on the server, so every
+     workflow sees the same shelf. A folder only gathers names. */
+  const STAR = (on) => `<svg viewBox="0 0 16 16"><path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="${on ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+  const FOLDER = '<svg viewBox="0 0 16 16"><path d="M1.8 4.2a1 1 0 0 1 1-1h3.1l1.5 1.5h5.8a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+  const FOLDER_ADD = '<svg viewBox="0 0 16 16"><path d="M1.8 4.2a1 1 0 0 1 1-1h3.1l1.5 1.5h5.8a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 7.2v4M6 9.2h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+  function shelfSet(doc) {
+    const d = doc && typeof doc === "object" ? doc : {};
+    SHELF = {
+      order: Array.isArray(d.order) ? d.order.slice() : [],
+      fav: Array.isArray(d.fav) ? d.fav.slice() : [],
+      folders: Array.isArray(d.folders) ? d.folders.map(f => ({ id: String(f.id), name: String(f.name), items: Array.isArray(f.items) ? f.items.slice() : [] })) : [],
+    };
+  }
+  function shelfSave() {
+    shelfBusy = shelfPost();
+    return shelfBusy;
+  }
+  async function shelfPost() {
+    try {
+      const r = await api.fetchApi(MUSIC_SHELF_URL, { method: "POST", body: JSON.stringify({ shelf: SHELF }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "not kept");
+    } catch (err) { say(`Folders not kept: ${err && err.message || err}`, true); }
+  }
+  const folderBy = (id) => SHELF.folders.find(f => f.id === id) || null;
+  function muView() {
+    const v = String(P.vly_mview || "all");
+    if (v === "fav") return v;
+    if (v.startsWith("f:") && folderBy(v.slice(2))) return v;
+    return "all";
+  }
+  /* The whole list in its order: as moved with the arrows, the pieces not
+     moved yet after them in the order they were added. */
+  function libNames() {
+    const all = (musicLib || []).map(m => m.name);
+    const have = new Set(all);
+    const first = SHELF.order.filter(n => have.has(n));
+    const seen = new Set(first);
+    return first.concat(all.filter(n => !seen.has(n)));
+  }
+  function viewNames(v) {
+    const all = libNames();
+    if (v === "fav") { const have = new Set(all); return SHELF.fav.filter(n => have.has(n)); }
+    if (v.startsWith("f:")) {
+      const f = folderBy(v.slice(2));
+      const have = new Set(all);
+      return f ? f.items.filter(n => have.has(n)) : [];
+    }
+    return all;
+  }
+  const REN_IC = '<svg viewBox="0 0 10 10"><path d="M6.6 1.8l1.6 1.6-4.9 4.9-2 .4.4-2z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>';
+  const ORD_UP = '<svg viewBox="0 0 10 10"><path d="M2.2 6.4L5 3.6l2.8 2.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ORD_DN = '<svg viewBox="0 0 10 10"><path d="M2.2 3.6L5 6.4l2.8-2.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  /* One step up or down in the list shown - the whole list, Favourites or a
+     folder each keep their own order. */
+  function moveIn(v, name, dir) {
+    const list = viewNames(v);
+    const i = list.indexOf(name), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return false;
+    [list[i], list[j]] = [list[j], list[i]];
+    if (v === "all") SHELF.order = list;
+    else if (v === "fav") SHELF.fav = list;
+    else { const f = folderBy(v.slice(2)); if (!f) return false; f.items = list; }
+    return true;
+  }
+  function addTo(v, names) {
+    const list = v === "fav" ? SHELF.fav : (folderBy(v.slice(2)) || {}).items;
+    if (!list) return 0;
+    let n = 0;
+    for (const name of names) if (!list.includes(name)) { list.push(name); n++; }
+    return n;
+  }
+  function takeFrom(v, name) {
+    if (v === "fav") SHELF.fav = SHELF.fav.filter(n => n !== name);
+    else { const f = folderBy(v.slice(2)); if (f) f.items = f.items.filter(n => n !== name); }
+  }
+  const viewTitle = (v) => (v === "fav" ? "Favourites" : v.startsWith("f:") ? ((folderBy(v.slice(2)) || {}).name || "") : "All");
+  function paintTabs() {
+    const v = muView();
+    const all = (musicLib || []).length;
+    const tab = (key, inner, title) => `<button class="mu-tab${v === key ? " on" : ""}${key !== "all" ? " tgt" : ""}" data-mview="${key}" title="${title}">${inner}</button>`;
+    return `<div class="mu-tabs">`
+      + tab("all", `All <b>${all}</b>`, "Every piece kept here")
+      + tab("fav", `${STAR(true)}Favourites <b>${viewNames("fav").length}</b>`, "The pieces starred - drag a piece here to star it")
+      + SHELF.folders.map(f => SH.rename === f.id
+        ? `<input class="mu-fin" data-ren="${f.id}" value="${esc(f.name)}" maxlength="40" />`
+        : tab(`f:${f.id}`, `${FOLDER}${esc(f.name)} <b>${viewNames(`f:${f.id}`).length}</b>${v === `f:${f.id}` ? `<i class="mu-fdx" data-fdx="${f.id}" title="Delete this folder - the music in it stays">${ICON.close}</i>` : ""}`,
+          "Drag a piece here to put it in this folder - double-click to rename")).join("")
+      + (SH.newf ? `<input class="mu-fin" data-newf="1" placeholder="Folder name" maxlength="40" />`
+        : `<button class="mu-tab add" data-addf="1" title="A new folder to gather pieces in">${FOLDER_ADD}Folder</button>`)
+      + `</div>`;
+  }
+  function paintFolderMenu(name) {
+    return `<div class="mu-fm"><span class="lab2">IN</span>`
+      + `<button class="mu-tab${SHELF.fav.includes(name) ? " on" : ""}" data-fmin="fav" data-fmname="${esc(name)}">${STAR(true)}Favourites</button>`
+      + SHELF.folders.map(f => `<button class="mu-tab${f.items.includes(name) ? " on" : ""}" data-fmin="f:${f.id}" data-fmname="${esc(name)}">${FOLDER}${esc(f.name)}</button>`).join("")
+      + (SHELF.folders.length ? "" : `<span class="hint">No folders yet - make one with + Folder above</span>`)
+      + `</div>`;
+  }
+  function focusFin() {
+    const inp = musicBox.querySelector(".mu-fin");
+    if (inp) { inp.focus(); inp.select(); }
+  }
+  /* A piece renamed: the file on the server first, then every place that
+     knows it by name - the films of every series, their markers, the
+     player, the marks - in every Layout node open. */
+  async function finishRename(inp, keep) {
+    if (!inp || inp.dataset.done) return;
+    inp.dataset.done = "1";
+    const old = inp.dataset.mren, to = inp.value.trim();
+    SH.mren = null;
+    if (!keep || !to || to === old.replace(/\.[^.]+$/, "")) { paintMusic(); return; }
+    // a file being played is let go first, so the system lets it be renamed
+    const was = PV.name === old && PV.audio ? { t: PV.t, held: PV.paused } : null;
+    if (was) pvStop();
+    const back = (name) => { if (was) { pvPlay(name, was.t); if (was.held) pvPause(); } };
+    try {
+      const r = await api.fetchApi(MUSIC_RENAME_URL, { method: "POST", body: JSON.stringify({ name: old, to }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "not renamed");
+      for (const o of [...VLY_ALL]) { try { o.renamed(old, j.name); } catch (err) { /* a node going */ } }
+      back(j.name);
+      say(`Renamed: ${j.name}`);
+    } catch (err) { back(old); say(`Not renamed: ${err && err.message || err}`, true); paintMusic(); }
+  }
+  function renamedHere(old, neu) {
+    for (const st of Object.values(P.vly_state || {})) {
+      const m = st && st.motion;
+      if (!m || typeof m !== "object") continue;
+      if (m.music && m.music.name === old) m.music.name = neu;
+      if (m.markers && m.markers[old]) { m.markers[neu] = m.markers[old]; delete m.markers[old]; }
+    }
+    if (MZ.bufs.has(old)) { MZ.bufs.set(neu, MZ.bufs.get(old)); MZ.bufs.delete(old); }
+    if (old in DUR) { DUR[neu] = DUR[old]; delete DUR[old]; }
+    if (PV.last === old) PV.last = neu;
+    // the piece playing goes on from where it was, read again under its new name
+    if (PV.name === old && PV.audio) { const t = PV.t, held = PV.paused; pvPlay(neu, t); if (held) pvPause(); }
+    if (Array.isArray(P.vly_pvmark)) P.vly_pvmark = P.vly_pvmark.map(n => (n === old ? neu : n));
+    loadLib(true).then(() => { if (!S.dead) paint(); });
+  }
+  function finishFin(inp, keep) {
+    if (!inp || inp.dataset.done) return;
+    inp.dataset.done = "1";
+    const name = inp.value.trim().slice(0, 40);
+    if (keep && name) {
+      if (inp.dataset.newf) {
+        const id = (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 16);
+        SHELF.folders.push({ id, name, items: [] });
+        shelfSave();
+      } else {
+        const f = folderBy(inp.dataset.ren);
+        if (f && f.name !== name) { f.name = name; shelfSave(); }
+      }
+    }
+    SH.newf = false;
+    SH.rename = null;
+    paintMusic();
+  }
+
+  function paintList(mu) {
+    const v = muView();
+    const film = filmName();
+    const names = viewNames(v);
+    const rows = names.map(n => musicLib.find(m => m.name === n)).filter(Boolean);
+    const inFolder = v !== "all";
+    if (!rows.length) {
+      return `<div class="mu-list"><div class="mu-empty">${v === "all" ? "No music yet - drop pieces from the computer here." : v === "fav" ? "No favourites yet - press the star beside a piece, or drag a piece onto Favourites."
+        : "This folder is empty - drag pieces onto its tab, or use the folder button beside a piece. Music dropped here from the computer goes into it."}</div></div>`;
+    }
+    return `<div class="mu-list">${rows.map(m => {
+      const marked = pvMarks().includes(m.name), fav = SHELF.fav.includes(m.name);
+      return `<div class="mu-it${m.name === film ? " cur" : ""}${PV.name === m.name ? " playing" : ""}" data-mname="${esc(m.name)}" draggable="${SH.mren === m.name ? "false" : "true"}" title="${isPlayer() ? "Play this piece" : "Set this music to the film"} - drag it onto a folder">
+          <button class="mu-pv${PV.name === m.name ? " on" : ""}" data-pv="${esc(m.name)}" data-from="0" title="${PV.name === m.name ? (PV.paused ? "Play on" : "Pause") : "Listen to it"}">${PV.name === m.name ? (PV.paused ? PV_PLAY : PV_ON) : PV_PLAY}</button><button class="mu-mk${marked ? " on" : ""}" data-pvmk="${esc(m.name)}" title="${marked ? "Unmark - back into the whole list" : "Mark - listen to the marked pieces only"}">${PV_CHECK}</button><button class="mu-st2${fav ? " on" : ""}" data-fav="${esc(m.name)}" title="${fav ? "Take it out of Favourites" : "Add to Favourites"}">${STAR(fav)}</button><span class="nm">${SH.mren === m.name ? `<input class="mu-rin" data-mren="${esc(m.name)}" value="${esc(m.name.replace(/\.[^.]+$/, ""))}" maxlength="120" />` : esc(m.name)}${m.name === film ? `<span class="mu-fl" title="The music of the film">${FILM_IC}film</span>` : ""}${PV.name === m.name ? ` <i class="mu-pt" data-pt="${esc(m.name)}">${clock(PV.t)}</i>${pvState()}` : ""}</span><span class="sz">${mb(m.bytes)}</span><span class="du">${DUR[m.name] ? clock(DUR[m.name]) : ""}</span>
+          <span class="mu-ord"><button data-mren-go="${esc(m.name)}" title="Rename - the file keeps its extension">${REN_IC}</button><button data-mup="${esc(m.name)}"${names[0] === m.name ? " disabled" : ""} title="Move it up">${ORD_UP}</button><button data-mdn="${esc(m.name)}"${names[names.length - 1] === m.name ? " disabled" : ""} title="Move it down">${ORD_DN}</button></span>
+          <button class="mu-fb${SH.menu === m.name ? " on" : ""}" data-fmenu="${esc(m.name)}" title="Folders this piece is in">${FOLDER}</button>
+          ${inFolder ? `<button class="mu-del" data-mout="${esc(m.name)}" title="Take it out of ${esc(viewTitle(v))} - the file stays">${ICON.close}</button>`
+            : `<button class="mu-del" data-mdel="${esc(m.name)}" title="Take it out of the list - the file is deleted">${ICON.close}</button>`}</div>`
+        + (SH.menu === m.name ? paintFolderMenu(m.name) : "");
+    }).join("")}</div>`;
+  }
 
   function paintMusic() {
     const mu = mstate().music;
@@ -4673,6 +5828,7 @@ function buildLayout(node) {
         <button class="vly-pack mu-pick" title="Choose a piece of music on this computer - MP3, WAV, M4A, OGG, FLAC">${mu.name ? "Change…" : "Choose music…"}</button>
         <input class="mu-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus" style="display:none" />
         <span class="mu-name">${mu.name ? `<b>${esc(mu.name)}</b>${len ? ` · ${clock(len)}` : ""}` : "No music"}</span>
+        ${mu.name ? `<button class="mu-pv${PV.name === mu.name ? " on" : ""}" data-pv="${esc(mu.name)}" data-from="${mu.start}" title="${PV.name === mu.name ? (PV.paused ? "Play on" : "Pause") : "Listen to it from START AT"}">${PV.name === mu.name ? (PV.paused ? PV_PLAY : PV_ON) : PV_PLAY}</button><span class="mu-pt" data-pt="${esc(mu.name)}">${PV.name === mu.name ? clock(PV.t) : ""}</span>` : ""}
         ${mu.name ? `<button class="mu-x" title="No music">${ICON.close}</button>` : ""}
         ${musicLib && musicLib.length ? `<button class="mu-lib${P.vly_mlib ? " on" : ""}" title="The music used before">Used before <b>${musicLib.length}</b> <i>${P.vly_mlib ? "\u25b4" : "\u25be"}</i></button>` : ""}
         ${mu.name ? `<span class="vly-vsep"></span>
@@ -4686,14 +5842,28 @@ function buildLayout(node) {
         <span class="vly-vsep"></span><span class="lab2">VOLUME</span><input class="mu-vol" type="range" min="0" max="1" step="0.05" value="${mu.vol}" />` : ""}
       </div>
       <div class="mu-info">${info}</div>
-      ${P.vly_mlib && musicLib && musicLib.length ? `<div class="mu-list">${musicLib.map(m =>
-        `<div class="mu-it${m.name === mu.name ? " cur" : ""}" data-mname="${esc(m.name)}" title="Set this music to the film">
-          <span class="dot"></span><span class="nm">${esc(m.name)}</span><span class="sz">${mb(m.bytes)}</span>
-          <button class="mu-del" data-mdel="${esc(m.name)}" title="Take it out of the list - the file is deleted">${ICON.close}</button></div>`).join("")}</div>` : ""}`;
+      ${isPlayer() && musicLib ? paintPlayerHead() : ""}
+      ${P.vly_mlib && !isPlayer() && musicLib && musicLib.length ? `<div class="mu-mode"><span class="lab2">LISTEN</span>${paintNow()}${paintTransport()}${PV.name && P.vly_series ? `<button class="mp-here" title="Start the film's music here - the piece playing, from where it is now">${HERE_IC}Start here <i class="mp-here-t">${clock(PV.t)}</i></button>` : ""}<span class="vly-vsep"></span><span class="vly-tseg pvm">${PV_MODES.map(m =>
+        `<button class="ic${pvMode() === m.id ? " on" : ""}" data-pvm="${m.id}" title="${m.title}">${m.icon}</button>`).join("")}</span>
+        <span class="vly-vsep"></span>${paintTabs()}
+        ${pvMarked().length ? `<span class="mk">Only the ${pvMarked().length} marked pieces play<button class="mu-mkx" title="Unmark all - every piece plays again">Unmark all</button></span>`
+          : `<span class="hint">tick pieces to play those only</span>`}</div>` : ""}
+      ${(P.vly_mlib || isPlayer()) && musicLib && (musicLib.length || isPlayer()) ? paintList(mu) : ""}`;
     if (!musicLib) loadLib();
+    else if (P.vly_mlib || isPlayer()) loadDur();
+    if (SH.newf || SH.rename) focusFin();
+    if (SH.mren) { const ri = musicBox.querySelector(".mu-rin"); if (ri) { ri.focus(); ri.select(); } }
+    if (isPlayer()) { cancelAnimationFrame(EQ.raf); EQ.raf = 0; eqRun(); }
+    else if (P.vly_series) {
+      const fn = mu.name || "";
+      if (fn !== lastFilm) {
+        lastFilm = fn;
+        for (const o of VLY_ALL) if (o !== ME && o.player() && o.series() === P.vly_series) o.refreshMusic();
+      }
+    }
     paintWave();
     if (mu.name && !mu.len) {
-      musicBuffer(mu.name).then(b => { if (b && !mu.len) { mu.len = b.duration; if (isMotion()) paintMusic(); } });
+      musicBuffer(mu.name).then(b => { if (b && !mu.len) { mu.len = b.duration; if (musicLive()) paintMusic(); } });
     }
   }
 
@@ -4709,6 +5879,8 @@ function buildLayout(node) {
   }
   async function mplay() {
     if (MZ.playing) { mpause(); return; }
+    if (PV.name) pvStop();
+    hushOthers();
     if (!S.book || !MZ.shots.length) return;
     const total = motionLength(MZ.shots);
     if (MZ.t >= total - 0.05) MZ.t = 0;
@@ -4901,6 +6073,107 @@ function buildLayout(node) {
   });
   musicBox.addEventListener("click", async (e) => {
     const mu = mstate().music;
+    const pvm = e.target.closest("[data-pvm]");
+    if (pvm) { P.vly_pvmode = pvm.dataset.pvm; paintMusic(); return; }
+    if (e.target.closest(".mp-here")) {
+      if (!PV.name || !P.vly_series) return;
+      await setFilmEverywhere(PV.name, Math.floor(PV.t * 10) / 10);
+      return;
+    }
+    if (e.target.closest(".mp-film")) {
+      const name = PV.name || PV.last;
+      if (!name || !P.vly_series || name === filmName()) return;
+      await setFilmEverywhere(name);
+      return;
+    }
+    if (e.target.closest(".mp-eqb")) { P.vly_eq = !eqOn(); paintMusic(); return; }
+    const trk = e.target.closest(".mp-track");
+    if (trk) {
+      const L = pvLen();
+      if (PV.audio && L) {
+        const r = trk.getBoundingClientRect();
+        PV.audio.currentTime = Math.max(0, Math.min(L - 0.2, (e.clientX - r.left) / r.width * L));
+        PV.t = PV.audio.currentTime;
+        trk.querySelector("i").style.width = `${pvFrac() * 100}%`;
+      }
+      return;
+    }
+    if (e.target.closest(".mu-back")) { P.vly_player = false; paint(); return; }
+    const tr = e.target.closest("[data-tr]");
+    if (tr) {
+      e.stopPropagation();
+      if (tr.dataset.tr === "pp") pvToggle(); else pvSkip(tr.dataset.tr === "next" ? 1 : -1);
+      return;
+    }
+    const mk = e.target.closest("[data-pvmk]");
+    if (mk) { e.stopPropagation(); pvMark(mk.dataset.pvmk); paintMusic(); return; }
+    if (e.target.closest(".mu-mkx")) { P.vly_pvmark = []; paintMusic(); return; }
+    if (e.target.closest(".mu-fin, .mu-rin")) return;
+    const rg = e.target.closest("[data-mren-go]");
+    if (rg) { e.stopPropagation(); SH.mren = rg.dataset.mrenGo; SH.menu = null; paintMusic(); return; }
+    const fdx = e.target.closest("[data-fdx]");
+    if (fdx) {
+      e.stopPropagation();
+      if (!fdx.classList.contains("armed")) {
+        fdx.classList.add("armed");
+        fdx.title = "Press again to delete the folder - the music stays";
+        setTimeout(() => { if (fdx.isConnected) fdx.classList.remove("armed"); }, 4000);
+        return;
+      }
+      SHELF.folders = SHELF.folders.filter(f => f.id !== fdx.dataset.fdx);
+      P.vly_mview = "all";
+      shelfSave();
+      paintMusic();
+      return;
+    }
+    const mv = e.target.closest("[data-mview]");
+    if (mv) {
+      if (mv.dataset.mview === muView()) return; // already shown - leaves a double-click to rename
+      P.vly_mview = mv.dataset.mview; SH.menu = null; paintMusic(); return;
+    }
+    if (e.target.closest("[data-addf]")) { SH.newf = true; SH.rename = null; paintMusic(); return; }
+    const fv = e.target.closest("[data-fav]");
+    if (fv) {
+      e.stopPropagation();
+      const name = fv.dataset.fav;
+      if (SHELF.fav.includes(name)) takeFrom("fav", name); else addTo("fav", [name]);
+      shelfSave();
+      paintMusic();
+      return;
+    }
+    const fm = e.target.closest("[data-fmenu]");
+    if (fm) { e.stopPropagation(); SH.menu = SH.menu === fm.dataset.fmenu ? null : fm.dataset.fmenu; paintMusic(); return; }
+    const fin = e.target.closest("[data-fmin]");
+    if (fin) {
+      e.stopPropagation();
+      const key = fin.dataset.fmin, name = fin.dataset.fmname;
+      if (viewNames(key).includes(name)) takeFrom(key, name); else addTo(key, [name]);
+      shelfSave();
+      paintMusic();
+      return;
+    }
+    if (e.target.closest(".mu-fm")) return;
+    const up = e.target.closest("[data-mup]"), dn = e.target.closest("[data-mdn]");
+    if (up || dn) {
+      e.stopPropagation();
+      if (moveIn(muView(), (up || dn).dataset[up ? "mup" : "mdn"], up ? -1 : 1)) { shelfSave(); paintMusic(); }
+      return;
+    }
+    const out = e.target.closest("[data-mout]");
+    if (out) {
+      e.stopPropagation();
+      takeFrom(muView(), out.dataset.mout);
+      shelfSave();
+      paintMusic();
+      return;
+    }
+    const pv = e.target.closest("[data-pv]");
+    if (pv) {
+      e.stopPropagation();
+      if (PV.name === pv.dataset.pv) pvPause();
+      else pvPlay(pv.dataset.pv, Number(pv.dataset.from) || 0);
+      return;
+    }
     if (e.target.closest(".mu-pick")) { musicBox.querySelector(".mu-file").click(); return; }
     if (e.target.closest(".mu-x")) { mpause(); delete mu.name; delete mu.len; mu.start = 0; paint(); return; }
     if (e.target.closest(".mu-lib")) { P.vly_mlib = !P.vly_mlib; paintMusic(); fitNode(); return; }
@@ -4929,6 +6202,12 @@ function buildLayout(node) {
       return;
     }
     const it = e.target.closest("[data-mname]");
+    if (it && isPlayer()) {
+      // in the player a piece is only played, never set to the film
+      const name = it.dataset.mname;
+      if (PV.name === name) pvPause(); else pvPlay(name, 0);
+      return;
+    }
     if (it) {
       const name = it.dataset.mname;
       if (name === mu.name) return;
@@ -4947,7 +6226,71 @@ function buildLayout(node) {
     const fo = e.target.closest("[data-fo]");
     if (fo) { mu.fade = Number(fo.dataset.fo); paintMusic(); }
   });
+  musicBox.addEventListener("dblclick", (e) => {
+    const t = e.target.closest("[data-mview^='f:']");
+    if (!t || e.target.closest("[data-fdx]")) return;
+    SH.rename = t.dataset.mview.slice(2);
+    SH.newf = false;
+    paintMusic();
+  });
+  musicBox.addEventListener("keydown", (e) => {
+    const ri = e.target.closest(".mu-rin");
+    if (ri) {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); finishRename(ri, true); }
+      else if (e.key === "Escape") { e.preventDefault(); finishRename(ri, false); }
+      return;
+    }
+    const inp = e.target.closest(".mu-fin");
+    if (!inp) return;
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); finishFin(inp, true); }
+    else if (e.key === "Escape") { e.preventDefault(); finishFin(inp, false); }
+  });
+  musicBox.addEventListener("focusout", (e) => {
+    const ri = e.target.closest && e.target.closest(".mu-rin");
+    if (ri) { setTimeout(() => finishRename(ri, true), 0); return; }
+    const inp = e.target.closest && e.target.closest(".mu-fin");
+    if (inp) setTimeout(() => finishFin(inp, true), 0);
+  });
+  /* A piece dragged from the list onto Favourites or a folder joins it. */
+  musicBox.addEventListener("dragstart", (e) => {
+    const it = e.target.closest && e.target.closest(".mu-it");
+    if (!it) return;
+    SH.drag = it.dataset.mname;
+    it.classList.add("drag");
+    try { e.dataTransfer.setData("text/x-vly-music", SH.drag); e.dataTransfer.effectAllowed = "copy"; } catch (err) { /* old browser */ }
+  });
+  musicBox.addEventListener("dragend", () => {
+    SH.drag = null;
+    musicBox.querySelectorAll(".mu-it.drag, .mu-tab.over").forEach(el => el.classList.remove("drag", "over"));
+  });
+  musicBox.addEventListener("dragover", (e) => {
+    if (!SH.drag) return;
+    const t = e.target.closest(".mu-tab.tgt");
+    musicBox.querySelectorAll(".mu-tab.over").forEach(el => { if (el !== t) el.classList.remove("over"); });
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    t.classList.add("over");
+  });
+  musicBox.addEventListener("drop", (e) => {
+    if (!SH.drag) return;
+    const t = e.target.closest(".mu-tab.tgt");
+    const name = SH.drag;
+    SH.drag = null;
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const key = t.dataset.mview;
+    if (addTo(key, [name])) { shelfSave(); say(`${name} \u2192 ${viewTitle(key)}`); }
+    else say(`${name} is already in ${viewTitle(key)}`);
+    paintMusic();
+  });
   musicBox.addEventListener("input", (e) => {
+    const vr = e.target.closest(".mp-volr");
+    if (vr) { P.vly_pvvol = Number(vr.value); vr.style.setProperty("--v", `${Math.round(pvVol() * 100)}%`); if (PV.audio) PV.audio.volume = pvVol(); return; }
     const mu = mstate().music;
     if (e.target.closest(".mu-start")) {
       mpause();
@@ -4983,6 +6326,59 @@ function buildLayout(node) {
     }
     inp.value = "";
     paint();
+  });
+
+  /* Music dropped on the MUSIC panel: every piece is kept in the list. The
+     film takes the first of them only when it has no music yet. */
+  const AUDIO_EXT = /\.(mp3|wav|m4a|aac|ogg|oga|flac|opus|webm)$/i;
+  const audioFiles = (dt) => [...((dt && dt.files) || [])].filter(f => AUDIO_EXT.test(f.name) || /^audio\//.test(f.type));
+  const hasFiles = (dt) => !!dt && [...(dt.types || [])].includes("Files");
+  musicBox.addEventListener("dragover", (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    musicBox.classList.add("drop");
+  });
+  musicBox.addEventListener("dragleave", (e) => {
+    if (!musicBox.contains(e.relatedTarget)) musicBox.classList.remove("drop");
+  });
+  musicBox.addEventListener("drop", async (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    musicBox.classList.remove("drop");
+    const files = audioFiles(e.dataTransfer);
+    if (!files.length) { say("Only music can be dropped here - MP3, WAV, M4A, OGG, FLAC", true); return; }
+    const kept = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      say(`Keeping ${f.name}… ${files.length > 1 ? `(${i + 1} / ${files.length})` : ""}`);
+      try {
+        const r = await api.fetchApi(`${MUSIC_URL}?name=${encodeURIComponent(f.name)}`, { method: "POST", body: f });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "could not be kept");
+        kept.push(j.name);
+      } catch (err) { say(`${f.name} not kept: ${err && err.message || err}`, true); }
+    }
+    if (!kept.length) return;
+    const into = muView();
+    if (into !== "all" && addTo(into, kept)) shelfSave();
+    await loadLib(true);
+    P.vly_mlib = true;
+    const mu = mstate().music;
+    if (!mu.name) {
+      mpause();
+      mu.name = kept[0];
+      mu.start = 0;
+      delete mu.len;
+      MZ.bufs.delete(kept[0]);
+      const b = await musicBuffer(kept[0]);
+      if (b) mu.len = b.duration;
+    }
+    say(kept.length === 1 ? `${kept[0]} added to the list` : `${kept.length} pieces added to the list`);
+    paint();
+    fitNode();
   });
 
   /* Framing a shot: drag the picture where it should sit in the frame; the
@@ -5301,6 +6697,66 @@ function buildLayout(node) {
     say("");
     loadBook();
   });
+
+  /* LIVE: the series opened in the Series Book is the one laid out here, as
+     the Lab, the Viewer and the Report follow it. Only a change in the book
+     is followed, so a series chosen here by hand stays until the book opens
+     another one. */
+  function paintLive() {
+    liveBtn.classList.toggle("on", !!P.vly_live);
+  }
+  async function goSeries(name, why) {
+    const want = String(name || "").trim();
+    if (!want || S.dead || S.exporting || MZ.recording) return;
+    const find = () => (S.list || []).find(x => String(x.name).trim().toLowerCase() === want.toLowerCase());
+    let hit = find();
+    if (!hit) { await loadList(); hit = find(); }
+    if (!hit) { say(`"${want}" is open in the book but not saved yet - save the series in the book to lay it out`); return; }
+    if (hit.name === P.vly_series) return;
+    if (P.vly_cat === "motion") mpause();
+    closePop();
+    P.vly_series = hit.name;
+    serSel.value = hit.name;
+    S.cur = 0;
+    S.sig = "";
+    MZ.cur = 0;
+    say(`${hit.name} - ${why || "opened in the Series Book"}`);
+    loadBook();
+  }
+  /* the series open in a Series Book on the canvas: the one with its prompt open */
+  function bookSeries() {
+    const nodes = (app.graph && (app.graph._nodes || app.graph.nodes)) || [];
+    for (const n of nodes) {
+      if ((n.comfyClass || n.type) !== BOOK) continue;
+      for (const w of n.widgets || []) {
+        if (!w.element) continue;
+        const box = w.element.querySelector(".lsb-pbox.cur");
+        const nm = box && box.querySelector(".lsb-gname");
+        if (nm) return nm.textContent.trim();
+      }
+    }
+    return "";
+  }
+  let seenBook = null;
+  function followBook() {
+    const cur = bookSeries();
+    if (cur === seenBook) return;
+    seenBook = cur;
+    if (P.vly_live && cur) goSeries(cur);
+  }
+  const onSeriesOpened = (e) => {
+    const names = (e && e.detail && e.detail.names) || [];
+    if (S.dead || !P.vly_live || !names.length || !root.isConnected) return;
+    goSeries(names[0], "opened in the Series Book");
+  };
+  window.addEventListener("leiel-series-opened", onSeriesOpened);
+  liveBtn.addEventListener("click", () => {
+    P.vly_live = !P.vly_live;
+    paintLive();
+    say(P.vly_live ? "LIVE - following the series opened in the Series Book" : "LIVE off - staying on this series");
+    if (P.vly_live) { seenBook = null; followBook(); }
+  });
+  paintLive();
   catSeg.addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b || b.dataset.c === P.vly_cat) return;
@@ -5314,6 +6770,10 @@ function buildLayout(node) {
     paint();
   });
   fontsBtn.addEventListener("click", openFonts);
+  $(".ud").addEventListener("click", () => undo());
+  $(".rd").addEventListener("click", () => redo());
+  // changes painted only in part - a shot's tools, a slider - are caught here
+  const histWatch = setInterval(() => { if (!S.dead && root.isConnected && !document.hidden) record(); }, 700);
   $(".rf").addEventListener("click", async () => {
     say("Reading the book and the picks…");
     S.sig = "";
@@ -5322,6 +6782,7 @@ function buildLayout(node) {
     say("");
   });
   $(".fs").addEventListener("click", openFull);
+  $(".mp").addEventListener("click", () => { P.vly_player = true; P.vly_mlib = true; paint(); });
   exportBtn.addEventListener("click", () => (isMotion() ? openMotionExport() : openExport()));
   packBtn.addEventListener("click", openPackage);
   linksBtn.addEventListener("click", openLinks);
@@ -5393,6 +6854,31 @@ function buildLayout(node) {
       const st = state();
       if (alb.dataset.al === "right") st.align[sh.id] = "right";
       else delete st.align[sh.id];
+      paint();
+      return;
+    }
+    const spb = e.target.closest("[data-split]");
+    if (spb) {
+      const st = state();
+      st.split = st.split || {};
+      const key = `${geo().cat}:${sh.id}`;
+      if (spb.dataset.split) st.split[key] = spb.dataset.split; else delete st.split[key];
+      // a new arrangement starts from its own shares
+      st.splitW = st.splitW || {};
+      delete st.splitW[key];
+      paint();
+      return;
+    }
+    const shw = e.target.closest("[data-show]");
+    if (shw) {
+      const st = state();
+      st.show = st.show || {};
+      const key = `${geo().cat}:${sh.id}`;
+      const now = { show: st.show[key] || "both" };
+      let t = showsTitle(now), x = showsText(now);
+      if (shw.dataset.show === "title") t = !t; else x = !x;
+      const next = t && x ? "both" : t ? "title" : x ? "text" : "none";
+      if (next === "both") delete st.show[key]; else st.show[key] = next;
       paint();
       return;
     }
@@ -5486,8 +6972,19 @@ function buildLayout(node) {
   function onKey(e) {
     if (S.dead || !S.book || pop) return;
     const t = e.target;
-    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+    if (t && t !== sink && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
     if (!isFull() && !S.hovered && !selected()) return;
+    // the layout's own undo, before the canvas reads the key as its own
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const key = e.key.toLowerCase();
+      const isUndo = key === "z" && !e.shiftKey, isRedo = key === "y" || (key === "z" && e.shiftKey);
+      if (isUndo || isRedo) {
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        if (MZ.recording || S.exporting) return;
+        if (isUndo) undo(); else redo();
+      }
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     let done = true;
     if (isMotion() && !isFull()) {
@@ -5530,6 +7027,19 @@ function buildLayout(node) {
     if (S.book) { if (isMotion()) paintMotionStage(); else paintStage(); }
   });
   ro.observe(root);
+  /* The timeline is scaled to the width it has. Drawn before the node has
+     its width - as on opening a workflow - it came out a few pixels wide;
+     it is drawn again once the strip has its real width, and whenever the
+     width changes. */
+  let tlT = 0;
+  const tlro = new ResizeObserver(() => {
+    if (S.dead || !isMotion() || !S.book) return;
+    const w = strip.clientWidth;
+    if (!w || Math.abs(w - (TL.room || 0)) < 4) return;
+    clearTimeout(tlT);
+    tlT = setTimeout(() => { if (!S.dead && isMotion() && S.book) paintShots(geo()); }, 60);
+  });
+  tlro.observe(strip);
 
   /* A .layout written into a package brings its layout back: the series,
      print or web and the size, the style, and every choice made per cut -
@@ -5620,21 +7130,65 @@ function buildLayout(node) {
     const tone = liveTone(S.book.series) || seriesTone(S.book.hue);
     if (root.style.getPropertyValue("--sg").trim() !== tone) root.style.setProperty("--sg", tone);
   }
-  const toneWatch = setInterval(() => { if (!S.dead && root.isConnected) followTone(); }, 400);
+  const toneWatch = setInterval(() => {
+    if (S.dead || !root.isConnected) return;
+    followTone();
+    try { followBook(); } catch (e) { /* a book being built */ }
+  }, 400);
 
   const poll = setInterval(() => {
     if (S.dead || S.exporting || !root.isConnected || document.hidden) return;
     loadBook(true);
   }, POLL_MS);
 
+  ME = {
+    series: () => P.vly_series || "",
+    player: () => isPlayer(),
+    film: () => (P.vly_series ? mstate().music.name || "" : ""),
+    refreshMusic: () => { if (!S.dead && musicLive()) paintMusic(); },
+    renamed: (old, neu) => { if (!S.dead) renamedHere(old, neu); },
+    hush: () => {
+      if (S.dead) return;
+      if (PV.audio && !PV.paused) pvPause();
+      if (MZ.playing) mpause();
+    },
+    setFilm: async (name, start) => {
+      const mu = mstate().music;
+      const at = Number(start) > 0 ? Number(start) : 0;
+      if (mu.name === name) {
+        if (start != null && mu.start !== at) {
+          mpause();
+          mu.start = mu.len ? Math.min(at, Math.max(0, mu.len - 1)) : at;
+          say(`The film's music now starts at ${clock(mu.start)}`);
+          paint();
+        } else if (musicLive()) paintMusic();
+        return;
+      }
+      mpause();
+      mu.name = name;
+      mu.start = at;
+      delete mu.len;
+      const b = await musicBuffer(name);
+      if (b) { mu.len = b.duration; mu.start = Math.min(at, Math.max(0, b.duration - 1)); }
+      say(b ? `Music of the film: ${name} \u00b7 ${clock(b.duration)}${mu.start ? ` \u00b7 from ${clock(mu.start)}` : ""}` : `This browser cannot play ${name}`, !b);
+      paint();
+    },
+  };
+  VLY_ALL.add(ME);
+
   node._vly = {
     refresh: async () => { defaults(); await loadList(); S.sig = ""; await loadBook(); },
     destroy: () => {
       S.dead = true;
+      VLY_ALL.delete(ME);
       mstop();
       if (MZ.ac) { try { MZ.ac.close(); } catch (e) { /* closed */ } }
       clearInterval(poll);
       clearInterval(toneWatch);
+      clearInterval(histWatch);
+      try { tlro.disconnect(); } catch (e) { /* gone */ }
+      try { pvStop(); } catch (e) { /* gone */ }
+      window.removeEventListener("leiel-series-opened", onSeriesOpened);
       ro.disconnect();
       closePop();
       closeFull();

@@ -79,7 +79,8 @@ picture; click to reserve it for the recipe, `x` to take it off the shelf.
 shelf, in a recipe or in the queue - also shows the model page's sample
 pictures as a strip under the preview. Move the pointer onto the card and
 point at a small one to see it large; the card stays open while the pointer
-is on the chip or the card. Click the large picture, or any small one, to
+is on the chip or the card. The chip's `x` is left free for deleting: pointing at it
+never opens the card, and moving onto it puts an open card away. Click the large picture, or any small one, to
 open it over the whole window - the buttons on either side, the arrow keys or
 the wheel go through the others, and a click or `Esc` goes back to the card,
 which stays open until the pointer leaves it or a click lands elsewhere. The pictures come from the metadata file beside
@@ -134,6 +135,14 @@ sealed one.
 A recipe that finishes leaves the box and goes back to the bench marked `done`,
 so the box always holds only what is left. Put it in the box again and it starts
 over.
+
+A recipe dragged out of the box part way keeps its count - `6 / 24` - and its
+chips keep their own, so put back in the box it carries on from there; only a
+render that was sent but never came back is made again. The round arrow in
+its header, beside copy, starts that one recipe over: its count goes back to 0
+and every other recipe keeps its own. It shows once a recipe has rendered
+something, and not on the recipe being rendered right now. **Reset** below
+still starts the whole queue over.
 
 ## While it runs
 
@@ -318,6 +327,16 @@ chip in. Or press the sweep button (three arrows) in the header and add with
 the `+` at the end of each row. Drag a chip from the sweep back onto the
 recipe's body to take it out again, drag within a row to change the order,
 `✕` removes it.
+A prompt chip in the sweep works as it does on the recipe: hover it to read
+the prompt's note, click it to swap it for another prompt. The new one takes
+its place in the order and keeps its count; a prompt already in the sweep is
+not added twice.
+The recipe's own prompt, once dragged into the sweep, is a sweep prompt like
+the others: `✕` takes it out of the recipe altogether and swapping it replaces
+it there too - it does not come back onto the recipe's body. The recipe then
+takes the prompt swapped in, or another prompt on its body, or else the first
+one left in the sweep, as its own. Only the very last prompt of a recipe
+stays, since a recipe with none could not render.
 
 A recipe whose own prompt is gone — never picked, or from a book that is no
 longer loaded — takes the first live prompt you add to its sweep as its own.

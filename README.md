@@ -17,7 +17,9 @@ The same series is there as text too, in
 `example_workflows/The Keeper's Letter - Series Pack.md` - the series note,
 each scene's frame, note and caption, and its anchors - in the form the
 Series Book's **Paste All** reads. Paste it into an empty Series Book to start
-from the sample series, or use it as a model for a pack of your own.
+from the sample series, or use it as a model for a pack of your own. A whole
+season of packs goes into Files at once, sorted into a folder, with **Make all
+series** in the Files panel.
 
 ## The nodes
 
@@ -58,6 +60,22 @@ replace across every prompt at once. Below the book sits the full Prompt
 Composer, on whichever prompt is open, for the times a prompt needs editing by
 hand.
 
+**Files.** Two rooms, each folding away: **Book files** - the whole book as
+you left it, saved by name - and **Series files**, each series on its own,
+written a moment after every change so nothing is ever lost. Both sort into
+folders, and any file or folder copies out as text without being opened.
+**Save book** and **Make all series** wait as buttons on a room's title line:
+Make all series takes a whole season of packs at once - pasted, or as `.txt`
+files - shows what it read before anything is written, and makes a file for
+every series in its folder, without opening them in the book.
+
+**Notes in two languages.** A note written in English and another language
+shows **EN**, the other language (**KO** for Korean) or **ALL** - one choice
+for every Series Book and Series Report on the canvas. **Auto save** on a
+series keeps its book file up to date a few seconds after each change, and a
+workflow saved part way through a series, opened again, is brought up to date
+from the series' own file.
+
 ![Visual Series Book](docs/images/series-book/01-overview.png)
 
 
@@ -74,7 +92,8 @@ count mid-run, with nothing already rendered repeated.
 
 Starting takes three steps — click a prompt, `+ ADD TO QUEUE` and drag the
 recipe into the queue box, `RUN ALL`. The rest — settings to sweep, a Series
-Book's capsules, trigger words — waits until you want it.
+Book's capsules, trigger words — waits until you want it. A recipe dragged
+out of the queue part way keeps its count, and can be started over on its own.
 
 ![Visual Series Lab](docs/images/series-lab/01-overview.png)
 
@@ -187,19 +206,28 @@ no model is involved: the words are the book's, the pictures are your picks.
 opener, a cut across a spread, a cut facing its words, two cuts framed inside
 the margins, the words set on the picture, a closing page that lists every
 cut. Each cut takes the layout its shape suggests, and any of it can be
-changed — the pick, the layout, the side, where the words sit. Every pick
-chosen for a cut shares its place on the page.
+changed — the pick, the layout, the side, where the words sit, which words a
+page carries. Every pick chosen for a cut shares its place on the page, in an
+arrangement picked from small drawings, and the lines between the pictures
+can be dragged to size them.
 
 **Web.** The same series as single frames for a feed, in 4:5, 1:1, 9:16 and
 16:9, each scaled from its short side so the type keeps its proportion.
 
 **Motion.** The picks become a film: a title, each picture moving slowly with
-its caption, a fade to black at the end, set to music. A timeline in the manner
+its caption - a pan or a slow zoom chosen by the shape of the picture against
+the frame, a fade to black at the end, set to music. A timeline in the manner
 of an editor — shots as wide as their time on screen over the music's waveform,
 lengths dragged at their edges, a playhead to scrub. Markers find the accents
 of the music without a model, and **Fit cuts** moves every cut onto the
 nearest one — the difference between pictures shown and a film. Encoded frame
 by frame in the browser to MP4, in every size at once.
+
+**Music player.** The music kept for the films, played while you work: dropped
+in from the computer, gathered in folders and favourites, heard once, through
+the list or round and round, with its spectrum in a display set in the
+series' colour. **Start here** makes the moment you are hearing the start of
+the film's music. One button turns the node into the player alone.
 
 **Out of the graph.** A PDF, pages as JPEG or PNG, a print package with every
 picture at full size, and an InDesign document with its pictures linked and

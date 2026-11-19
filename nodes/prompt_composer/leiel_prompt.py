@@ -1034,7 +1034,7 @@ DRAWER_FILENAME = "drawer.json"
 # the style bar's own settings - paragraph and character styles, favourite
 # fonts and colours - kept beside the books so they outlive the browser
 UI_PREFS_FILENAME = "ui_prefs.json"
-UI_PREF_KEYS = ("lvp-pstyles", "lvp-cstyles", "lvp-font-fav", "lvp-font-reg", "lvp-rgb-fav")
+UI_PREF_KEYS = ("lvp-pstyles", "lvp-cstyles", "lvp-font-fav", "lvp-font-reg", "lvp-rgb-fav", "lvp-note-lang")
 UI_PREF_VALUE_MAX = 1000000
 DRAWER_KINDS = ("quality", "subject", "outfit", "pose", "scene", "camera", "absolute")
 DRAWER_MAX = 3000

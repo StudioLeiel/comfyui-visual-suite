@@ -1163,7 +1163,56 @@ def _music_list():
             st = os.stat(p)
             out.append({"name": n, "bytes": st.st_size, "added": getattr(st, "st_ctime", st.st_mtime)})
     out.sort(key=lambda m: (m["added"], m["name"].lower()))
-    return {"ok": True, "list": out}
+    return {"ok": True, "list": out, "shelf": _shelf_clean(_shelf_read(), {m["name"] for m in out})}
+
+
+# The order of the music list, its favourites and its folders. A folder only
+# gathers names: the files stay where they are, and one piece can sit in
+# several folders.
+SHELF_NAME = "_shelf.json"
+
+
+def _shelf_read():
+    try:
+        with open(os.path.join(_music_dir(), SHELF_NAME), "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _shelf_clean(doc, names=None):
+    doc = doc if isinstance(doc, dict) else {}
+
+    def keep(items):
+        seen, out = set(), []
+        for n in items if isinstance(items, list) else []:
+            n = os.path.basename(str(n or ""))
+            if n and n not in seen and (names is None or n in names):
+                seen.add(n)
+                out.append(n)
+        return out
+
+    folders, ids = [], set()
+    for f in doc.get("folders") if isinstance(doc.get("folders"), list) else []:
+        if not isinstance(f, dict):
+            continue
+        fid = re.sub(r"[^a-z0-9]", "", str(f.get("id") or "").lower())[:24]
+        name = str(f.get("name") or "").strip()[:60]
+        if not fid or fid in ids or not name:
+            continue
+        ids.add(fid)
+        folders.append({"id": fid, "name": name, "items": keep(f.get("items"))})
+    return {"order": keep(doc.get("order")), "fav": keep(doc.get("fav")), "folders": folders}
+
+
+def _shelf_save(doc):
+    clean = _shelf_clean(doc)
+    path = os.path.join(_music_dir(), SHELF_NAME)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(clean, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+    return {"ok": True, "shelf": clean}
 
 
 def _music_forget(name):
@@ -1175,6 +1224,42 @@ def _music_forget(name):
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True}
+
+
+def _music_rename(name, to):
+    """A piece of the list given a new name: the file is renamed, its
+    extension kept, and the order, favourites and folders follow it."""
+    src = _music_path(name)
+    if not src:
+        return {"ok": False, "error": "that music is not in the list"}
+    old = os.path.basename(src)
+    ext = os.path.splitext(old)[1]
+    stem = str(to or "").strip()
+    if stem.lower().endswith(ext.lower()):
+        stem = stem[: -len(ext)]
+    stem = _UNSAFE.sub(" ", stem).strip().rstrip(".")
+    if not stem:
+        return {"ok": False, "error": "the name is empty"}
+    new = stem + ext
+    if new == old:
+        return {"ok": True, "name": old}
+    dst = os.path.join(_music_dir(), new)
+    if os.path.exists(dst) and os.path.normcase(dst) != os.path.normcase(src):
+        return {"ok": False, "error": "a piece with that name is already in the list"}
+    try:
+        os.rename(src, dst)
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+    shelf = _shelf_read()
+    if isinstance(shelf, dict):
+        swap = lambda items: [new if n == old else n for n in items] if isinstance(items, list) else items
+        shelf["order"] = swap(shelf.get("order"))
+        shelf["fav"] = swap(shelf.get("fav"))
+        for fd in shelf.get("folders") if isinstance(shelf.get("folders"), list) else []:
+            if isinstance(fd, dict):
+                fd["items"] = swap(fd.get("items"))
+        _shelf_save(shelf)
+    return {"ok": True, "name": new}
 
 
 def _music_path(name):
@@ -1407,6 +1492,16 @@ try:                                                 # pragma: no cover
     @_routes.get("/leiel_layout/music_list")
     async def _layout_music_list(request):
         return _web.json_response(await _run(_music_list))
+
+    @_routes.post("/leiel_layout/music_shelf")
+    async def _layout_music_shelf(request):
+        data = await _json(request)
+        return _web.json_response(await _run(_shelf_save, data.get("shelf")))
+
+    @_routes.post("/leiel_layout/music_rename")
+    async def _layout_music_rename(request):
+        data = await _json(request)
+        return _web.json_response(await _run(_music_rename, data.get("name"), data.get("to")))
 
     @_routes.post("/leiel_layout/music_forget")
     async def _layout_music_forget(request):

@@ -18,6 +18,7 @@ title and line set beside it in the pack's house style.
 | `11-export.png` | EXPORT | Export |
 | `12-export-video.png` | VIDEO EXPORT | Recording |
 | `13-package.png` | PACKAGE PROJECT | Package |
+| `14-music-player.png` | A PLAYER FOR THE WORK | Music player |
 
 Taken at 100% zoom on the dark theme. Nothing personal on screen: no paths of
 this computer, no music or typefaces of its own - mask them before a shot is

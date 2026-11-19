@@ -67,6 +67,9 @@ the magazine page.
 | O | Text on photo | The cut across both pages, its words set on the picture | The cut filling the frame, its words set on the picture |
 | F | Closing | The last cut, then the list of every cut | The list of every cut - in two columns in a wide frame |
 
+The series title is set larger on the opener than anywhere else - in print
+and on the web - so the cover reads as a cover.
+
 ![Inset - the picture inside the margins, its words beside it](images/series-layout/05-inset.png)
 
 ## Moving a picture in its frame
@@ -95,6 +98,31 @@ The pictures share their place with a thin line of paper between them, and
 the way they share it is chosen by their shapes: two landscapes one above the
 other, two portraits side by side, three as one large picture and two small,
 more in a grid - whichever cuts the least off the pictures.
+
+Where a page holds a cut with more than one pick, **PICKS** under the page
+shows the ways that many pictures can share the place, each as a small
+drawing, and the page takes the one chosen:
+
+| Picks | Arrangements |
+| --- | --- |
+| 2 | side by side, stacked, large and small, large over small |
+| 3 | in a row, stacked, one left and two right, two left and one right, one over two, two over one |
+| 4 | grid, in a row, stacked, one large and three beside, one large and three under |
+| 5 or more | in a row, stacked |
+
+**Auto** takes, of these, the one that cuts the least off the pictures (five
+and more: a grid by their shapes). Where there is a large place, the first
+pick of the cut takes it. Side by side on a full spread puts two picks one on
+each page.
+
+**The lines between the pictures can be dragged.** Hold the pointer on the
+paper between two pictures - it turns into a two-way arrow - and drag: the
+pictures either side grow and shrink together, never below an eighth of the
+place. Dragged under Auto, the page keeps the arrangement on show. Press a
+line twice to even the two pictures again; choosing another arrangement
+starts it from its own sizes. It holds with **Inset** too, it goes into the
+PDF and the InDesign document as on the page, and print and web each keep
+their own.
 
 The words of a cut on a **Photo | text** page are its number, its title, a
 short rule, its caption, then its note. The block sits where the page's words
@@ -144,7 +172,14 @@ full spread in print and a framed picture in a feed.
 
 1. Pick the series in the list at the top. Every series the Series Book has
    saved is in it, the one saved last first. The node wears the series' colour
-   from the Series Book, and follows it when it is changed there.
+   from the Series Book, and follows it when it is changed there. With
+   **LIVE** on - beside the list, on by default - the node follows the book
+   as the Series Lab, the Image Viewer and the Series Report do: open another
+   series in the Series Book and it is laid out here. Only a change in the
+   book is followed, so a series picked in the list stays until the book
+   opens another one. LIVE off keeps the node on the series chosen here. A
+   series opened in the book but not saved yet says so, and is laid out once
+   the book has saved it.
 2. Choose **PRINT** or **WEB**, and the size beside it.
 3. **CUTS**, on the left, has every cut of the book with its picks - never
    taller than the page beside it; a long series scrolls - all at one
@@ -165,6 +200,16 @@ full spread in print and a framed picture in a feed.
      photo**) - the pictures come in from the edge and sit inside the margins
      of the page or the spread, the paper round them; press again for the edge.
      Mixing pages to the edge with inset ones gives a series its rhythm
+   - **SHOW** - which words this page carries, on every page but the
+     closing: **Title** and **Text**, each on or off - lit, it is on the
+     page; dark, it is not; both dark, the page carries no words. On the
+     opener the title is the series title and the text its note - turning
+     **Text** off leaves the story out and sets the title alone. On a cut's page the title
+     is its number and title, the text its caption and note. A picture to
+     the edge - **Full spread** or **Pair** - carries only a small label in
+     its corner, so there the buttons read **Number** and **Caption** (Pair:
+     **Number** alone); for the title and note set on the picture, choose
+     **Text on photo**. Print and web each keep their own, page by page
    - **WORDS** - on a page with words of its own: **Auto** follows the Style,
      **Top**, **Middle** and **Bottom** set this page alone; **Bottom** sets the
      last line on the foot of the page
@@ -219,13 +264,20 @@ The Style (colour, typefaces, sizes) is the one of the layout.
   where it is; near the playhead it snaps to
   it, and the next shot then starts there. Drag the playhead - or along the
   waveform - and the screen above follows, the time shown on the playhead. **+** and **−** zoom the timeline
-  in and out, as does Alt with the mouse wheel; a shot shows one frame at its
-  head and the rest of its length is left empty, as clips on a timeline. **×** takes a shot out of the film, **Restore** brings every shot
+  in and out, as does Alt with the mouse wheel - at Fit the whole film fills
+  the width the timeline has, and it is drawn again whenever that width
+  changes, as when the node is resized or a workflow opened; a shot shows one frame at its
+  head and the rest of its length is left empty, as clips on a timeline. **×**, at the foot of a shot's picture when the pointer is on it, takes the shot out of the film, **Restore** brings every shot
   back. Picks chosen or taken out in CUTS come and go in the film too.
 - For the shot chosen:
-  - **MOVE** - **Auto** pans where the frame cuts the picture and zooms slowly
-    where it fits, in turn; **Still**, **In**, **Out**, or a pan **←** **→**
-    **↑** **↓**
+  - **MOVE** - **Auto** is chosen by the shape of the picture against the
+    frame of the size on show, so it changes with the size: a pan along the
+    side the frame cuts, a slow zoom in or out where the picture fits. Where
+    the frame cuts only a little - a portrait picture in a 9:16 frame - pans
+    and zooms take turns (pan, in, pan back, out), so a tall film does not
+    only slide sideways. A picture cut a lot - a landscape in a tall frame -
+    keeps its pan. Or set the move by hand: **Still**, **In**, **Out**, or a
+    pan **←** **→** **↑** **↓**
   - **LENGTH** - 2 to 8 seconds, or any length from 1 to 20 typed beside them
   - **TO NEXT** - **Fade** into the next shot, a straight **Cut**, or down to
     **Black** and up again - a pause between two parts. A fade overlaps the
@@ -233,7 +285,11 @@ The Style (colour, typefaces, sizes) is the one of the layout.
     did, so a cut set on a marker stays on it - the shot's length changes by
     the overlap instead. On the timeline, a small mark at the top right of
     each shot says how it passes: a gold wedge for a fade, a bar for a cut,
-    a black square for black
+    a black square for black. A mark at the top left, where the shot
+    begins, says how it moves: an arrow for a pan, two arrows out to the
+    corners for In and two arrows in from them for Out, a small square for
+    Still - gold where the move was
+    set on the shot, pale where Auto chose it
   - **CAPTION** - the cut's number and title, small, and its caption under
     them, on the picture. On by itself for the first pick of a cut. The small
     grid beside it places the caption: top, middle or bottom, by left,
@@ -309,11 +365,105 @@ outside the part the film uses. The
 markers belong to the piece of music, in its own time: they move with START
 AT, repeat where it loops, and come back when the piece is chosen again.
 
-**Used before** opens the list of every piece chosen here, in the order it was
-first added - click one to set it to the film; the one in use is marked in
-gold. **×** beside a piece, pressed twice, deletes it from the list and from
-the folder. The list closes again with the same button. Under it, how long the film runs and which
-part of the music it uses; it says so when the piece ends before the film.
+**Used before** opens the list of every piece kept here, in the order it was
+first added, and closes it again. Click a piece to set it to the film; the
+one in use carries a small gold **film** tag after its name, and the piece
+playing is the one written in gold. Under the list, how long the film runs
+and which part of the music it uses - it says so when the piece ends before
+the film.
+
+Music files can also be dragged from the computer and dropped on the MUSIC
+panel, one or many at once. Each is copied into the list, so the original
+file is no longer needed; the film takes the first of them only when it has
+no music yet, so a film already set keeps its own.
+
+#### Listening
+
+The list doubles as a player to work to. Listening never changes the film:
+it keeps the music set to it.
+
+| On a row | |
+| --- | --- |
+| **▶ / ❚❚** | listen, pause, play on - beside the film's piece it plays from START AT |
+| **☐** | mark it: once any piece is marked, only the marked ones play |
+| **☆** | add it to Favourites |
+| size, time | the file's size and the running time of the piece |
+| **✎** | rename it (shows under the pointer) - Enter keeps, Esc leaves |
+| **▲ ▼** | move it a step up or down in the list shown |
+| **folder** | the folders it is in, to tick in or out |
+| **×** | pressed twice, deletes the file - in a folder, only takes it out |
+
+**LISTEN**, above the list, names the piece playing, how far it has run and
+how long it is (grey while paused), then has three player buttons:
+**previous** (the start of the piece when it has run more than three
+seconds, else the piece before), **play / pause**, and **next**. Play with
+nothing playing starts the piece heard last, or the first of the list.
+While a piece plays, **Start here** beside them sets it as the film's music
+from the moment it has reached, as in the [music player](#music-player). Then
+five icons say what follows when a piece ends:
+
+| Mode | When a piece ends |
+| --- | --- |
+| **Once** (arrow to a bar) | it stops |
+| **Play all** (list with ▶) | the next plays, to the end of the list |
+| **Repeat one** (loop with 1) | the same piece again |
+| **Repeat all** (loop) | the list round and round |
+| **Shuffle** (crossed arrows) | any other piece, at random, without end |
+
+The playing piece shows the mode, and the list it goes round, after its
+name. Listening keeps to the list shown and, within it, to the marked
+pieces; **Unmark all** brings the whole list back. The mode and the marks
+are kept with the node.
+
+**Favourites and folders.** After the modes come the tabs - **All**,
+**Favourites** and the folders, in the order they were made; clicking a tab
+opens it. **+ Folder** makes a folder: type its name and press Enter (it
+opens when its tab is clicked). A piece joins a folder when it is dragged
+onto the tab, or from its folder button. One piece can sit in several
+folders: a folder only gathers names, the files stay where they are.
+Double-click a tab to rename the folder; its ×, pressed twice, deletes the
+folder and leaves the music. Music dropped from the computer while a folder
+is open goes into it. The whole list, Favourites and each folder keep an
+order of their own.
+
+Renaming a piece renames its file and keeps the extension; the order,
+Favourites, folders, marks, the piece playing, and the film music and
+markers of every series in the Layout nodes open follow the new name. A
+workflow saved elsewhere with the old name finds its music when it is set
+again. The order, Favourites and folders are kept with the music, in
+`_shelf.json` in the music folder, so every workflow sees the same ones.
+
+### Music player
+
+![Music player - a player for the work](images/series-layout/14-music-player.png)
+
+The note button in the bar at the top turns the whole node into a player of
+the music kept here. The layout, the cuts and the film hide; only the player
+and the list stay. It works from Print, Web or Motion, with or without a
+series open, and **Layout** brings the node back as it was - music playing
+keeps playing.
+
+| Part | |
+| --- | --- |
+| body | the previous, play / pause and next buttons, in the series' colour |
+| display | the piece playing, its spectrum (low notes left, high right - flat when it stops) and a bar to click to move in the piece |
+| right | the five modes, **EQ** to show or hide the spectrum, and the player's own volume - the film keeps its own |
+| top line | the list playing and the pieces marked, then **Start here**, **To the film** and **Layout** |
+
+**To the film** sets the piece playing as the music of the film of the
+series open; it reads **In the film** once it is. **Start here**, shown while
+a piece plays, sets it as the film's music *from the moment it has reached* -
+the time is on the button - so START AT is found by listening, not by hand.
+In the player a click on a piece only plays it (or pauses it); it is never
+set to the film from there.
+
+**Two nodes.** A second Layout node kept as a player beside the one the film
+is made in stays in step with it: the film's music is read from the Layout
+node of the same series, and **To the film** and **Start here** set it in
+every Layout node on that series. One sound plays at a time across the
+canvas - a piece or a film started in one node pauses whatever plays in the
+others. Each node keeps its own layout, so lay out the pages in one and keep
+the other as the player.
 
 ![Markers and Fit cuts](images/series-layout/10-markers.png)
 
@@ -406,6 +556,26 @@ open:
 | Home End | First and last page |
 | F, ↓ | Full screen |
 | Esc, ↑, F | Back from full screen |
+| Ctrl+Z | Undo |
+| Ctrl+Y, Ctrl+Shift+Z | Redo |
+
+## Undo and redo
+
+Every change to the layout is a step that can be taken back: a layout
+chosen for a page, a pick added or taken out, a picture moved in its frame,
+a line between pictures dragged, words shown or hidden, a shot's length,
+move or caption, markers, the style. **Ctrl+Z** - with the pointer over the
+node or the node selected - goes back one step, **Ctrl+Y** or
+**Ctrl+Shift+Z** forward again; the two arrows at the top beside the refresh
+button do the same, and are dimmed when there is nothing to go to. Changes
+made within a moment of each other, as while typing or dragging, are one
+step. The key is the node's own there, so ComfyUI does not reload the
+workflow under it: ComfyUI's own undo leaves a key alone while a text field
+has the focus, so while the pointer is over the node an unseen field of the
+node holds it - a field being typed in keeps its own. Move the pointer off
+the node and Ctrl+Z is ComfyUI's again. The history belongs to the series on show: opening
+another series starts a new one. Choosing another series or another size is
+not a step.
 
 ## Style
 
@@ -425,6 +595,13 @@ the page stays in proportion.
   **Latin script only** - a note written in two languages keeps its English
   and leaves the lines in another script out - or **None**, the
   titles and captions alone. The notes in the Series Book are not changed.
+- **Shot length** (MOTION) - how long each picture shot of the film runs
+  when it has no length of its own: 2 to 8 seconds, or any length from 1 to
+  20 typed beside them; 4 to begin with. It is kept with the series' film, and
+  changing it changes every such shot at once. A shot given its own length -
+  under the picture, by dragging its edge, or by **Fit cuts** - keeps it;
+  **Set every shot** gives this length to those too. The title and the
+  closing keep their own.
 - **Title size** and **Text size** - 70 to 150 %. Titles are the series title,
   cut titles and the closing list; text is everything else. **Reset sizes**
   brings both back to 100 %.

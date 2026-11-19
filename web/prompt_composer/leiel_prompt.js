@@ -582,6 +582,10 @@ function snapClassify(list) {
 const PICON_SORT = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5v11M2.5 11.5l2 2 2-2"/><path d="M9 3.5h4.5M9 7h3.5M9 10.5h2.5"/></svg>`;
 const PICON_NEW = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M8 5.5v5M5.5 8h5"/></svg>`;
 const PICON_DUP = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="2"/><path d="M11 3.2V3a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5.5A1.5 1.5 0 0 0 4 10h.8"/></svg>`;
+/* a disk inside a turning arrow - saving by itself */
+const PICON_AUTO = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.6 6.4A5.8 5.8 0 0 0 3.1 4.6"/><path d="M3 1.9v2.8h2.8"/><path d="M2.4 9.6a5.8 5.8 0 0 0 10.5 1.8"/><path d="M13 14.1v-2.8h-2.8"/><path d="M5.6 5.8h3.6l1.2 1.2v3.2H5.6z"/></svg>`;
+/* two sheets with lines - copy as text */
+const PICON_COPYTXT = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><rect x="5" y="4.5" width="8.5" height="10" rx="1.2"/><path d="M3 11.5V2.8a1.2 1.2 0 0 1 1.2-1.2H10"/><path d="M7 8h4.5M7 10.5h4.5"/></svg>`;
 const PICON_SAVE = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 3.5a1 1 0 0 1 1-1h7.6l2.4 2.4v7.6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/><path d="M5 2.5v3.2h5V2.5M5 13.5V9.5h6v4"/></svg>`;
 const PICON_PASTE = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="11" rx="2"/><path d="M6 3V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V3M5.8 7h4.4M5.8 9.5h4.4M5.8 12h2.6"/></svg>`;
 /* Paste All: two sheets, one over the other - a whole series at once */
@@ -716,7 +720,7 @@ const DRAWER_URL = "/leiel_vpc/drawer";
    cleared browser. The browser's own storage only keeps a copy; on the first
    load whatever it already held is carried over to the file. */
 const PREFS_URL = "/leiel_vpc/ui_prefs";
-const PREF_KEYS = ["lvp-pstyles", "lvp-cstyles", "lvp-font-fav", "lvp-font-reg", "lvp-rgb-fav"];
+const PREF_KEYS = ["lvp-pstyles", "lvp-cstyles", "lvp-font-fav", "lvp-font-reg", "lvp-rgb-fav", "lvp-note-lang"];
 const PREFS = {};
 let prefsTimer = null;
 function prefRaw(key) {
@@ -1627,6 +1631,72 @@ function psImport(text) {
   list.sort((a, b) => b.t - a.t);
   psWrite(list);
   return { added, updated, skipped, refused };
+}
+
+/* A series note written in two languages shows one of them, or both: the
+   lines in Latin script, the lines in another script (Korean, say), or all.
+   Only the view changes - the note itself keeps every line. */
+const NOTE_LANGS = [
+  { id: "en", label: "EN", hint: "Show the English lines of the note" },
+  { id: "other", label: "", hint: "" },
+  { id: "all", label: "ALL", hint: "Show the whole note" },
+];
+/* The button for the second language is named after the script the note
+   is written in, so it reads right whatever that language is. */
+const NOTE_SCRIPTS = [
+  [/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/, "KO", "Korean"],
+  [/[\u3040-\u30FF]/, "JA", "Japanese"],
+  [/[\u4E00-\u9FFF]/, "ZH", "Chinese"],
+  [/[\u0400-\u04FF]/, "RU", "Cyrillic"],
+  [/[\u0370-\u03FF]/, "EL", "Greek"],
+  [/[\u0600-\u06FF]/, "AR", "Arabic"],
+  [/[\u0590-\u05FF]/, "HE", "Hebrew"],
+  [/[\u0E00-\u0E7F]/, "TH", "Thai"],
+  [/[\u0900-\u097F]/, "HI", "Devanagari"],
+];
+function noteScript(text) {
+  const other = String(text || "").split("\n").filter(ln => NOTE_OTHER.test(ln)).join("\n");
+  for (const [re, label, name] of NOTE_SCRIPTS) if (re.test(other)) return { label, name };
+  return { label: "2ND", name: "the other script" };
+}
+function noteButtons(text) {
+  const sc = noteScript(text);
+  return NOTE_LANGS.map(l => (l.id === "other" ? { ...l, label: sc.label, hint: `Show the lines in ${sc.name}` } : l));
+}
+const NOTE_OTHER = /[^\u0000-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2100-\u214F\s]/;
+/* Kept among the ui prefs as JSON, as they all are; shared with the
+   Series Report through the same key and a window event. */
+function noteLang() {
+  const raw = prefRaw("lvp-note-lang");
+  let v = raw;
+  try { v = JSON.parse(raw); } catch (e) {
+    // an early plain value: kept again as JSON so the prefs save whole
+    if (NOTE_LANGS.some(l => l.id === raw)) { PREFS["lvp-note-lang"] = JSON.stringify(raw); try { localStorage.setItem("lvp-note-lang", JSON.stringify(raw)); } catch (err) { /* storage off */ } }
+  }
+  return NOTE_LANGS.some(l => l.id === v) ? v : "all";
+}
+function setNoteLang(id) {
+  prefPut("lvp-note-lang", JSON.stringify(id));
+  window.dispatchEvent(new CustomEvent("leiel-note-lang", { detail: { lang: id, from: "book" } }));
+}
+window.addEventListener("leiel-note-lang", (e) => {
+  const id = e && e.detail && e.detail.lang;
+  if (e.detail.from === "book" || !NOTE_LANGS.some(l => l.id === id)) return;
+  PREFS["lvp-note-lang"] = JSON.stringify(id);
+});
+function noteView(text) {
+  const mode = noteLang();
+  const all = String(text || "");
+  if (mode === "all") return all;
+  const lines = all.split("\n");
+  const keep = lines.filter(ln => !ln.trim() || (mode === "en" ? !NOTE_OTHER.test(ln) : NOTE_OTHER.test(ln)));
+  const out = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  // a note in one language only shows whole, whichever is chosen
+  return out ? out : all;
+}
+function noteBilingual(text) {
+  const lines = String(text || "").split("\n").filter(ln => ln.trim());
+  return lines.some(ln => NOTE_OTHER.test(ln)) && lines.some(ln => !NOTE_OTHER.test(ln));
 }
 
 function escapeHtml(s) {
@@ -3224,6 +3294,8 @@ const CSS = `
   border-radius:6px;color:#9aa0a9;cursor:pointer;}
 .lsb-pi svg{width:14px;height:14px;display:block;}
 .lsb-pi.psave{position:relative;}
+.lsb-pi.pauto{border-radius:7px;}
+.lsb-pi.pauto.on{color:#f3dcaa;background:#2a2416;box-shadow:inset 0 0 0 1px color-mix(in srgb, #d9b26a 60%, transparent);}
 .lsb-pi.psave.dirty{color:#e0b85a;}
 .lsb-pi.psave.dirty::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;
   background:#e0b85a;box-shadow:0 0 0 1.5px #1a1612;}
@@ -3345,6 +3417,59 @@ const CSS = `
 .lsb-load .lsave input{flex:1;min-width:0;height:22px;box-sizing:border-box;padding:0 8px;border-radius:5px;
   border:1px solid #3a3e46;background:#16181c;color:#e6e6e6;font-size:11px;}
 .lsb-load .lfoot{display:flex;justify-content:flex-end;}
+/* Book files and Series files: two rooms of their own, each opening with its
+   gold action box - Save current book as, Make all series */
+.lsb-load .lzone{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:10px 12px 12px;
+  background:#111317;border:1px solid #2c2f35;border-radius:8px;}
+.lsb-load .lzone.shut{padding-bottom:10px;}
+.lsb-load .lzone.shut>:not(.ls){display:none !important;}
+.lsb-load .lzone>.ls{margin:0 0 2px;padding-bottom:8px;border-bottom:1px solid #23262c;font-size:11px;letter-spacing:.8px;}
+.lsb-load .lzone.shut>.ls{padding-bottom:0;border-bottom:none;margin:0;}
+.lsb-load .lzone .lsave,.lsb-load .lzone .lpa{margin:2px 0 4px;}
+.lsb-load .lzone .fold{display:none !important;}
+.lsb-load .ls .lsp{flex:1;min-width:8px;}
+.lsb-load .ls i{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.lsb-load .ls .lsa{margin-left:6px;gap:5px;}
+.lsb-load .ls .lsa svg{width:11px;height:11px;}
+.lsb-load .ls .lsa.on{color:#e0b85a;border-color:#6a5a33;background:#1b1912;}
+.lsb-load .lpa{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px;padding:9px 10px 9px 12px;
+  background:#1b1912;border:1px solid #4a3f26;border-left:3px solid #e0b85a;border-radius:6px;}
+.lsb-load .lpa.over{border-color:#e0b85a;background:#221f15;}
+.lsb-load .lpa .lpr{display:flex;align-items:center;gap:8px;}
+.lsb-load .lpa .lsl{flex:0 0 auto;color:#e0b85a;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;}
+.lsb-load .lpa .lph{flex:1;min-width:0;color:#7d828b;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lsb-load .lpa .lsb-btn{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;}
+.lsb-load .lpa .lsb-btn svg{width:12px;height:12px;}
+.lsb-load .lpa .lpb:empty{display:none;}
+.lsb-load .lpa .lpb{display:flex;flex-direction:column;gap:6px;border-top:1px solid #3a3424;padding-top:8px;}
+.lsb-load .lpa .lpt{height:52px;resize:none;background:#141414;color:#ddd;border:1px solid #3a3e46;border-radius:5px;
+  padding:6px 8px;font-size:11px;box-sizing:border-box;width:100%;}
+.lsb-load .lpa .lpsum{display:flex;align-items:center;gap:12px;}
+.lsb-load .lpa .lpsum label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;color:#a9a28e;font-size:10px;
+  font-weight:700;letter-spacing:.6px;text-transform:uppercase;}
+.lsb-load .lpa .pfo{flex:1;min-width:0;height:22px;box-sizing:border-box;padding:0 8px;border-radius:5px;
+  border:1px solid #3a3e46;background:#16181c;color:#e6e6e6;font-size:11px;text-transform:none;letter-spacing:0;font-weight:400;}
+.lsb-load .lpa .pct{flex:0 0 auto;color:#e6e6e6;font-size:11px;font-variant-numeric:tabular-nums;}
+.lsb-load .lpa .pct i{font-style:normal;color:#6c7079;margin:0 6px;}
+.lsb-load .lpa .lpls{display:flex;flex-direction:column;max-height:220px;overflow:auto;border:1px solid #2c2f35;border-radius:5px;background:#111215;}
+.lsb-load .lpa .lpr2{display:flex;align-items:center;gap:10px;padding:3px 8px;font-size:11px;color:#d8d8d8;border-top:1px solid #1d1f24;}
+.lsb-load .lpa .lpr2:first-child{border-top:none;}
+.lsb-load .lpa .lpr2.off{color:#6c7079;}
+.lsb-load .lpa .lpr2 .pi{flex:0 0 18px;color:#c9a453;font-size:9.5px;font-weight:600;line-height:1;letter-spacing:.3px;font-variant-numeric:tabular-nums;}
+.lsb-load .lpa .lpr2 b{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lsb-load .lpa .lpr2 .pc{flex:0 0 28px;text-align:right;color:#a9a28e;font-variant-numeric:tabular-nums;}
+.lsb-load .lpa .lpr2 em{flex:0 0 92px;font-style:normal;font-size:9.5px;letter-spacing:.4px;text-transform:uppercase;text-align:right;}
+.lsb-load .lpa .lpr2 .pn{color:#8aa585;}
+.lsb-load .lpa .lpr2 .pf{color:#7d828b;}
+.lsb-load .lpa .lpr2 .pf.on{color:#e0b85a;}
+.lsb-load .lpa .lpr2 .po{color:#7f97b5;}
+.lsb-load .lpa .lpcf{display:flex;align-items:center;gap:10px;color:#a9a28e;font-size:10.5px;}
+.lsb-load .lpa .ppol{height:22px;padding:0 6px;border-radius:5px;border:1px solid #3a3e46;background:#16181c;color:#e6e6e6;font-size:11px;cursor:pointer;}
+.lsb-load .lpa .lpm{color:#7d828b;font-size:10.5px;}
+.lsb-load .lpa .lpm.err{color:#c98a7c;}
+.lsb-load .lpa .lpgo{display:flex;justify-content:flex-end;gap:6px;}
+.lsb-load .lpa .pgo{color:#e0b85a;border-color:#6a5a33;}
+.lsb-load .lpa .pgo[disabled]{opacity:.4;cursor:default;}
 .lsb-load .lsave .bsc{height:22px;max-width:220px;padding:0 6px;border-radius:5px;border:1px solid #3a3e46;
   background:#16181c;color:#e6e6e6;font-size:11px;cursor:pointer;}
 .lsb-load .lh .lsb-btn{text-transform:none;letter-spacing:0;font-weight:600;margin-left:6px;}
@@ -3377,7 +3502,7 @@ const CSS = `
 .lsb-load .lsec{display:flex;flex-direction:column;gap:4px;max-height:540px;overflow-y:auto;padding:2px;border-radius:6px;}
 /* book files hold the folders, so they get the room: series files half */
 .lsb-load .lsec[data-sec="book"]{max-height:810px;}
-.lsb-load .lsec[data-sec="series"]{max-height:270px;}
+.lsb-load .lsec[data-sec="series"]{max-height:540px;}
 .lsb-load .lsec.shut{display:none;}
 .lsb-load .lsec.drop,.lsb-load .ls.drop{outline:1px dashed #e0b85a;outline-offset:1px;}
 .lsb-load .lfd{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;cursor:pointer;
@@ -3427,8 +3552,11 @@ const CSS = `
 .lsb-load .lr:hover .fmv{opacity:1;}
 /* Open and Bring back show on the row under the pointer only, like the
    arrows and the delete mark - the list reads as names, not buttons */
-.lsb-load .lr .bop,.lsb-load .lr .ld{opacity:0;}
-.lsb-load .lr:hover .bop,.lsb-load .lr:hover .ld,.lsb-load .lr.sel .bop,.lsb-load .lr.sel .ld{opacity:1;}
+.lsb-load .lr .bop,.lsb-load .lr .ld,.lsb-load .lr .lcpy{opacity:0;}
+.lsb-load .lr:hover .bop,.lsb-load .lr:hover .ld,.lsb-load .lr.sel .bop,.lsb-load .lr.sel .ld,
+.lsb-load .lr:hover .lcpy,.lsb-load .lr.sel .lcpy{opacity:1;}
+.lsb-load .lcpy,.lsb-load .fcpy{display:inline-flex;align-items:center;gap:5px;}
+.lsb-load .lcpy svg,.lsb-load .fcpy svg{width:13px;height:13px;display:block;}
 .lsb-load .lr:hover .sdel,.lsb-load .lr .sdel.armed{opacity:1;}
 .lsb-load .lr .lhide{opacity:0;}
 .lsb-load .lr:hover .lhide,.lsb-load .lr .lhide.un{opacity:1;}
@@ -3465,6 +3593,12 @@ const CSS = `
   color:color-mix(in srgb, var(--sg, #c9a453) 30%, #c9c4ba);white-space:pre-wrap;cursor:text;
   border-left:2px solid color-mix(in srgb, var(--sg, #c9a453) 55%, transparent);}
 .lsb-gnote:hover{background:#ffffff08;}
+.lsb-glang{float:right;display:inline-flex;gap:2px;margin:0 0 4px 10px;padding:2px;border-radius:7px;background:#0c0d10;
+  border:1px solid color-mix(in srgb, var(--sg, #c9a453) 35%, #2a2c30);white-space:normal;}
+.lsb-glang button{border:0;background:transparent;color:#8a8e95;font:inherit;font-size:9.5px;letter-spacing:.06em;
+  padding:2px 7px;border-radius:5px;cursor:pointer;line-height:1.3;}
+.lsb-glang button:hover{color:#ece6da;}
+.lsb-glang button.on{background:color-mix(in srgb, var(--sg, #c9a453) 22%, #1a1b1e);color:#f3dcaa;}
 .lsb-grow{display:flex;align-items:stretch;gap:10px;margin:2px 2px 8px;}
 .lsb-grow>.lsb-gnote{flex:1;min-width:0;margin:0;}
 .lsb-gpic{flex:0 0 auto;width:84px;min-height:60px;border-radius:6px;overflow:hidden;cursor:pointer;display:flex;
@@ -3791,6 +3925,9 @@ app.registerExtension({
       /* and what the run had to say when it ended, for the same reason */
       let readNote = null;
       let userTouched = false;  // tells a deliberate wipe from an undo wipe
+      /* Make all series at work in Files: each series passes through the
+         book for a moment, and the book is not saved meanwhile */
+      let importing = false;
       const touch = () => { userTouched = true; };
 
       /* ---------- DOM ---------- */
@@ -3928,6 +4065,7 @@ app.registerExtension({
       /* ---------- persistence ---------- */
       const save = () => {
         if (!ready) return;
+        if (importing) return;
         const w = node.widgets?.find(x => x.name === "layout_json");
         if (!w) return;
         if (!userTouched && !state.sections.length && w.value) {
@@ -3936,7 +4074,7 @@ app.registerExtension({
             if (prev.sections?.length) { restoreFrom(prev, "recovered"); return; }
           } catch (e) { /* unreadable, fall through */ }
         }
-        if (BOOK) writeBack();
+        if (BOOK) { writeBack(); stampEdits(); }
         if (!restoring) recordHistory();
         /* Search hits are a viewing aid, not part of the document - strip them
            out of anything that gets written down. */
@@ -3948,7 +4086,7 @@ app.registerExtension({
         if (BOOK) doc.book = book;
         w.value = JSON.stringify(doc);
         snapPush(clean, "auto");
-        if (BOOK) { paintBook(); scheduleSeriesSave(); }
+        if (BOOK) { paintBook(); scheduleSeriesSave(); scheduleAutoBook(); }
         /* every change can now be undone - say so on the button at once */
         refreshToolbar();
       };
@@ -4537,6 +4675,8 @@ app.registerExtension({
                                 ? { memoHtml: sanitizeMemo(g.memoHtml) } : {}),
                             ...(Number.isFinite(g.memoLead) && g.memoLead >= 80 && g.memoLead <= 300 ? { memoLead: Math.round(g.memoLead) } : {}),
                             ...(g.memoOpen === false ? { memoOpen: false } : {}),
+                            ...(g.autoSave === true ? { autoSave: true } : {}),
+                            ...(Number.isFinite(g.editedAt) && g.editedAt > 0 ? { editedAt: g.editedAt } : {}),
                             ...(typeof g.thumb === "string" && /^data:image\//.test(g.thumb) && g.thumb.length < 400000 ? { thumb: g.thumb } : {}),
                             ...(typeof g.savedSig === "string" && g.savedSig.length < 40 ? { savedSig: g.savedSig } : {}) });
           max = Math.max(max, id);
@@ -5282,7 +5422,9 @@ app.registerExtension({
                           ...(g.note ? { note: g.note } : {}), ...(g.memo ? { memo: g.memo } : {}),
                           ...(g.memo && g.memoHtml ? { memoHtml: g.memoHtml } : {}),
                           ...(g.memoLead ? { memoLead: g.memoLead } : {}),
-                          ...(g.memoOpen === false ? { memoOpen: false } : {}), ...(g.thumb ? { thumb: g.thumb } : {}) },
+                          ...(g.memoOpen === false ? { memoOpen: false } : {}), ...(g.thumb ? { thumb: g.thumb } : {}),
+                          ...(g.autoSave === true ? { autoSave: true } : {}),
+                          ...(Number.isFinite(g.editedAt) ? { edited: g.editedAt } : {}) },
                  prompts, caps };
       }
       /* A series with nothing written in it yet - every capsule empty but
@@ -5305,6 +5447,81 @@ app.registerExtension({
               headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
           } catch (e) { seriesSaved.delete(g.uid); }
         }
+      }
+      /* Auto save: a series with it on writes its own book file a few
+         seconds after the last change, as its save button would - so the
+         book file is never left behind the work. */
+      /* Every series carries the time of its last change, in the workflow and
+         in its own file. A workflow saved part way through a series and
+         opened again would otherwise bring back that older state, though
+         the series' file - written a moment after every change - holds the
+         work done after it. */
+      const lastSig = new Map();
+      function stampEdits() {
+        if (!book) return;
+        for (const g of book.groups) {
+          const sig = groupSig(g);
+          if (!lastSig.has(g.uid)) { lastSig.set(g.uid, sig); continue; }
+          if (lastSig.get(g.uid) !== sig) { lastSig.set(g.uid, sig); g.editedAt = Date.now(); }
+        }
+      }
+      let catchUpDone = false;
+      async function catchUpFromFiles() {
+        if (!BOOK || !book || catchUpDone) return;
+        catchUpDone = true;
+        const newer = [];
+        for (const g of book.groups.slice()) {
+          if (!g.uid) continue;
+          try {
+            const r = await api.fetchApi("/leiel_vpc/series?uid=" + encodeURIComponent(g.uid));
+            const j = await r.json();
+            const doc = j && j.ok ? j.series : null;
+            const fileAt = doc && doc.group && Number(doc.group.edited);
+            if (fileAt && fileAt > (Number(g.editedAt) || 0) + 1000) newer.push([g, doc]);
+          } catch (e) { /* no file for it */ }
+        }
+        if (!newer.length) return;
+        writeBack();
+        snapPush(state.sections, "before the series were brought up to date");
+        for (const [g, doc] of newer) replaceSeries(g, doc);
+        lastSig.clear();
+        touch(); save(); paintBook(true);
+        say(newer.length === 1
+          ? `"${newer[0][0].name}" brought up to date from its series file - it holds work done after this workflow was saved (Undo goes back)`
+          : `${newer.length} series brought up to date from their files - they hold work done after this workflow was saved (Undo goes back)`);
+      }
+      /* the series taken out and read in again from its file, in its place */
+      function replaceSeries(g, doc) {
+        const at = book.groups.indexOf(g);
+        const keep = { no: g.no, open: g.open };
+        const gone = new Set(promptsOf(g).map(p => p.id));
+        book.prompts = book.prompts.filter(p => !gone.has(p.id));
+        for (const c of capsOf(g)) delete book.caps[c.id];
+        book.groups = book.groups.filter(x => x !== g);
+        const before = new Set(book.groups);
+        loadSeries(doc);
+        const ng = book.groups.find(x => !before.has(x));
+        if (!ng) return;
+        book.groups = book.groups.filter(x => x !== ng);
+        book.groups.splice(Math.max(0, at), 0, ng);
+        ng.no = keep.no;
+        ng.open = keep.open;
+      }
+      let autoT = null, autoBusy = false;
+      function scheduleAutoBook() {
+        if (!BOOK || !book || !book.groups.some(g => g.autoSave)) return;
+        if (autoT) clearTimeout(autoT);
+        autoT = setTimeout(runAutoBook, 3000);
+      }
+      async function runAutoBook() {
+        autoT = null;
+        if (autoBusy) { scheduleAutoBook(); return; }
+        autoBusy = true;
+        try {
+          for (const g of book.groups.slice()) {
+            if (g.autoSave && unsaved(g) && !seriesEmpty(g)) await saveBookFile(g.name, g.id, true);
+          }
+        } finally { autoBusy = false; }
       }
       function scheduleSeriesSave() {
         if (!BOOK) return;
@@ -5344,6 +5561,8 @@ app.registerExtension({
         if (typeof grp.memo === "string" && grp.memo.trim()) g.memo = grp.memo.slice(0, 20000);
         if (g.memo && typeof grp.memoHtml === "string" && grp.memoHtml.length < 80000) g.memoHtml = sanitizeMemo(grp.memoHtml);
         if (grp.memoOpen === false) g.memoOpen = false;
+        if (grp.autoSave === true) g.autoSave = true;
+        if (Number.isFinite(grp.edited)) g.editedAt = grp.edited;
         if (Number.isFinite(grp.memoLead) && grp.memoLead >= 80 && grp.memoLead <= 300) g.memoLead = Math.round(grp.memoLead);
         if (typeof grp.thumb === "string" && /^data:image\//.test(grp.thumb)) g.thumb = grp.thumb;
         const map = new Map();
@@ -5393,7 +5612,14 @@ app.registerExtension({
         save();
         const w = node.widgets?.find(x => x.name === "layout_json");
         let doc = null;
-        try { doc = JSON.parse(w && w.value || "null"); } catch (e) { doc = null; }
+        /* Make all series at work: the node is not saved meanwhile, so the
+           book is taken as it is now */
+        if (importing) {
+          try {
+            doc = JSON.parse(JSON.stringify({ sections: state.sections, fx: state.fx, trTo: state.trTo,
+                                              trUnit: state.trUnit, reader: state.reader, book }));
+          } catch (e) { doc = null; }
+        } else try { doc = JSON.parse(w && w.value || "null"); } catch (e) { doc = null; }
         if (!doc || !doc.book) return null;
         if (gid) {
           const b = doc.book;
@@ -5416,7 +5642,7 @@ app.registerExtension({
         return { format: "leiel.book", v: 1, saved: Date.now(),
                  series: book.groups.map(g => g.name), doc };
       }
-      async function saveBookFile(name, gid) {
+      async function saveBookFile(name, gid, quiet) {
         if (!book) return null;
         /* the series is stamped before it is written, so the file carries
            the stamp too and opening it again shows nothing unsaved */
@@ -5432,6 +5658,7 @@ app.registerExtension({
           const j = await r.json();
           if (!j || !j.ok) throw new Error(j && j.error);
           const bk = file.doc.book;
+          if (quiet) { if (sg) paintBook(true); return j; }  // auto save: no word, no undo step
           say(`book ${j.replaced ? "updated" : "saved"} as "${j.name}" - ${bk.groups.length} series, ${bk.prompts.length} prompts`);
           if (sg) { touch(); save(); paintBook(true); }
           return j;
@@ -5743,6 +5970,7 @@ app.registerExtension({
               + `<span>${escapeHtml(bookSeriesNote(b))}${b.prompts} prompt${b.prompts === 1 ? "" : "s"}`
               + ` - ${escapeHtml(when(b.saved))}</span>`
               + (inFolder ? `<button class="lsb-btn fmv up" title="Move up in this folder">&#9650;</button><button class="lsb-btn fmv dn" title="Move down in this folder">&#9660;</button>` : "")
+              + `<button class="lsb-btn lcpy" title="Copy this file's series as text, without opening it - pasted into a chat or back here, it reads as a series pack">${PICON_COPYTXT}</button>`
               + `<button class="lsb-btn bop">Open</button>`
               + hideBtn("book", b.name)
               + `<button class="lsb-btn sdel bdel${bdelArmed === b.name ? " armed" : ""}" title="Delete this book file - click again to confirm">`
@@ -5757,6 +5985,7 @@ app.registerExtension({
             + `<span>${s.prompts} prompt${s.prompts === 1 ? "" : "s"}`
             + ` - ${escapeHtml(when(s.saved))}</span>`
             + (inFolder ? `<button class="lsb-btn fmv up" title="Move up in this folder">&#9650;</button><button class="lsb-btn fmv dn" title="Move down in this folder">&#9660;</button>` : "")
+            + `<button class="lsb-btn lcpy" title="Copy this series as text, without opening it - pasted into a chat or back here, it reads as a series pack">${PICON_COPYTXT}</button>`
             + (here.has(s.uid) ? `<i>in this book</i>` : `<button class="lsb-btn ld">Bring back</button>`
               + hideBtn("series", s.uid)
               + `<button class="lsb-btn sdel${sdelArmed === s.uid ? " armed" : ""}" title="Delete this series file - click again to confirm">`
@@ -5800,6 +6029,7 @@ app.registerExtension({
               + `<span class="n">${mine.length}</span>`
               + (f === ARCHIVE ? "" : `<span class="fcol" title="Folder colour: ${tone[0]} - click for the next, Shift+click for the one before"></span>`)
               + `<span class="fsp"></span>`
+              + `<button class="lsb-btn fcpy" title="Copy every ${sec === "book" ? "book file" : "series"} in this folder - and in the folders inside it - as text, in the order shown">${PICON_COPYTXT}Copy text</button>`
               + `<button class="lsb-btn fsub" title="A folder inside this one">+ Folder</button>`
               + (arch ? `</div>` : `<button class="lsb-btn fren" title="Rename this folder">Rename</button>`
               + `<button class="lsb-btn fdel${delArmed === f ? " armed" : ""}" title="Remove this folder - what is in it moves up a level, nothing is deleted">`
@@ -5846,6 +6076,14 @@ app.registerExtension({
           }
           return html;
         }
+        /* the gold Make all series box, at the head of each room */
+        const packBoxHtml = (sec) => `<div class="lpa fold" data-sec="${sec}"><div class="lpr"><span class="lsl">Make all series</span>`
+          + `<span class="lph">${sec === "book"
+              ? "a whole season from its packs - every # Series heading made into a book file of its own, sorted into a folder"
+              : "a whole season from its packs - every # Series heading made into a series file, sorted into a folder, without opening them here"}</span>`
+          + `<button class="lsb-btn pap" title="Read the packs from the clipboard - one text holding several # Series headings">${PICON_PASTE_ALL}Paste</button>`
+          + `<button class="lsb-btn paf" title="Pick the .txt files of the packs - or drop them on this box">Choose files...</button></div>`
+          + `<div class="lpb"></div></div>`;
         box.innerHTML = `<div class="lh"><span>Files</span>`
           + `<input class="lfq" type="text" spellcheck="false" placeholder="find a book, series or folder">`
           + `<span class="sp"></span>`
@@ -5855,8 +6093,11 @@ app.registerExtension({
           + `</select></span>`
           + `<button class="lsb-btn lnf" title="Make a folder - files picked with Ctrl or Shift go straight into it">+ Folder</button>`
           + `<button class="lsb-btn cls">Close</button></div>`
-          + `<div class="ls" data-sec="book">Book files<i>the whole book - every series, prompt and capsule - in user/visual_series_book/books</i></div>`
-          + `<div class="lsave"><span class="lsl" title="The book open in this node - every series, prompt and capsule - is saved under the name typed here">Save current book as</span>`
+          + `<div class="lzone" data-sec="book"><div class="ls" data-sec="book">Book files<i>the whole book - every series, prompt and capsule - in user/visual_series_book/books</i>`
+          + `<span class="lsp"></span>`
+          + `<button class="lsb-btn lsa" data-open="save" title="Save the book open here as a book file - opens the box to name it">Save book</button>`
+          + `<button class="lsb-btn lsa" data-open="pack" title="Make a book file for every series in a set of packs - opens the box to paste them">${PICON_PASTE_ALL}Make all series</button></div>`
+          + `<div class="lsave fold"><span class="lsl" title="The book open in this node - every series, prompt and capsule - is saved under the name typed here">Save current book as</span>`
           + (book.groups.length > 1
               ? `<select class="bsc" title="Save every series open here as one book, or one series as a book of its own">`
                 + `<option value="">All ${book.groups.length} series</option>`
@@ -5865,10 +6106,14 @@ app.registerExtension({
               : "")
           + `<input class="bnm" type="text" spellcheck="false" value="${escapeHtml(dflt)}" placeholder="name of the book file">`
           + `<button class="lsb-btn bsave" title="Save the whole book under this name - the same name again updates it">Save book</button></div>`
+          + packBoxHtml("book")
           + `<div class="lsec" data-sec="book"></div>`
-          + `<div class="lfoot"><button class="lsb-btn bimp" title="Open a book file from anywhere on this computer">Open a file from the computer...</button></div>`
-          + `<div class="ls" data-sec="series">Series files<i>each series on its own, written as you work - closed ones come back from here</i></div>`
-          + `<div class="lsec" data-sec="series"></div>`;
+          + `<div class="lfoot"><button class="lsb-btn bimp" title="Open a book file from anywhere on this computer">Open a file from the computer...</button></div></div>`
+          + `<div class="lzone" data-sec="series"><div class="ls" data-sec="series">Series files<i>each series on its own, written as you work - closed ones come back from here</i>`
+          + `<span class="lsp"></span>`
+          + `<button class="lsb-btn lsa" data-open="pack" title="Make a series file for every series in a set of packs - opens the box to paste them">${PICON_PASTE_ALL}Make all series</button></div>`
+          + packBoxHtml("series")
+          + `<div class="lsec" data-sec="series"></div></div>`;
 
         function wireRename() {
           const fn = box.querySelector(".lfn");
@@ -6033,6 +6278,7 @@ app.registerExtension({
             box.querySelector(`.lsec[data-sec="${sec}"]`).innerHTML = secHtml(sec);
             box.querySelector(`.lsec[data-sec="${sec}"]`).classList.toggle("shut", s);
             box.querySelector(`.ls[data-sec="${sec}"]`).classList.toggle("shut", s);
+            box.querySelector(`.lzone[data-sec="${sec}"]`).classList.toggle("shut", s);
           }
           box.querySelector(".lnf").textContent = sel.keys.size
             ? `+ Folder (${sel.keys.size})` : "+ Folder";
@@ -6075,10 +6321,289 @@ app.registerExtension({
           nm.value = j.name;
           books = await readBooks();
           paint();
+          foldBox(box.querySelector('.lzone[data-sec="book"]'), "save", false);
         };
         box.querySelector(".bsave").addEventListener("click", (e) => { e.stopPropagation(); doSave(); });
-        nm.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSave(); } });
+        nm.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); doSave(); }
+          else if (e.key === "Escape") { e.preventDefault(); foldBox(box.querySelector('.lzone[data-sec="book"]'), "save", false); }
+        });
         box.querySelector(".bimp").addEventListener("click", (e) => { e.stopPropagation(); pickBookFile(box); });
+        /* Save book and Make all series wait folded on a room's title line;
+           a click opens the gold box under it, a second click folds it */
+        function foldBox(zone, which, open) {
+          const el = zone.querySelector(which === "save" ? ".lsave" : ".lpa");
+          const btn = zone.querySelector(`.lsa[data-open="${which}"]`);
+          if (!el) return;
+          el.classList.toggle("fold", !open);
+          if (btn) btn.classList.toggle("on", open);
+          requestAnimationFrame(fitNodeToContent);
+        }
+        for (const b of box.querySelectorAll(".lsa")) {
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const zone = b.closest(".lzone");
+            const sec = zone.dataset.sec, which = b.dataset.open;
+            const el = zone.querySelector(which === "save" ? ".lsave" : ".lpa");
+            const open = el.classList.contains("fold") || zone.classList.contains("shut");
+            if (open && shut[sec]) { shut[sec] = false; setFilesUi({ [sec + "Shut"]: false }); paint(); }
+            foldBox(zone, which, open);
+            if (open && which === "save") { nm.focus(); nm.select(); }
+          });
+        }
+        /* ---------- Make all series ----------
+           Several series packs at once - from the clipboard or from .txt
+           files - each "# Series" heading becoming a series of its own,
+           written straight to Files and sorted into a folder, without being
+           opened here. In Series files each becomes a series file; in Book
+           files each becomes a book file of its own - and its series file
+           too. A "# Folder: S1 L'Empire" line names the folder (a slash
+           makes one inside another); with none, the S number the series'
+           names share - S1E4, S1E5 - gives "S1". */
+        const FOLDER_HEAD = /^#{1,6}\s+Folder\s*[-–—:]\s*(.+?)\s*$/i;
+        const packs = { book: null, series: null };      // what was read, per room
+        const pols = { book: "skip", series: "skip" };   // already there: skip, copy or replace
+        let busyPack = false;
+        const pkey = (v) => String(v || "").replace(/\s+/g, " ").trim().toLowerCase();
+        /* "S1/Valois" - each part cleaned the way a folder name is */
+        const packFolder = (s) => String(s || "").split("/").map(cleanFolderName).filter(Boolean).join("/");
+        function readPacks(raw, sec) {
+          const lines = normalizeText(raw).split("\n");
+          let folder = null, fence = null;
+          const heads = [];
+          for (let i = 0; i < lines.length; i++) {
+            const fm = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
+            if (fm) { fence = fence ? (lines[i].trim().startsWith(fence) ? null : fence) : fm[1]; continue; }
+            if (fence) continue;
+            const t = lines[i].trim();
+            const fh = FOLDER_HEAD.exec(t);
+            if (fh) { if (folder === null) folder = fh[1]; lines[i] = ""; continue; }
+            if (SERIES_HEAD.test(t)) heads.push(i);
+          }
+          const series = [];
+          heads.forEach((st, k) => {
+            const text = lines.slice(st, k + 1 < heads.length ? heads[k + 1] : lines.length).join("\n").trim();
+            const name = SERIES_HEAD.exec(lines[st].trim())[2].trim();
+            const scenes = splitScenes(text).filter(p => p.series && parseReply(p.text).anchors.length).length;
+            if (!scenes) return;
+            const file = list.find(s => pkey(s.name) === pkey(name)) || null;
+            const bfile = sec === "book" ? (books.find(b => pkey(b.name) === pkey(name)) || null) : null;
+            const open = book.groups.some(g => pkey(g.name) === pkey(name));
+            series.push({ name, text, scenes, file, bfile, open });
+          });
+          if (folder === null) {
+            const nos = new Set(series.map(s => (/^S(\d+)E/i.exec(s.name) || [])[1]).filter(Boolean));
+            folder = nos.size === 1 && series.every(s => /^S\d+E/i.test(s.name)) ? `S${[...nos][0]}` : "";
+          }
+          return { folder: packFolder(folder), series };
+        }
+        const there = (s, sec) => sec === "book" ? !!(s.bfile || s.file) : !!s.file;
+        const packGoes = (s, sec) => !s.open && (!there(s, sec) || pols[sec] !== "skip");
+        function paintPack(sec) {
+          const pk = packs[sec];
+          const pb = box.querySelector(`.lpa[data-sec="${sec}"] .lpb`);
+          if (!pb) return;
+          if (!pk) { pb.innerHTML = ""; requestAnimationFrame(fitNodeToContent); return; }
+          if (pk.box) {
+            pb.innerHTML = `<textarea class="lpt" spellcheck="false" placeholder="Press Ctrl+V here - or drop the .txt files of the packs on this box"></textarea>`;
+            const ta = pb.querySelector(".lpt");
+            ["keydown", "keyup", "keypress"].forEach(k => ta.addEventListener(k, e => {
+              e.stopPropagation();
+              if (k === "keydown" && e.key === "Escape") { packs[sec] = null; paintPack(sec); }
+            }));
+            ta.addEventListener("paste", (e) => {
+              const t = e.clipboardData?.getData("text/plain");
+              if (!t) return;
+              e.preventDefault();
+              takePack(t, sec);
+            });
+            setTimeout(() => ta.focus(), 0);
+            requestAnimationFrame(fitNodeToContent);
+            return;
+          }
+          const ss = pk.series;
+          if (!ss.length) {
+            pb.innerHTML = `<div class="lpm err">No series found - a pack starts with a heading like "# Series 1 - S1E5 The Double", its scenes under it</div>`
+              + `<div class="lpgo"><button class="lsb-btn pcx">Close</button></div>`;
+            requestAnimationFrame(fitNodeToContent);
+            return;
+          }
+          const pol = pols[sec];
+          const inFiles = ss.filter(s => there(s, sec) && !s.open).length;
+          const openN = ss.filter(s => s.open).length;
+          const goes = ss.filter(s => packGoes(s, sec));
+          const cuts = ss.reduce((a, s) => a + s.scenes, 0);
+          const what = sec === "book" ? "book file" : "series file";
+          const tag = (s) => s.open ? `<em class="po" title="This series is open in this book - it is left alone here; use its own Paste All">open here</em>`
+            : there(s, sec) ? `<em class="pf${pol === "skip" ? "" : " on"}" title="A ${s.bfile || sec === "series" ? what : "series file"} of this name is already in Files">${pol === "skip" ? "in Files - left" : pol === "copy" ? "in Files - copy" : "in Files - replaced"}</em>`
+            : `<em class="pn">new</em>`;
+          pb.innerHTML = `<div class="lpsum"><label>Folder <input class="pfo" type="text" spellcheck="false" value="${escapeHtml(pk.folder)}" placeholder="none - the files stay loose"></label>`
+            + `<span class="pct">${ss.length} series<i>&middot;</i>${cuts} scene${cuts === 1 ? "" : "s"}</span></div>`
+            + `<div class="lpls">` + ss.map((s, i) => `<div class="lpr2${packGoes(s, sec) ? "" : " off"}"><span class="pi">${pad2(i + 1)}</span>`
+              + `<b>${escapeHtml(s.name)}</b><span class="pc">${s.scenes}</span>${tag(s)}</div>`).join("") + `</div>`
+            + (inFiles ? `<div class="lpcf"><span>${inFiles} already in Files</span><select class="ppol">`
+              + [["skip", "Leave them as they are"], ["copy", "Add them as copies"], ["replace", "Replace them with these"]]
+                  .map(([v, l]) => `<option value="${v}"${pol === v ? " selected" : ""}>${l}</option>`).join("")
+              + `</select></div>` : "")
+            + (openN ? `<div class="lpm">${openN} open in this book - left alone; paste into ${openN === 1 ? "it" : "them"} with the series' own Paste All</div>` : "")
+            + `<div class="lpgo"><button class="lsb-btn pgo"${goes.length ? "" : " disabled"}>Make ${goes.length} ${sec === "book" ? `book file${goes.length === 1 ? "" : "s"}` : "series"}</button>`
+            + `<button class="lsb-btn pcx">Cancel</button></div>`;
+          const fo = pb.querySelector(".pfo");
+          ["keydown", "keyup", "keypress", "pointerdown", "mousedown", "click"].forEach(k => fo.addEventListener(k, e => {
+            e.stopPropagation();
+            if (k === "keydown" && e.key === "Enter") { e.preventDefault(); putPacks(sec); }
+          }));
+          fo.addEventListener("input", () => { pk.folder = fo.value; });
+          const ps = pb.querySelector(".ppol");
+          if (ps) {
+            ps.addEventListener("click", e => e.stopPropagation());
+            ps.addEventListener("change", () => { pols[sec] = ps.value; paintPack(sec); });
+          }
+          requestAnimationFrame(fitNodeToContent);
+        }
+        function takePack(text, sec) {
+          packs[sec] = readPacks(text, sec);
+          paintPack(sec);
+        }
+        async function packFromClipboard(sec) {
+          let text = null;
+          try { text = await navigator.clipboard.readText(); } catch (e) { text = null; }
+          if (text == null) { packs[sec] = { box: true }; paintPack(sec); return; }
+          takePack(text, sec);
+        }
+        async function packFromFiles(files, sec) {
+          const fs = [...files].filter(f => /\.(txt|md)$/i.test(f.name) || /^text\//.test(f.type));
+          if (!fs.length) { say("no text files there - a pack is a .txt file", "err"); return; }
+          fs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+          const texts = [];
+          for (const f of fs) { try { texts.push(await f.text()); } catch (e) { /* unreadable - left out */ } }
+          takePack(texts.join("\n\n"), sec);
+        }
+        const nameFree = (base, taken) => {
+          let n = `${base} copy`, i = 2;
+          while (taken(n)) n = `${base} copy ${i++}`;
+          return n;
+        };
+        /* Each series is made in the book a moment, written to its file (and
+           in Book files, to a book file of its own), and taken out again -
+           the book is left as it was, with no step to undo. */
+        async function putPacks(sec) {
+          const pk = packs[sec];
+          if (!pk || !pk.series || busyPack) return;
+          const goes = pk.series.filter(s => packGoes(s, sec));
+          if (!goes.length) return;
+          busyPack = true;
+          const pol = pols[sec];
+          const folder = packFolder(pk.folder);
+          writeBack();
+          const keepActive = book.active;
+          const done = [], doneBooks = [];
+          importing = true;
+          try {
+            for (const s of goes) {
+              const g0 = newGroup(s.name);
+              if (s.file && pol === "replace") g0.uid = s.file.uid;
+              g0.open = false;
+              const ok = applyReply(s.text, g0.id, true);
+              /* the paste may read the book in again - the series by its id */
+              const g = groupById(g0.id);
+              if (!g) continue;
+              if (ok && pol === "copy" && there(s, sec)) {
+                g.name = nameFree(g.name, (n) => list.some(x => pkey(x.name) === pkey(n))
+                  || books.some(b => pkey(b.name) === pkey(n)));
+              }
+              g.editedAt = Date.now();
+              if (ok && !seriesEmpty(g)) {
+                seriesSaved.delete(g.uid);
+                await flushSeries(g);
+                done.push(g.uid);
+                if (sec === "book") {
+                  const bn = s.bfile && pol === "replace" ? s.bfile.name : g.name;
+                  const j = await saveBookFile(bn, g.id, true);
+                  if (j && j.name) doneBooks.push(j.name);
+                }
+              }
+              const gone = new Set(promptsOf(g).map(p => p.id));
+              book.prompts = book.prompts.filter(p => !gone.has(p.id));
+              for (const c of capsOf(g)) delete book.caps[c.id];
+              book.groups = book.groups.filter(x => x !== g);
+            }
+          } finally {
+            importing = false;
+            book.active = book.prompts.some(p => p.id === keepActive) ? keepActive
+              : (orderedPrompts()[0] || {}).id;
+            reopen();
+            paintBook(true);
+            /* the book drawn again takes the panel with it - put it back */
+            if (!box.isConnected) root.querySelector(".lsb-book .lsb-head")?.insertAdjacentElement("afterend", box);
+            busyPack = false;
+          }
+          /* the folder, made with the folders above it, and the files put in
+             it in the order of the pack - series files, and book files too */
+          if (folder && done.length) {
+            const parts = folder.split("/");
+            for (let i = 1; i <= parts.length; i++) {
+              const f = parts.slice(0, i).join("/");
+              if (!ix.folders.includes(f)) ix.folders.push(f);
+              if (!ix.open.includes(f)) ix.open.push(f);      // open down to it, so it shows
+            }
+            for (const uid of done) ix.series[uid] = folder;
+            ix.order.series = ix.order.series.filter(k => !done.includes(k)).concat(done);
+            ix.hidden.series = ix.hidden.series.filter(k => !done.includes(k));
+            for (const n of doneBooks) ix.books[n] = folder;
+            ix.order.book = ix.order.book.filter(k => !doneBooks.includes(k)).concat(doneBooks);
+            ix.hidden.book = ix.hidden.book.filter(k => !doneBooks.includes(k));
+            await writeFileFolders(ix);
+          }
+          try {
+            const r = await api.fetchApi("/leiel_vpc/series");
+            const j = await r.json();
+            list = (j && j.list) || list;
+          } catch (e) { /* the old list stays */ }
+          if (sec === "book") books = await readBooks();
+          const cuts = goes.reduce((a, s) => a + s.scenes, 0);
+          packs[sec] = null;
+          paintPack(sec);
+          paint();
+          foldBox(box.querySelector(`.lzone[data-sec="${sec}"]`), "pack", false);
+          const n = sec === "book" ? doneBooks.length : done.length;
+          const unit = sec === "book" ? `book file${n === 1 ? "" : "s"}` : "series";
+          say(n
+            ? `${n} ${unit}, ${cuts} scenes made in Files` + (folder ? ` - in the folder "${folder}"` : "")
+              + (n < goes.length ? ` - ${goes.length - n} could not be made` : "")
+            : "nothing was made - no scenes could be read", n ? "" : "err");
+        }
+        for (const lpa of box.querySelectorAll(".lpa")) {
+          const sec = lpa.dataset.sec;
+          ["keydown", "keyup", "keypress"].forEach(k => lpa.addEventListener(k, e => e.stopPropagation()));
+          lpa.addEventListener("click", (e) => {
+            const t = e.target instanceof Element ? e.target : null;
+            if (!t) return;
+            if (t.closest(".pap")) { e.stopPropagation(); packFromClipboard(sec); }
+            else if (t.closest(".paf")) {
+              e.stopPropagation();
+              const inp = document.createElement("input");
+              inp.type = "file"; inp.multiple = true; inp.accept = ".txt,.md,text/plain";
+              inp.addEventListener("change", () => { if (inp.files && inp.files.length) packFromFiles(inp.files, sec); });
+              inp.click();
+            }
+            else if (t.closest(".pgo")) { e.stopPropagation(); putPacks(sec); }
+            else if (t.closest(".pcx")) { e.stopPropagation(); packs[sec] = null; paintPack(sec); foldBox(lpa.closest(".lzone"), "pack", false); }
+          });
+          lpa.addEventListener("dragover", (e) => {
+            if (!e.dataTransfer.types.includes("Files")) return;
+            e.preventDefault(); e.stopPropagation();
+            e.dataTransfer.dropEffect = "copy";
+            lpa.classList.add("over");
+          });
+          lpa.addEventListener("dragleave", (e) => { if (!lpa.contains(e.relatedTarget)) lpa.classList.remove("over"); });
+          lpa.addEventListener("drop", (e) => {
+            if (!e.dataTransfer.files || !e.dataTransfer.files.length) return;
+            e.preventDefault(); e.stopPropagation();
+            lpa.classList.remove("over");
+            packFromFiles(e.dataTransfer.files, sec);
+          });
+        }
         const kd = box.querySelector(".lkd");
         kd.addEventListener("click", e => e.stopPropagation());
         kd.addEventListener("change", async () => {
@@ -6109,7 +6634,7 @@ app.registerExtension({
            drawn again after each change */
         box.addEventListener("click", async (e) => {
           const t = e.target;
-          if (!(t instanceof Element) || t.closest(".lfn") || t.closest(".lkd")) return;
+          if (!(t instanceof Element) || t.closest(".lfn") || t.closest(".lkd") || t.closest(".lpa")) return;
           const fc = t.closest(".fcol");
           if (fc) {
             e.stopPropagation();
@@ -6261,6 +6786,21 @@ app.registerExtension({
           /* A double click is read here, from two clicks on the same name:
              each click draws the list again, so the browser never sees the
              second click land on the element the first one did. */
+          const fcpy = t.closest(".fcpy");
+          if (fcpy) {
+            e.stopPropagation();
+            const fd = fcpy.closest(".lfd");
+            const sec = fd.dataset.sec, top = fd.dataset.f, m = mapOf(sec);
+            const all = itemsOf(sec).filter(it => showHidden[sec] || !isHidden(sec, it.key));
+            const walk = (f) => {
+              const keys = inFolderOrder(sec, all.filter(it => m[it.key] === f)).map(it => it.key);
+              for (const sub of ix.folders.filter(x => fParent(x) === f)) keys.push(...walk(sub));
+              return keys;
+            };
+            const keys = walk(top);
+            await copyFiles(sec, keys, `the folder "${fLeaf(top)}"`);
+            return;
+          }
           const nameHit = t.closest("b") && t.closest(".lfd, .lr[data-key]");
           const nameKey = nameHit ? (nameHit.dataset.f || (nameHit.dataset.sec + ":" + nameHit.dataset.key)) : null;
           const twice = nameKey && lastName.key === nameKey && Date.now() - lastName.t < 400;
@@ -6318,6 +6858,13 @@ app.registerExtension({
             if (rowHit.dataset.sec === "book") await openBookFile(rowHit.dataset.key);
             else if (here.has(rowHit.dataset.key)) say("this series is already open in the book");
             else await bringBackSeries(rowHit.dataset.key);
+            return;
+          }
+          const lcpy = t.closest(".lcpy");
+          if (lcpy) {
+            e.stopPropagation();
+            const r = lcpy.closest(".lr");
+            await copyFiles(r.dataset.sec, [r.dataset.key]);
             return;
           }
           const bop = t.closest(".bop");
@@ -6891,7 +7438,8 @@ app.registerExtension({
             + `<span class="lsb-psep"></span>`
             + (mine.length > 1 || (mine[0] && Number(mine[0].no) !== 1) ? `<span class="lsb-pi psort" title="Put this series' prompts in number order - 01, 02, 03... Shift+click: number them again from 01 in the order they stand now. Undo puts either back">${PICON_SORT}</span>` : "")
             + `<span class="lsb-pi pnew" title="New empty prompt in this series - paste a scene into it or write it in">${PICON_NEW}</span>`
-            + `<span class="lsb-pi psave${unsaved(g) ? " dirty" : ""}" title="${unsaved(g) ? "Changed since it was last saved - click to save this series as a book file under its own name" : "Saved - nothing changed since. Click to save this series as a book file under its own name again"}">${PICON_SAVE}</span>`
+            + `<span class="lsb-pi psave${unsaved(g) ? " dirty" : ""}" title="${unsaved(g) ? (g.autoSave ? "Changed - saving itself in a moment" : "Changed since it was last saved - click to save this series as a book file under its own name") : "Saved - nothing changed since. Click to save this series as a book file under its own name again"}">${PICON_SAVE}</span>`
+            + `<span class="lsb-pi pauto${g.autoSave ? " on" : ""}" title="${g.autoSave ? "Auto save on - this series saves its book file by itself a few seconds after each change. Click to turn it off" : "Auto save off - click so this series saves its book file by itself after each change"}">${PICON_AUTO}</span>`
 
             + (cur ? `<span class="lsb-pi pdup" title="Duplicate the open prompt - the copy shares every capsule, replace only what changes">${PICON_DUP}</span>`
                    + `<span class="lsb-pi pdel" title="Delete the open prompt - its capsules stay on the shelf, and Undo brings it back">${PICON_DEL}</span>` : "")
@@ -6904,7 +7452,9 @@ app.registerExtension({
                 + `<span class="lsb-gpic${g.thumb ? "" : " none"}" title="The series' picture&#10;Click: see it larger (with no picture: set one)&#10;Double click: take the picture open in a Visual Image Viewer - or choose a file&#10;Drop: a picture onto it&#10;Right click: take it off">`
                 + (g.thumb ? `<img src="${g.thumb}" alt="">` : `<i>+</i>`) + `</span>` : "")
             + (isOpen ? `<div class="lsb-gnote${g.note ? "" : " empty"}" title="What this series is - the story, the look, what was tried. Click to write">`
-                + (g.note ? escapeHtml(g.note) : "add a note about this series...") + `</div></div>` : "")
+                + (g.note && noteBilingual(g.note) ? `<span class="lsb-glang">${noteButtons(g.note).map(l =>
+                    `<button data-nlang="${l.id}" class="${noteLang() === l.id ? "on" : ""}" title="${l.hint}">${l.label}</button>`).join("")}</span>` : "")
+                + (g.note ? escapeHtml(noteView(g.note)) : "add a note about this series...") + `</div></div>` : "")
             + (isOpen ? `<div class="lsb-prompts">${mine.map(chipOf).join("")}</div>` : "")
             /* the series' memo: working thoughts, kept apart from the note
                above - folds on its own */
@@ -7916,6 +8466,8 @@ app.registerExtension({
           }
           box.querySelector(".lsb-gnote")?.addEventListener("click", (e) => {
             e.stopPropagation();
+            const nl = e.target.closest("[data-nlang]");
+            if (nl) { setNoteLang(nl.dataset.nlang); paintBook(true); requestAnimationFrame(fitNodeToContent); return; }
             const el = e.currentTarget;
             if (el.querySelector("textarea")) return;
             const ta = document.createElement("textarea");
@@ -8174,6 +8726,16 @@ app.registerExtension({
               if (mine.length) activate(mine[mine.length - 1].id);
             }
             newPrompt(false);
+          });
+          box.querySelector(".pauto")?.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            writeBack();
+            const g2 = groupById(gid);
+            if (!g2) return;
+            if (g2.autoSave) delete g2.autoSave; else g2.autoSave = true;
+            touch(); save(); paintBook(true);
+            say(g2.autoSave ? `auto save on for "${g2.name}" - its book file keeps up by itself` : `auto save off for "${g2.name}"`);
+            if (g2.autoSave && unsaved(g2)) await saveBookFile(g2.name, gid, true);
           });
           box.querySelector(".psave")?.addEventListener("click", async (e) => {
             e.stopPropagation();
@@ -9168,6 +9730,79 @@ app.registerExtension({
         }
         return out.join("\n").trim() + "\n";
       }
+      /* The same text read straight from files, without opening them: a
+         book file's series, or a series file, in the form Paste reads. */
+      function anchorLines(out, cap) {
+        const text = cap && cap.sec && String(cap.sec.text || "").trim();
+        if (!text || !LABEL_WORD[cap.kind]) return;
+        out.push(`${LABEL_WORD[cap.kind]} · ${cap.name}`, "```", text, "```", "");
+      }
+      function promptLines(out, p, capOf) {
+        out.push(`**${p.name}**`, "");
+        if (orientOf(p) !== "all") out.push(`FRAME: ${orientOf(p)}`);
+        if (String(p.note || "").trim()) out.push("NOTE:", String(p.note).trim(), "");
+        for (const cid of p.caps || []) anchorLines(out, capOf(cid));
+      }
+      function bookDocText(bk, start) {
+        const out = [];
+        let n = start || 1;
+        for (const g of bk.groups || []) {
+          out.push(`# Series ${n++} - ${g.name}`, "");
+          if (String(g.note || "").trim()) out.push("NOTE:", String(g.note).trim(), "");
+          for (const p of (bk.prompts || []).filter(q => q.g === g.id)) promptLines(out, p, (cid) => bk.caps[cid]);
+        }
+        return { text: out.join("\n").trim(), series: (bk.groups || []).length,
+                 prompts: (bk.prompts || []).length, next: n };
+      }
+      function seriesDocText(doc, n) {
+        const out = [];
+        const g = doc.group || {};
+        const caps = {};
+        for (const [k, c] of Object.entries(doc.caps || {})) if (c) caps[Number(c.id || k)] = c;
+        out.push(`# Series ${n || 1} - ${g.name || "Series"}`, "");
+        if (String(g.note || "").trim()) out.push("NOTE:", String(g.note).trim(), "");
+        for (const p of doc.prompts || []) promptLines(out, p, (cid) => caps[Number(cid)]);
+        return { text: out.join("\n").trim(), series: 1, prompts: (doc.prompts || []).length };
+      }
+      async function fileText(sec, key, n) {
+        if (sec === "book") {
+          const r = await api.fetchApi("/leiel_vpc/books?name=" + encodeURIComponent(key));
+          const j = await r.json();
+          const doc = j && j.ok ? readBookFile(j.book) : null;
+          if (!doc) throw new Error(`"${key}" could not be read`);
+          return bookDocText(doc.book, n);
+        }
+        const r = await api.fetchApi("/leiel_vpc/series?uid=" + encodeURIComponent(key));
+        const j = await r.json();
+        if (!j || !j.ok) throw new Error((j && j.error) || "a series file could not be read");
+        return seriesDocText(j.series, n);
+      }
+      async function toClipboard(text) {
+        try { await navigator.clipboard.writeText(text); return true; } catch (e) {
+          const ta = document.createElement("textarea");
+          ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
+          let ok = false;
+          try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+          ta.remove();
+          return ok;
+        }
+      }
+      async function copyFiles(sec, keys, what) {
+        const parts = [];
+        let series = 0, prompts = 0, n = 1;
+        try {
+          for (const key of keys) {
+            const t = await fileText(sec, key, n);
+            if (!t.text) continue;
+            parts.push(t.text);
+            series += t.series; prompts += t.prompts; n += t.series;
+          }
+        } catch (err) { say(`not copied - ${err && err.message || err}`, "err"); return; }
+        if (!parts.length) { say("nothing to copy there", "err"); return; }
+        const ok = await toClipboard(parts.join("\n\n") + "\n");
+        say(ok ? `${prompts} prompt${prompts === 1 ? "" : "s"} from ${series} series copied${what ? ` - ${what}` : ""}` : "could not reach the clipboard", ok ? "" : "err");
+      }
       async function copySeries(all) {
         if (!book) return;
         const gs = all ? book.groups : [activeGroup()].filter(Boolean);
@@ -9375,6 +10010,9 @@ app.registerExtension({
         touch(); save(); paintBook(true);
       };
       window.addEventListener("leiel-set-picture", onSetPicture);
+      // the note's language chosen in another node: every book shows it
+      const onNoteLang = (e) => { if (e.detail && e.detail.from !== "book") { paintBook(true); requestAnimationFrame(fitNodeToContent); } };
+      window.addEventListener("leiel-note-lang", onNoteLang);
 
       function restoreFrom(p, why) {
         if (!p) return false;
@@ -15311,6 +15949,7 @@ app.registerExtension({
         setTimeout(() => {
           render();
           if (lastShot === null) lastShot = shotOf();
+          catchUpFromFiles();
         }, 0);
         return r;
       };
@@ -15366,6 +16005,7 @@ app.registerExtension({
           try { node._lvpDragCleanup?.(); } catch (e) { /* ignore */ }
           document.removeEventListener("paste", onDocPaste, true);
           window.removeEventListener("leiel-set-picture", onSetPicture);
+          window.removeEventListener("leiel-note-lang", onNoteLang);
           document.removeEventListener("selectionchange", onMarkSelChange);
           document.removeEventListener("pointerdown", onPanelOut, true);
           document.removeEventListener("keydown", onPanelEsc, true);

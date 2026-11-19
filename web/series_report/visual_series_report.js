@@ -122,6 +122,54 @@ function seasonOf(name) {
   return m ? Number(m[1]) : null;
 }
 
+// --------------------------------------------------------------- note language
+/* The story shown in one language or both, as the Series Book shows its
+   notes: the same choice, kept under the Series Book's ui prefs and passed
+   between the nodes by a window event. Only the view changes. */
+const NOTE_KEY = "lvp-note-lang";
+const NOTE_OTHER = /[^\u0000-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2100-\u214F\s]/;
+const NOTE_SCRIPTS = [
+  [/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/, "KO", "Korean"],
+  [/[\u3040-\u30FF]/, "JA", "Japanese"],
+  [/[\u4E00-\u9FFF]/, "ZH", "Chinese"],
+  [/[\u0400-\u04FF]/, "RU", "Cyrillic"],
+  [/[\u0370-\u03FF]/, "EL", "Greek"],
+  [/[\u0600-\u06FF]/, "AR", "Arabic"],
+  [/[\u0590-\u05FF]/, "HE", "Hebrew"],
+  [/[\u0E00-\u0E7F]/, "TH", "Thai"],
+  [/[\u0900-\u097F]/, "HI", "Devanagari"],
+];
+function noteLang() {
+  let v = null;
+  try { v = localStorage.getItem(NOTE_KEY); } catch (e) { /* storage off */ }
+  try { v = JSON.parse(v); } catch (e) { /* an early plain value */ }
+  return ["en", "other", "all"].includes(v) ? v : "all";
+}
+function setNoteLang(id) {
+  const json = JSON.stringify(id);
+  try { localStorage.setItem(NOTE_KEY, json); } catch (e) { /* storage off */ }
+  fetch("/leiel_vpc/ui_prefs", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prefs: { [NOTE_KEY]: json } }) }).catch(() => {});
+  window.dispatchEvent(new CustomEvent("leiel-note-lang", { detail: { lang: id, from: "report" } }));
+}
+function noteBilingual(text) {
+  const lines = String(text || "").split("\n").filter(ln => ln.trim());
+  return lines.some(ln => NOTE_OTHER.test(ln)) && lines.some(ln => !NOTE_OTHER.test(ln));
+}
+function noteView(text) {
+  const mode = noteLang();
+  const all = String(text || "");
+  if (mode === "all") return all;
+  const keep = all.split("\n").filter(ln => !ln.trim() || (mode === "en" ? !NOTE_OTHER.test(ln) : NOTE_OTHER.test(ln)));
+  const out = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return out || all;
+}
+function noteScript(text) {
+  const other = String(text || "").split("\n").filter(ln => NOTE_OTHER.test(ln)).join("\n");
+  for (const [re, label, name] of NOTE_SCRIPTS) if (re.test(other)) return { label, name };
+  return { label: "2ND", name: "the other script" };
+}
+
 // --------------------------------------------------------------- helpers
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -851,6 +899,12 @@ const CSS = `
 .vsr-fstory .sh i{font-style:normal;font-size:11px;color:#8d8679;min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .vsr-fstory .sh:hover b{color:#f3ead8}
+.vsr-fstory .sh .lang{margin-left:auto;display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:#0c0d10;
+  border:1px solid color-mix(in srgb, var(--sg) 35%, #2a2c30);align-self:center;flex:0 0 auto}
+.vsr-fstory .sh .lang button{border:0;background:transparent;color:#8a8e95;font:inherit;font-size:9.5px;letter-spacing:.06em;
+  padding:2px 7px;border-radius:5px;cursor:pointer;line-height:1.3}
+.vsr-fstory .sh .lang button:hover{color:#ece6da}
+.vsr-fstory .sh .lang button.on{background:color-mix(in srgb, var(--sg) 22%, #1a1b1e);color:#f3dcaa}
 .vsr-fstory p{margin:0 12px 0 33px;padding-bottom:10px;font-size:10px;line-height:1.55;color:#c9c4ba;white-space:pre-wrap}
 .vsr-fstory.none p{color:#6f6a60;font-style:italic}
 /* the analysis in a drawer of its own, folding like the Series Book's */
@@ -1537,9 +1591,21 @@ function buildReport(node) {
     sh.append(el("span", "car", P.vsr_story_open ? "\u25BE" : "\u25B8"),
       el("b", "", cut ? `${head} \u00b7 Cut` : `${head} \u00b7 Story`));
     if (sub) sh.append(el("i", "", sub));
+    const real = cut ? cut.note : d.story;
+    if (P.vsr_story_open && real && noteBilingual(real)) {
+      const sc = noteScript(real);
+      const seg = el("span", "lang");
+      for (const [id, label, hint] of [["en", "EN", "Show the English lines"], ["other", sc.label, `Show the lines in ${sc.name}`], ["all", "ALL", "Show the whole story"]]) {
+        const b = el("button", noteLang() === id ? "on" : "", label);
+        b.title = hint;
+        b.addEventListener("click", (e) => { e.stopPropagation(); setNoteLang(id); S.sig = ""; paint(); });
+        seg.append(b);
+      }
+      sh.append(seg);
+    }
     sh.addEventListener("click", () => { P.vsr_story_open = !P.vsr_story_open; S.sig = ""; paint(); });
     band.append(sh);
-    if (P.vsr_story_open) band.append(el("p", "", text));
+    if (P.vsr_story_open) band.append(el("p", "", real ? noteView(text) : text));
     return band;
   }
 
@@ -3337,6 +3403,9 @@ function buildReport(node) {
     flash(`series "${j.series}" - opened in the book`);
   };
   window.addEventListener("leiel-series-opened", onSeriesOpened);
+  // the note's language chosen in a Series Book or another report
+  const onNoteLang = (e) => { if (!S.dead && e.detail && e.detail.from !== "report-" + node.id) { S.sig = ""; paint(); } };
+  window.addEventListener("leiel-note-lang", onNoteLang);
 
   /* The viewers say nothing when their folder changes, so their folders are
      looked at instead. What each one shows is remembered, and only a change
@@ -3405,6 +3474,7 @@ function buildReport(node) {
       clearInterval(lookWatch);
       if (resize) resize.disconnect();
       try { window.removeEventListener("leiel-series-opened", onSeriesOpened); } catch (e) { /* gone */ }
+      try { window.removeEventListener("leiel-note-lang", onNoteLang); } catch (e) { /* gone */ }
       clearTimeout(scanTimer);
       clearTimeout(flashTimer);
       clearTimeout(freshTimer);

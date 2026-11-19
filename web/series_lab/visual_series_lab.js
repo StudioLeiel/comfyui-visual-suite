@@ -96,6 +96,9 @@ const RICON_COPY = RI(
   `<rect x="5" y="5" width="8.5" height="8.5" rx="2"/>` +
   `<path d="M11 3.2V3a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5.5` +
   `A1.5 1.5 0 0 0 4 10h.8"/>`);
+/* an arrow going round - back to the start */
+const RICON_RESET = RI(
+  `<path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.8"/><path d="M2.6 1.9v2.9h2.9"/>`);
 const RICON_DEL = RI(
   `<path d="M2.5 4.5h11M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5` +
   `M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6M6.8 7v4.5M9.2 7v4.5"/>`);
@@ -2956,10 +2959,27 @@ app.registerExtension({
           if (hoverLeave) clearTimeout(hoverLeave);
           hoverLeave = setTimeout(() => { hoverLeave = null; if (!exOpen) hideHover(); }, 220);
         };
+        /* the x that deletes the chip is left alone: pointing at it never
+           opens the pictures, and moving onto it puts them away */
+        let onX = false;
+        el.addEventListener("pointerover", (e) => {
+          const x = e.target && e.target.closest ? e.target.closest(".x") : null;
+          if (x && el.contains(x)) {
+            onX = true;
+            if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+            if (hoverLeave) { clearTimeout(hoverLeave); hoverLeave = null; }
+            if (!exOpen) hideHover();
+          } else if (onX) {
+            onX = false;
+            el.dispatchEvent(new PointerEvent("pointerenter"));
+          }
+        });
         el.addEventListener("pointerenter", () => {
           hideHover();
+          if (onX) return;
           hoverTimer = setTimeout(async () => {
             hoverTimer = null;
+            if (onX) return;
             const src = state.thumbs[loraName] ||
                         state.thumbs[shortName(loraName)];
             const box = document.createElement("div");
@@ -3953,10 +3973,31 @@ app.registerExtension({
         line("prompt", "prompt", sw.prompts, (n, i) => {
           const c = tintPrompt(chip("c-n6", promptName(n), "", {
             pno: pnoEl(n),
-            title: promptName(n) + "\nrendered in turn, after the recipe's own prompt" +
-              "\ndrag to reorder, or back onto the recipe to take it out of the sweep",
+            title: promptName(n) + "\n" + promptNote(n) + "rendered in turn, after the recipe's own prompt" +
+              "\nclick to swap it\ndrag to reorder, or back onto the recipe to take it out of the sweep",
+            /* swapped in place: the new prompt takes this one's turn and its
+               count; one already in the sweep only closes the gap */
+            onClick: (ev) => openPromptPicker({
+              get prompt() { return Number(n); },
+              set prompt(v) {
+                v = Number(v);
+                if (!(v > 0) || v === Number(n)) return;
+                sw.pn = sw.pn || {};
+                if (sw.prompts.map(Number).includes(v)) {
+                  sw.prompts = sw.prompts.filter((x) => Number(x) !== Number(n));
+                } else {
+                  sw.prompts = sw.prompts.map((x) => (Number(x) === Number(n) ? v : x));
+                  if (sw.pn[n] != null) sw.pn[v] = sw.pn[n];
+                }
+                delete sw.pn[n];
+                releaseMain(row, n, v);
+                healMain(row);
+              },
+              sweep: null,
+            }, ev.currentTarget),
             onRemove: () => {
               sw.prompts = sw.prompts.filter((x) => Number(x) !== Number(n));
+              releaseMain(row, n);
               if (!swCount(row)) sw.on = false;
               writeStore(); paint();
             },
@@ -4100,10 +4141,12 @@ app.registerExtension({
         const from = q.indexOf(row);
         if (from < 0) return;
         q.splice(from, 1);
-        /* Dropped back in to be run again: whatever it did last time is not
-           this run's business. */
+        /* Dropped back in: a recipe that had finished runs again from the
+           start; one taken out part way picks up where it stopped (its own
+           reset button starts it over). Only what came back counts - a
+           render sent but never returned is sent again. */
         if (staged && !row.staged) {
-          delete state.done[row.id];
+          if (doneOf(row) >= rowTotal(row)) delete state.done[row.id];
           delete state.sent[row.id];
         }
         row.staged = !!staged;
@@ -5616,6 +5659,16 @@ app.registerExtension({
               writeStore();
               paint();
             });
+          /* this recipe's own progress back to nothing - the others keep theirs */
+          const rst = (doneHere > 0 || finished) && !isNow
+            ? rowBtn(RICON_RESET, "b-reset", "Start this recipe over - its count goes back to 0, the other recipes keep theirs",
+              () => {
+                delete state.done[row.id];
+                delete state.sent[row.id];
+                writeStore();
+                paint();
+              })
+            : null;
           const del = rowBtn(RICON_DEL, "b-del", "Remove this recipe from the queue",
             () => {
               state.queue.splice(i, 1);
@@ -5657,6 +5710,7 @@ app.registerExtension({
           head.appendChild(addL);
           head.appendChild(addO);
           head.appendChild(swBtn);
+          if (rst) head.appendChild(rst);
           head.appendChild(dup);
           head.appendChild(del);
           el.appendChild(head);
@@ -6870,6 +6924,27 @@ app.registerExtension({
          first, it would sit with "no prompt" and never render. The first
          live sweep prompt becomes its own prompt instead: it stays in the
          sweep, so nothing new appears on the body and nothing renders twice. */
+      /* The recipe's own prompt, once moved into the sweep, is one of the
+         sweep's prompts like the others: taken out of the sweep or swapped
+         there, it lets go of the recipe too, which takes another prompt as
+         its own - the one swapped in, one left in the body, else the first
+         left in the sweep. The last prompt of all stays, so the recipe can
+         still render. */
+      function releaseMain(row, n, to) {
+        if (!row || Number(row.prompt) !== Number(n)) return;
+        if (Number(to) > 0) { row.prompt = Number(to); return; }
+        const sw = swOf(row);
+        const inSw = ((sw && sw.prompts) || []).map(Number);
+        const body = ((row.prompts) || []).map(Number).filter((k) => k > 0 && k !== Number(n) && !inSw.includes(k));
+        if (body.length) {
+          row.prompt = body[0];
+          row.prompts = (row.prompts || []).filter((k) => Number(k) !== body[0]);
+          return;
+        }
+        const left = inSw.filter((k) => k > 0 && k !== Number(n));
+        if (left.length) row.prompt = left[0];
+      }
+
       function healMain(row) {
         if (!row) return false;
         const wired = promptSlots();

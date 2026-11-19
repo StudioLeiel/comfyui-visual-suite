@@ -117,8 +117,10 @@ A few months of work leaves a long list. **Files** keeps it short:
   files can share one. Folders are an index only, kept in
   `user/visual_series_book/file_folders.json`: the files never move, and a
   series keeps writing to its own file.
-- **Save current book as.** The framed row at the top of **Book files**
-  saves the book open in this node under the name typed there.
+- **Save current book as.** **Save book** on the **Book files** title line
+  opens a framed row with the name: `Enter` or its **Save book** saves the
+  book open in this node under that name, and the row folds away again.
+  `Esc` folds it without saving.
 - **Find.** The box beside **Files** narrows both lists as you type - book
   names, the series a book holds, and folder names. `Esc` clears it.
 - **Fold a list.** Click **Book files** or **Series files** to fold it away.
@@ -139,6 +141,22 @@ A few months of work leaves a long list. **Files** keeps it short:
     second removes the `.json` from `books/` or `series/` and takes it out of
     its folder. A deleted book does not touch the book open on the canvas, and
     the series files it was made from stay in **Series files**.
+- **Copy text without opening.** Each file row has a copy button (two sheets)
+  beside **Open** / **Bring back**: it copies that file's series as text, in
+  the form Copy Text writes and Paste reads, without opening anything. Each
+  folder's bar has **Copy text**, which copies every file in the folder - and
+  in the folders inside it - in the order shown, one series after another,
+  numbered in turn. Hidden files are left out unless they are shown.
+- **Two rooms.** Book files and Series files each sit in a box of their own.
+  Their actions wait folded as buttons on the room's title line - **Save
+  book** and **Make all series** for books, **Make all series** for series -
+  and a click opens the gold box under the title; a second click, or Cancel,
+  folds it again. The arrow on a room's title folds the whole room away; a
+  button on a folded room opens the room too.
+- **Make all series.** The gold box in each room makes many files at once
+  from their packs, without opening them in the book - in Book files a book
+  file for each series, in Series files a series file for each - see
+  [Make all series](#make-all-series) under Paste.
 - **Notes on hover.** Rest the pointer on a row and the series' note shows -
   the note written under the series name. A book file shows the note of each
   series it holds, so a book can be told apart before it is opened.
@@ -164,6 +182,7 @@ them closes the series itself.
 | --- | --- |
 | **new** (icon) | A new empty scene; only the LoRA trigger is carried over. On another series' box, it starts from that series' last prompt. |
 | **save** (icon) | Saves the series as a book file under its own name - the same name again is updated. When anything in the series has changed since it was last saved - a prompt, an anchor, a name, a note, a picture, a frame - the icon turns gold with a dot; saved, it is grey again. A series never saved this way shows the dot until its first save. |
+| **auto save** (icon, a disk in turning arrows) | Auto save for this series. On (gold), the series saves its book file by itself about three seconds after each change - the save icon's dot shows only for that moment - so the book file is never left behind the work. It saves quietly, with no message and no step in Undo. The choice is kept with the series, in the workflow and in its files; off, the save icon works by hand as before. |
 | **duplicate** (icon) | A copy of the open prompt sharing every capsule - replace only what changes. |
 | **delete** (icon) | Removes the open prompt. Its capsules stay on the shelf, and Undo brings it back. |
 | **Copy Text** | Copies every prompt of the open series as text, in the form Paste reads - the series heading and note, each scene's name and note, then each anchor under a label carrying its capsule's name. Shift+click copies every series. |
@@ -237,6 +256,25 @@ notes are only being read starts the writing with that selection kept, so it
 can be styled straight away. The styling is kept with the notes; a click anywhere
 outside the notes ends the writing. Click the **Production Notes** bar to fold it; folded, only the bar shows. The notes are kept with the series in its own file and in book
 files, apart from the note above, which stays the description of the series.
+
+**A workflow saved part way through.** Every series keeps the time of its
+last change, in the workflow and in its own series file, which is written a
+moment after every change. A workflow saved in the middle of a series and
+closed later without saving again would open with the older state; instead,
+when it opens, each series whose file holds later work is brought up to date
+from that file, in its place and with its number, and the book says so.
+Undo goes back to the state the workflow held. Series saved before this was
+added carry no time yet and are left as they are until their next change.
+
+**A note in two languages.** A series note that holds lines in English and
+lines in another script shows three buttons at its top right: **EN**, the
+English lines; the second language, named after its script (**KO** for
+Korean, **JA** Japanese, **ZH** Chinese, **RU** Cyrillic and so on); and
+**ALL**, the whole note. Only the view
+changes: the note keeps every line, clicking it to write shows the whole of
+it, and the Series Layout still reads the lines it is set to. The choice is
+kept for every series and every Series Book, and shared with the story box
+of the Series Report; a note in one language only always shows whole.
 
 **A picture for each series.** Beside a series' note sits its picture. Click
 it to see it larger (click anywhere or press Esc to close); double click it to
@@ -669,6 +707,76 @@ Alt), the pasted anchor takes the first one's place and the others are taken out
 they stay on the shelf. A pack's label repeated in one scene is read as a
 correction: the later one wins.
 
+
+### Make all series
+
+Paste All fills one series. **Make all series** in Files takes a whole season
+at once: many packs, each written straight to a file of its own and sorted
+into a folder, without being opened in the book. It is there in both rooms,
+and the room says what is made:
+
+| Where | What each series becomes |
+| --- | --- |
+| **Book files** | A book file of its own, named after the series - and its series file too, both in the folder. Open it from Book files as any saved book |
+| **Series files** | A series file only - Bring back puts it in the book |
+
+1. Press **Make all series** on the room's title line to open the box, then
+   **Paste** to read the packs from the clipboard - one text holding
+   several `# Series` headings, one pack after another - or **Choose files...**
+   to pick the packs' `.txt` files; the files can also be dropped on the box.
+   Files are read in the order of their names, numbers read as numbers:
+   S1E2 before S1E10.
+2. The box lists what it read before anything is written: each series with its
+   number of scenes, and in total how many series and scenes.
+3. **Folder** - where they go. A line `# Folder: <name>` in the text names it;
+   a slash makes a folder inside another (`# Folder: Chronicle/S1`). With no
+   such line, the S number every series' name shares - `S1E4`, `S1E5` - gives
+   `S1`. The name can be changed in the box, or emptied to leave the files
+   loose. A folder not there yet is made.
+4. **Make N book files** / **Make N series** writes them. In the folder they
+   stand in the order of the pack, and the folder - with the folders above
+   it - is opened to show them.
+
+Each series is made exactly as Paste All would make it - its note, every scene
+with its note and frame, every anchor as a named capsule - then written to its
+file and taken out of the book again. The book open on the canvas is left as
+it was, with no step to undo.
+
+A series of the same name already in Files - in Book files, a book file or a
+series file of that name - is marked **in Files**, and one choice covers them
+all:
+
+| Choice | What happens |
+| --- | --- |
+| Leave them as they are | Those series are skipped - the files already there stay untouched |
+| Add them as copies | A new file beside each, named `<name> copy` (in Book files, a book file and a series file of that name) |
+| Replace them with these | The file is written over with the pack, under the same name, and moves to the folder - in Book files, the book file and the series file both |
+
+A series open in this book is marked **open here** and always left alone -
+paste into it with its own Paste All, so the book and its file never
+disagree.
+
+A pack for several series at once looks like this:
+
+```
+# Folder: S1 L'Empire de Valois-Leiel
+
+# Series 1 - S1E5 The Double
+NOTE:
+<the series note>
+
+**C-01 The Invitation, Sealed**
+FRAME: portrait
+NOTE:
+<...>
+
+QUALITY · <Capsule Name>
+<...>
+
+# Series 1 - S1E6 Eye to Eye
+NOTE:
+<...>
+```
 ---
 
 ## Search

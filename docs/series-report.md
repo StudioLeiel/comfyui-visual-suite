@@ -143,6 +143,11 @@ Whatever tab is open, the frame holds the same overview of what is on show:
    cut's own prompt note, the description and subtitle written for it. It is
    read from the Series Book's series file of the same name, and follows it
    when the note is edited.
+   A story written in two languages shows **EN**, the second language (named
+   after its script, **KO** for Korean) and **ALL** at the right of its bar,
+   as the Series Book does: the English lines, the other lines or the whole.
+   The choice is one with the Series Book's - set in either, every Series Book
+   and Series Report on the canvas follows it.
 
 Under it are the tabs: **VERDICTS**, **PROMPTS**, **WALL**, **LOOK**, **FRAMING**,
 **RECIPES**, **TIME** - about the series on show - and, apart at the right behind
