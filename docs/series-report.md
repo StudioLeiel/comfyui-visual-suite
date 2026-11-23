@@ -681,10 +681,11 @@ opened.
 It also reads the Series Book's series files in `user/visual_series_book/series`
 for the story box, and never writes to them.
 
-It writes `user/visual_series_report/ledger.sqlite3` — one line per render with
+It writes its ledger as JSON files in `user/visual_series_report` (`renders.json`,
+`files.json`, `aliases.json`, `looks.json`) — one line per render with
 its recipe, a short fingerprint of each anchor of its prompt (never the words
 themselves), its last known state and its measures, and the LoRA names that were
-joined — and the small pictures in `user/visual_series_report/thumbs`. Deleting that file forgets everything; **SCAN** reads
+joined — and the small pictures in `user/visual_series_report/thumbs`. Deleting those files forgets everything; **SCAN** reads
 and measures back what is still on disk, but the renders whose files are gone
 are gone from the report too.
 

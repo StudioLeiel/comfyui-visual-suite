@@ -41,7 +41,6 @@ import threading
 import time
 import uuid
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
 
 from PIL import Image
 
@@ -629,22 +628,13 @@ def _add_picture_body(blob, name, source, via, memo=None):
     return {"ok": True, "item": it}
 
 
-_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-       "(KHTML, like Gecko) Chrome/131.0 Safari/537.36")
 PAGE_BYTES = 3 * 1024 * 1024
 
 
 def _fetch(url, referer=None, limit=MAX_BYTES):
-    req = Request(url, headers={"User-Agent": _UA, "Accept-Language": "en,ko;q=0.8",
-                                "Referer": referer or url})
-    with urlopen(req, timeout=FETCH_TIMEOUT) as r:
-        kind = (r.headers.get("Content-Type") or "").lower()
-        charset = r.headers.get_content_charset() or ""
-        if kind.startswith(("video/", "audio/")) or kind.startswith("application/pdf"):
-            limit = VIDEO_URL_MAX
-        blob = r.read(limit + 1)
-        final = r.geturl() or url
-    return blob, kind, charset, final
+    """Web addresses are not read by the server in this build: the browser
+    sends the picture itself, or the address is kept as a link."""
+    raise OSError("web addresses are not read by the server")
 
 
 def _meta(page, *names):
@@ -955,8 +945,10 @@ def _add_url_body(url, source, via=None, memo=None):
         return {"ok": False, "error": "not a web address"}
     try:
         blob, kind, charset, final = _fetch(url, source)
-    except Exception as e:
-        return {"ok": False, "error": "the address could not be read (%s)" % type(e).__name__}
+    except Exception:
+        # kept as the address itself
+        it = _add(_item("text", text=url, source=url[:2000], via=via, memo=memo or ""))
+        return {"ok": True, "item": it, "page": True}
     if kind.startswith(("image/", "video/", "audio/", "application/pdf")) or not ("html" in kind or blob[:600].lstrip()[:1] == b"<"):
         r = _add_picture_body(blob, os.path.basename(urlparse(final).path), source or url, via, memo)
         if r.get("ok") or kind.startswith(("image/", "video/", "audio/", "application/pdf")):
@@ -1085,7 +1077,7 @@ def _more_add_body(iid, blob=None, name="", url=None, memo=None, t=None):
             blob, _k, _c, final = _fetch(str(url), str(url))
             name = os.path.basename(urlparse(final).path)
         except Exception as e:
-            return {"ok": False, "error": "the address could not be read (%s)" % type(e).__name__}
+            return {"ok": False, "error": "drop the picture itself - addresses are not read (%s)" % type(e).__name__}
     try:
         f, w, h = _save_picture(blob, name)
     except ValueError as e:
@@ -1372,111 +1364,7 @@ def _brief_files_body(ids, title):
                 mext = os.path.splitext(msrc)[1].lower() or ".jpg"
                 shutil.copyfile(msrc, os.path.join(dest, "%02d-%d%s%s" % (n, k, " " + name[:60] if name else "", mext)))
                 written += 1
-    if os.name == "nt":
-        try:
-            os.startfile(dest)                          # noqa: the user's own folder, opened for them
-        except Exception:
-            pass
     return {"ok": True, "folder": dest, "written": written}
-
-
-# ------------------------------------------------------------- page capture
-CAPTURE_SIZE = (1440, 1800)
-CAPTURE_WAIT_MS = 6000
-CAPTURE_TIMEOUT = 60
-
-
-def _browser():
-    """A Chromium browser already on this computer - Edge, which every
-    Windows has, or Chrome - to capture a page with, unseen."""
-    import shutil
-    env = os.environ
-    found = []
-    for base in (env.get("PROGRAMFILES(X86)"), env.get("PROGRAMFILES"), env.get("LOCALAPPDATA")):
-        if not base:
-            continue
-        found += [os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe"),
-                  os.path.join(base, "Google", "Chrome", "Application", "chrome.exe")]
-    found += ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-              "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-              "/Applications/Chromium.app/Contents/MacOS/Chromium"]
-    for path in found:
-        if os.path.isfile(path):
-            return path
-    for name in ("msedge", "microsoft-edge", "google-chrome", "chrome", "chromium", "chromium-browser"):
-        hit = shutil.which(name)
-        if hit:
-            return hit
-    return None
-
-
-def _capture_body(iid):
-    """The page an idea came from, captured as it opens on a wide screen,
-    in place of its picture. The browser runs in a profile of its own, so
-    it never touches the browser in use - and so it is signed in nowhere."""
-    import subprocess
-    import tempfile
-    with _lock:
-        doc = _read()
-    it = next((x for x in doc["items"] if x["id"] == iid), None)
-    if not it:
-        return {"ok": False, "error": "no such idea"}
-    url = str(it.get("source") or "")
-    if not re.match(r"^https?://", url, re.I):
-        return {"ok": False, "error": "this idea has no web address to capture"}
-    exe = _browser()
-    if not exe:
-        return {"ok": False, "error": "no Edge or Chrome found on this computer to capture with"}
-    work = tempfile.mkdtemp(prefix="idea_capture_")
-    shot = os.path.join(work, "page.png")
-    w, h = CAPTURE_SIZE
-    cmd = [exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--mute-audio",
-           "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-           "--user-data-dir=" + os.path.join(work, "profile"),
-           "--window-size=%d,%d" % (w, h), "--virtual-time-budget=%d" % CAPTURE_WAIT_MS,
-           "--screenshot=" + shot, url]
-    try:
-        kw = {}
-        if os.name == "nt":
-            kw["creationflags"] = 0x08000000          # no console window
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       timeout=CAPTURE_TIMEOUT, **kw)
-        with open(shot, "rb") as fh:
-            blob = fh.read()
-        f, pw, ph = _save_picture(blob, "page.png")
-    except subprocess.TimeoutExpired:
-        shutil.rmtree(work, ignore_errors=True)
-        return {"ok": False, "error": "the page took too long to open"}
-    except Exception:
-        shutil.rmtree(work, ignore_errors=True)
-        return {"ok": False, "error": "the page could not be captured"}
-    shutil.rmtree(work, ignore_errors=True)
-    with _lock:
-        doc = _read()
-        it = next((x for x in doc["items"] if x["id"] == iid), None)
-        if not it:
-            return {"ok": False, "error": "no such idea"}
-        old = it.get("file")
-        if it.get("kind") == "text":
-            words = str(it.get("text") or "").strip()
-            memo = str(it.get("memo") or "").strip()
-            if words and words != url and words not in memo:
-                it["memo"] = (words + ("\n" + memo if memo else "")).strip()
-            it.pop("text", None)
-            it["kind"] = "image"
-        it.update({"file": f, "w": pw, "h": ph, "captured": True})
-        _write(doc)
-    if old:
-        src = os.path.join(_dir("files"), os.path.basename(old))
-        if os.path.exists(src):
-            try:
-                shutil.move(src, os.path.join(_dir("trash"), os.path.basename(old)))
-            except OSError:
-                pass
-    with _lock:
-        for k in [k for k in _thumbs if k[0] == iid]:
-            _thumbs.pop(k, None)
-    return {"ok": True, "item": it}
 
 
 # ------------------------------------------------------------- routes
@@ -1576,11 +1464,6 @@ try:                                                 # pragma: no cover
     async def _idea_brief_files(request):
         data = await _json(request)
         return _web.json_response(await _run(_brief_files_body, data.get("ids"), data.get("title")))
-
-    @_routes.post("/leiel_idea/capture")
-    async def _idea_capture(request):
-        data = await _json(request)
-        return _web.json_response(await _run(_capture_body, data.get("id")))
 
     @_routes.get("/leiel_idea/picture")
     async def _idea_picture(request):

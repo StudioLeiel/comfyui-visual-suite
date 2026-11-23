@@ -452,8 +452,8 @@ keeps playing.
 | Part | |
 | --- | --- |
 | body | the previous, play / pause and next buttons, in the series' colour |
-| display | the piece playing, its spectrum (low notes left, high right - flat when it stops) and a bar to click to move in the piece |
-| right | the five modes, **EQ** to show or hide the spectrum, and the player's own volume - the film keeps its own |
+| display | the piece playing and a bar to click to move in the piece |
+| right | the five modes and the player's own volume - the film keeps its own |
 | top line | the list playing and the pieces marked, then **Start here**, **To the film** and **Layout** |
 
 **To the film** sets the piece playing as the music of the film of the

@@ -44,7 +44,7 @@ last seen of them - picked, left or deleted - and counted as archived, with
 their measures, times and small copies, so the analysis does not lose them.
  Emptying the bin takes
 the deleted renders away, and with them the only record that a recipe failed
-- so each render is written once into a ledger, a single SQLite file in the
+- so each render is written once into a ledger, a few JSON files in the
 user folder, and a render last seen in the bin stays counted as deleted after
 the bin is emptied. A render that vanishes any other way is left out of the
 counts until it turns up again: moved pictures are recognised by what is
@@ -63,14 +63,17 @@ import io
 import json
 import os
 import re
-import sqlite3
 import threading
+import atexit
 import time
 
 from PIL import Image, ImageFilter, ImageStat
 
 REPORT_DIRNAME = "visual_series_report"
-DB_FILENAME = "ledger.sqlite3"
+# the ledger: plain JSON files in the user folder, one per table
+LEDGER_FILES = {"rows": "renders.json", "files": "files.json",
+                "aliases": "aliases.json", "looks": "looks.json"}
+SAVE_DELAY = 1.5        # seconds changes are gathered before they are written
 
 LOOK_VERSION = 2        # raised when what is measured changes: older looks are measured again
 THUMB_DIRNAME = "thumbs"
@@ -111,41 +114,6 @@ _SETTINGS = ("sampler", "scheduler", "steps", "cfg")
 _SETTING_WIDGETS = {"sampler_name", "scheduler", "steps", "cfg", "denoise",
                     "seed", "noise_seed"}
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS renders(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  fp TEXT UNIQUE NOT NULL,
-  home TEXT NOT NULL,
-  name TEXT NOT NULL,
-  mtime REAL,
-  size INTEGER,
-  w INTEGER,
-  h INTEGER,
-  series TEXT NOT NULL DEFAULT '',
-  scene_id INTEGER,
-  scene_no TEXT NOT NULL DEFAULT '',
-  scene_name TEXT NOT NULL DEFAULT '',
-  seed TEXT NOT NULL DEFAULT '',
-  recipe TEXT NOT NULL,
-  state TEXT NOT NULL DEFAULT '',
-  added REAL
-);
-CREATE INDEX IF NOT EXISTS renders_series ON renders(series);
-CREATE TABLE IF NOT EXISTS files(
-  path TEXT PRIMARY KEY,
-  mtime REAL,
-  fp TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS aliases(
-  name TEXT PRIMARY KEY,
-  same_as TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS looks(
-  fp TEXT PRIMARY KEY,
-  v INTEGER NOT NULL,
-  data TEXT NOT NULL
-);
-"""
 
 
 def _episode(series):
@@ -172,31 +140,71 @@ _lock = threading.RLock()
 _mem = {"loaded": False, "rows": {}, "by_fp": {}, "files": {}, "aliases": {}, "looks": {}}
 
 
-def _db_path():
-    return os.path.join(_viewer()._user_dir(), REPORT_DIRNAME, DB_FILENAME)
+def _ledger_path(name):
+    return os.path.join(_viewer()._user_dir(), REPORT_DIRNAME, LEDGER_FILES[name])
 
 
-_migrated = set()
+def _read_table(name, default):
+    path = _ledger_path(name)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return default
+    except (OSError, ValueError) as exc:
+        # a damaged file is set aside rather than written over
+        print("[Visual Series Report] %s unreadable, starting it again: %s" % (path, exc))
+        try:
+            os.replace(path, path + ".damaged")
+        except OSError:
+            pass
+        return default
 
 
-def _connect():
-    path = _db_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    con = sqlite3.connect(path, timeout=15)
-    con.row_factory = sqlite3.Row
-    # write-ahead, so a summary can read while a scan is writing
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA synchronous=NORMAL")
-    con.executescript(_SCHEMA)
-    if path not in _migrated:
-        # columns added after the first ledgers were written
-        have = {r["name"] for r in con.execute("PRAGMA table_info(renders)")}
-        for col in ("away", "carry"):
-            if col not in have:
-                con.execute("ALTER TABLE renders ADD COLUMN %s INTEGER NOT NULL DEFAULT 0" % col)
-        con.commit()
-        _migrated.add(path)
-    return con
+def _table_data(name):
+    if name == "rows":
+        return [dict(r) for r in sorted(_mem["rows"].values(), key=lambda r: r["id"])]
+    if name == "files":
+        return {k: [v[0], v[1]] for k, v in _mem["files"].items()}
+    return _mem[name]
+
+
+_dirty = set()
+_timer = {"t": None}
+
+
+def _flush():
+    """Write the tables that changed - each to a new file first, then put in
+    place, so a file is never left half written."""
+    with _lock:
+        _timer["t"] = None
+        names = list(_dirty)
+        _dirty.clear()
+        for name in names:
+            path = _ledger_path(name)
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                tmp = path + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(_table_data(name), fh, ensure_ascii=False, separators=(",", ":"))
+                os.replace(tmp, path)
+            except OSError as exc:                  # pragma: no cover
+                _dirty.add(name)
+                print("[Visual Series Report] could not write %s: %s" % (path, exc))
+
+
+def _mark(*names):
+    """Tables changed in memory: written a moment later, together."""
+    with _lock:
+        _dirty.update(names)
+        if _timer["t"] is None:
+            t = threading.Timer(SAVE_DELAY, _flush)
+            t.daemon = True
+            _timer["t"] = t
+            t.start()
+
+
+atexit.register(_flush)
 
 
 def _row_dict(r):
@@ -208,36 +216,43 @@ def _row_dict(r):
     return d
 
 
+def _migrate_old():
+    """A ledger left by an older version, moved over once - where the helper
+    for it is installed."""
+    try:
+        try:
+            from . import _ledger_migrate as m
+        except ImportError:
+            import series_report._ledger_migrate as m      # noqa: E402
+    except Exception:
+        return
+    try:
+        m.run(os.path.dirname(_ledger_path("rows")), LEDGER_FILES)
+    except Exception as exc:                        # pragma: no cover
+        print("[Visual Series Report] could not move the old ledger: %s" % exc)
+
+
 def _load():
     with _lock:
         if _mem["loaded"]:
             return
-        con = _connect()
-        try:
-            rows = {}
-            for r in con.execute("SELECT * FROM renders ORDER BY id"):
-                d = _row_dict(r)
-                rows[d["id"]] = d
-            _mem["rows"] = rows
-            _mem["by_fp"] = {d["fp"]: d["id"] for d in rows.values()}
-            _mem["files"] = {r["path"]: (r["mtime"], r["fp"])
-                             for r in con.execute("SELECT * FROM files")}
-            _mem["aliases"] = {r["name"]: r["same_as"]
-                               for r in con.execute("SELECT * FROM aliases")}
-            looks = {}
-            # older looks are kept and shown until they are measured again;
-            # one whose picture is gone keeps what it had
-            for r in con.execute("SELECT fp, v, data FROM looks"):
-                try:
-                    look = json.loads(r["data"])
-                except ValueError:
-                    continue
-                look["_v"] = r["v"]
-                looks[r["fp"]] = look
-            _mem["looks"] = looks
-            _mem["loaded"] = True
-        finally:
-            con.close()
+        _migrate_old()
+        rows = {}
+        for d in _read_table("rows", []):
+            if isinstance(d, dict) and "id" in d:
+                if not isinstance(d.get("recipe"), dict):
+                    d["recipe"] = {}
+                rows[int(d["id"])] = d
+        _mem["rows"] = rows
+        _mem["by_fp"] = {d["fp"]: d["id"] for d in rows.values()}
+        _mem["next_id"] = max(rows) + 1 if rows else 1
+        _mem["files"] = {k: (v[0], v[1]) for k, v in _read_table("files", {}).items()
+                         if isinstance(v, list) and len(v) == 2}
+        _mem["aliases"] = dict(_read_table("aliases", {}))
+        # older looks are kept and shown until they are measured again;
+        # one whose picture is gone keeps what it had
+        _mem["looks"] = {k: v for k, v in _read_table("looks", {}).items() if isinstance(v, dict)}
+        _mem["loaded"] = True
 
 
 # ------------------------------------------------------- reading one render
@@ -521,15 +536,10 @@ def _states(rows):
             changed.append((st, away, carry, r["id"]))
     if changed:
         with _lock:
-            con = _connect()
-            try:
-                con.executemany("UPDATE renders SET state=?, away=?, carry=? WHERE id=?", changed)
-                con.commit()
-            finally:
-                con.close()
             for st, away, carry, rid in changed:
                 if rid in _mem["rows"]:
                     _mem["rows"][rid].update(state=st, away=away, carry=carry)
+            _mark("rows")
     return out
 
 
@@ -557,7 +567,7 @@ def _remember_once():
 
 
 # ---------------------------------------------------------------- ingest
-def _ingest(path, con=None):
+def _ingest(path):
     """Read one file into the ledger. Returns (what happened, the row):
     'new', 'known', 'moved', 'copy' or 'skip'."""
     v = _viewer()
@@ -577,61 +587,45 @@ def _ingest(path, con=None):
         rec = _read(path)
     except Exception:
         return "skip", None
-    own = con is None
     with _lock:
-        if own:
-            con = _connect()
-        try:
-            fp = rec["fp"] if rec else ""
-            con.execute("INSERT OR REPLACE INTO files(path, mtime, fp) VALUES(?,?,?)",
-                        (key, mtime, fp))
-            _mem["files"][key] = (mtime, fp)
-            if rec is None:
-                if own:
-                    con.commit()
-                return "skip", None
-            home, binned = _home(path)
-            rid = _mem["by_fp"].get(fp)
-            if rid is None:
-                state = "deleted" if binned else ""
-                cur = con.execute(
-                    "INSERT INTO renders(fp, home, name, mtime, size, w, h, series, scene_id,"
-                    " scene_no, scene_name, seed, recipe, state, added)"
-                    " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (fp, home, rec["name"], rec["mtime"], rec["size"], rec["w"], rec["h"],
-                     rec["series"], rec["scene_id"], rec["scene_no"], rec["scene_name"],
-                     rec["seed"], json.dumps(rec["recipe"], ensure_ascii=False), state,
-                     time.time()))
-                row = dict(rec, id=cur.lastrowid, state=state)
-                _mem["rows"][row["id"]] = row
-                _mem["by_fp"][fp] = row["id"]
-                what = "new"
+        fp = rec["fp"] if rec else ""
+        _mem["files"][key] = (mtime, fp)
+        _mark("files")
+        if rec is None:
+            return "skip", None
+        home, binned = _home(path)
+        rid = _mem["by_fp"].get(fp)
+        if rid is None:
+            state = "deleted" if binned else ""
+            rid = _mem.get("next_id") or 1
+            _mem["next_id"] = rid + 1
+            row = {"id": rid, "fp": fp, "home": home, "name": rec["name"], "mtime": rec["mtime"],
+                   "size": rec["size"], "w": rec["w"], "h": rec["h"], "series": rec["series"],
+                   "scene_id": rec["scene_id"], "scene_no": rec["scene_no"],
+                   "scene_name": rec["scene_name"], "seed": rec["seed"], "recipe": rec["recipe"],
+                   "state": state, "added": time.time(), "away": 0, "carry": 0}
+            _mem["rows"][rid] = row
+            _mem["by_fp"][fp] = rid
+            _mark("rows")
+            return "new", row
+        row = _mem["rows"][rid]
+        what = "known"
+        if "av" not in row["recipe"]:
+            # read before prompt versions were kept: add them now
+            row["recipe"].update(av=rec["recipe"]["av"], sw=rec["recipe"]["sw"])
+            _mark("rows")
+        if _pick_key(row) != v._key(home):
+            # the same render somewhere else: it has been moved when
+            # the old place is empty, and is a copy when it is not
+            _listings.clear()
+            if _where(row):
+                what = "copy"
             else:
-                row = _mem["rows"][rid]
-                what = "known"
-                if "av" not in row["recipe"]:
-                    # read before prompt versions were kept: add them now
-                    row["recipe"].update(av=rec["recipe"]["av"], sw=rec["recipe"]["sw"])
-                    con.execute("UPDATE renders SET recipe=? WHERE id=?",
-                                (json.dumps(row["recipe"], ensure_ascii=False), rid))
-                if _pick_key(row) != v._key(home):
-                    # the same render somewhere else: it has been moved when
-                    # the old place is empty, and is a copy when it is not
-                    _listings.clear()
-                    if _where(row):
-                        what = "copy"
-                    else:
-                        carry = 1 if row.get("state") == "pick" else 0
-                        con.execute("UPDATE renders SET home=?, name=?, away=0, carry=? WHERE id=?",
-                                    (home, rec["name"], carry, rid))
-                        row.update(home=home, name=rec["name"], away=0, carry=carry)
-                        what = "moved"
-            if own:
-                con.commit()
-            return what, row
-        finally:
-            if own:
-                con.close()
+                carry = 1 if row.get("state") == "pick" else 0
+                row.update(home=home, name=rec["name"], away=0, carry=carry)
+                _mark("rows")
+                what = "moved"
+        return what, row
 
 
 # --------------------------------------------------------------- measure
@@ -789,10 +783,8 @@ def _next_to_measure(refill):
 
 
 def _measure_worker():
-    con = None
     try:
         _load()
-        con = _connect()
         refilled = False
         while True:
             row = _next_to_measure(not refilled)
@@ -813,22 +805,14 @@ def _measure_worker():
                     # cannot be opened now; tried again after a restart
                     _measuring["failed"].add(row["fp"])
                     continue
-                con.execute("INSERT OR REPLACE INTO looks(fp, v, data) VALUES(?,?,?)",
-                            (row["fp"], LOOK_VERSION, json.dumps(look)))
-                # an old look is replaced in memory below; a stale one stays
-                # in use until then
-                con.commit()
+                # an old look is replaced here; a stale one stays in use until then
                 look["_v"] = LOOK_VERSION
                 _mem["looks"][row["fp"]] = look
+                _mark("looks")
                 _measuring["done"] += 1
     except Exception as exc:                         # pragma: no cover
         print("[Visual Series Report] measure: %s" % exc)
     finally:
-        if con is not None:
-            try:
-                con.close()
-            except Exception:
-                pass
         with _lock:
             _measuring["running"] = False
 
@@ -885,10 +869,8 @@ def _versioned(fp):
 
 def _scan_worker():
     v = _viewer()
-    con = None
     try:
         _load()
-        con = _connect()
         for root in _scan_roots():
             for e in _walk(root):
                 if _scan["stop"]:
@@ -902,11 +884,7 @@ def _scan_worker():
                 known = _mem["files"].get(key)
                 if known and known[0] == mtime and _versioned(known[1]):
                     continue
-                # written at once: a change held back would keep the file
-                # locked against the summary a browser is waiting for
-                with _lock:
-                    what, _row = _ingest(e.path, con)
-                    con.commit()
+                what, _row = _ingest(e.path)
                 if what in ("new", "moved"):
                     _scan["added"] += 1
             if _scan["stop"]:
@@ -915,11 +893,6 @@ def _scan_worker():
         _scan["error"] = str(exc)
         print("[Visual Series Report] scan: %s" % exc)
     finally:
-        if con is not None:
-            try:
-                con.close()
-            except Exception:
-                pass
         _scan.update(running=False, stop=False, finished=time.time())
         _remember_all()
         _measure_kick()
@@ -2279,18 +2252,11 @@ def _alias_body(name, same_as):
     with _lock:
         if same_as and _canon(same_as) == name:
             return {"ok": False, "error": "that would point two names at each other"}
-        con = _connect()
-        try:
-            if same_as and same_as != name:
-                con.execute("INSERT OR REPLACE INTO aliases(name, same_as) VALUES(?,?)",
-                            (name, same_as))
-                _mem["aliases"][name] = same_as
-            else:
-                con.execute("DELETE FROM aliases WHERE name=?", (name,))
-                _mem["aliases"].pop(name, None)
-            con.commit()
-        finally:
-            con.close()
+        if same_as and same_as != name:
+            _mem["aliases"][name] = same_as
+        else:
+            _mem["aliases"].pop(name, None)
+        _mark("aliases")
     return {"ok": True}
 
 
@@ -2333,8 +2299,7 @@ def _follow_body(folder, names):
         dirs = [path]
 
     read, more = 0, False
-    con = _connect()
-    try:
+    if True:
         for d in dirs:
             for e in _walk(d):
                 try:
@@ -2347,14 +2312,10 @@ def _follow_body(folder, names):
                 if read >= FOLLOW_CAP:
                     more = True
                     break
-                with _lock:
-                    _ingest(e.path, con)
-                    con.commit()
+                _ingest(e.path)
                 read += 1
             if more:
                 break
-    finally:
-        con.close()
     # Renders nobody had read means the ledger is behind, and the rest of
     # this series may sit in a folder beside this one - a second day of it.
     # The scan catches up on everything while the page shows what is known.

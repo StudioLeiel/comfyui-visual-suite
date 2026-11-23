@@ -443,14 +443,9 @@ _font_lock = threading.Lock()
 
 
 def _font_dirs():
-    dirs = []
-    win = os.environ.get("WINDIR") or os.environ.get("SystemRoot")
-    if win:
-        dirs.append(os.path.join(win, "Fonts"))
-    local = os.environ.get("LOCALAPPDATA")
-    if local:
-        dirs.append(os.path.join(local, "Microsoft", "Windows", "Fonts"))
     home = os.path.expanduser("~")
+    # Windows: the system's fonts, and those installed for this user only
+    dirs = ["C:\\Windows\\Fonts", os.path.join(home, "AppData", "Local", "Microsoft", "Windows", "Fonts")]
     dirs += [os.path.join(home, "Library", "Fonts"), "/Library/Fonts", "/System/Library/Fonts",
              os.path.join(home, ".fonts"), os.path.join(home, ".local", "share", "fonts"), "/usr/share/fonts"]
     return [d for d in dirs if os.path.isdir(d)]

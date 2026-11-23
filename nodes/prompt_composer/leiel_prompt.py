@@ -31,6 +31,7 @@ Design rules
 """
 
 import json
+import re
 import shutil
 import os
 import traceback
@@ -705,7 +706,7 @@ BOOKS_DIRNAME = "books"
 BOOK_HOME = "visual_series_book"
 SERIES_BYTES_MAX = 8000000
 BOOK_BYTES_MAX = 40000000
-_SERIES_UID = __import__("re").compile(r"^[A-Za-z0-9_-]{6,64}$")
+_SERIES_UID = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 _moved = {"done": False}
 
 
@@ -745,8 +746,8 @@ def _books_dir():
 
 def _book_name(name):
     """A book file's name: what was typed, kept readable, made safe."""
-    name = __import__("re").sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", str(name or "")).strip(" .")
-    name = __import__("re").sub(r"\s+", " ", name)[:120]
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", str(name or "")).strip(" .")
+    name = re.sub(r"\s+", " ", name)[:120]
     if not name:
         raise ValueError("no name")
     return name
