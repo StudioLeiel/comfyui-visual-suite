@@ -731,10 +731,21 @@ function recText(x, y, w, h, first, paras) {
 /* Words set flush right are drawn from the right edge of their column:
    ALIGN holds that edge while a block set that way is drawn. */
 let ALIGN = null;
+/* Centred words: ALIGN is then the middle of the column, not its edge. */
+let ALIGNC = false;
+/* Set the side for a column from x, w wide, by the page's own setting -
+   left leaves ALIGN as it was. Returns what to put back afterwards. */
+function alignAt(G, x, w) {
+  const before = [ALIGN, ALIGNC];
+  if (G.al === "right") { ALIGN = x + w; ALIGNC = false; }
+  else if (G.al === "center") { ALIGN = x + w / 2; ALIGNC = true; }
+  return before;
+}
+function alignBack(before) { ALIGN = before[0]; ALIGNC = before[1]; }
 function drawLines(ctx, k, lines, x, y, lead) {
   let by = y;
   const right = ALIGN != null;
-  ctx.textAlign = right ? "right" : "left";
+  ctx.textAlign = right ? (ALIGNC ? "center" : "right") : "left";
   lines.forEach((ln, i) => {
     if (i) by += ln === null || lines[i - 1] === null ? lead * 0.55 : lead;
     if (ln) ctx.fillText(ln, (right ? ALIGN : x) * k, by * k);
@@ -744,7 +755,7 @@ function drawLines(ctx, k, lines, x, y, lead) {
 }
 /* A short rule under a title, at the side the words are set to. */
 function rule(ctx, k, x, y, w, len) {
-  const rx = ALIGN != null ? ALIGN - len : x;
+  const rx = ALIGN != null ? ALIGN - (ALIGNC ? len / 2 : len) : x;
   ctx.fillRect(rx * k, y * k, len * k, Math.max(1, 0.25 * k));
 }
 function clip(lines, max) {
@@ -841,13 +852,13 @@ function kicker(ctx, k, G, text, x, y, color) {
   setFont(ctx, k, stack(G.bf), pt, 500, false);
   if (ALIGN != null) {
     // no tracking after the last letter, so the right edge stays true
-    ctx.textAlign = "right";
+    ctx.textAlign = ALIGNC ? "center" : "right";
     setTrack(ctx, k, pt, 0.22);
     const t = String(text).toUpperCase();
     const tail = ctx.measureText(t).width - ctx.measureText(t.slice(0, -1)).width
       - (setTrack(ctx, k, pt, 0), ctx.measureText(t.slice(-1)).width);
     setTrack(ctx, k, pt, 0.22);
-    ctx.fillText(t, ALIGN * k + Math.max(0, tail), y * k);
+    ctx.fillText(t, ALIGN * k + Math.max(0, tail) * (ALIGNC ? 0.5 : 1), y * k);
     ctx.textAlign = "left";
   } else {
     setTrack(ctx, k, pt, 0.22);
@@ -875,9 +886,8 @@ function onPhoto(G) {
    or the layout's; a long note moves it up, and what still does not fit is
    cut with an ellipsis. */
 function textPage(ctx, k, G, cut, extra, x, width, area) {
-  const before = ALIGN;
-  if (G.al === "right") ALIGN = x + width;
-  try { textBlockOf(ctx, k, G, cut, extra, x, width, area); } finally { ALIGN = before; }
+  const before = alignAt(G, x, width);
+  try { textBlockOf(ctx, k, G, cut, extra, x, width, area); } finally { alignBack(before); }
 }
 function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
   const f = G.f, ts = G.st, xs = G.sx;
@@ -919,7 +929,8 @@ function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
   if (REC) {
     const kp = 7 * f * xs, al = G.al;
     const ruleR = { color: G.c.accent, weight: 0.25, offset: 6 * f - 0.25,
-      left: al === "right" ? Math.max(0, width - 10 * f) : 0, right: al === "right" ? 0 : Math.max(0, width - 10 * f) };
+      left: al === "right" ? Math.max(0, width - 10 * f) : al === "center" ? Math.max(0, (width - 10 * f) / 2) : 0,
+      right: al === "right" ? 0 : al === "center" ? Math.max(0, (width - 10 * f) / 2) : Math.max(0, width - 10 * f) };
     const paras = showT ? [
       para("Number", String(cutLabel(cut)).toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22, G.c.accent, al),
       para("Title", cut.title, G.tf, 500, false, T.title, lead.title, 0, G.c.ink, al,
@@ -939,7 +950,8 @@ function textBlockOf(ctx, k, G, cut, extra, x, width, area) {
       const et = extraFirst - T.extra * PT * KASC;
       recText(x, et, width, bottom - et, T.extra * PT * KASC, [para("Foot", extra, G.bf, 400, false, T.extra, lead.extra, 0, G.c.ink, al, null,
         { indent: Math.max(0, width - 128 * f), rule_above: { color: G.c.accent, weight: 0.25, offset: T.extra * PT + 5 * f - 0.25,
-          left: al === "right" ? Math.max(0, width - 6 * f) : 0, right: al === "right" ? 0 : Math.max(0, width - 6 * f) } })]);
+          left: al === "right" ? Math.max(0, width - 6 * f) : al === "center" ? Math.max(0, (width - 6 * f) / 2) : 0,
+          right: al === "right" ? 0 : al === "center" ? Math.max(0, (width - 6 * f) / 2) : Math.max(0, width - 6 * f) } })]);
     }
   }
   const rec = REC;
@@ -982,15 +994,17 @@ function smallWords(ctx, k, G, cut, x, y, width) {
   const showT = showsTitle(G), showX = showsText(G) && !!cut.caption;
   if (REC && (showT || showX)) {
     const kp = 7 * f * G.sx;
-    const paras = showT ? [para("Number", String(cutLabel(cut)).toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22, G.c.accent, "left"),
-      para("Small title", cut.title, G.tf, 500, false, tp, tp * 1.08 * PT, 0, G.c.ink, "left", 7 * f * Math.max(1, G.st) - tp * 1.08 * PT)] : [];
-    if (showX) paras.push(para("Small caption", cut.caption, G.tf, 500, true, cp, cp * 1.42 * PT, 0, G.c.soft, "left", showT ? 6 * f - cp * 1.42 * PT : null));
+    const al = G.al || "left";
+    const paras = showT ? [para("Number", String(cutLabel(cut)).toUpperCase(), G.bf, 500, false, kp, kp * 1.3 * PT, 0.22, G.c.accent, al),
+      para("Small title", cut.title, G.tf, 500, false, tp, tp * 1.08 * PT, 0, G.c.ink, al, 7 * f * Math.max(1, G.st) - tp * 1.08 * PT)] : [];
+    if (showX) paras.push(para("Small caption", cut.caption, G.tf, 500, true, cp, cp * 1.42 * PT, 0, G.c.soft, al, showT ? 6 * f - cp * 1.42 * PT : null));
     const first = showT ? kp * PT * KASC : cp * PT * KASC;
     recText(x, y - first, width, 60 * f, first, paras);
   }
   const rec = REC;
   REC = null;
-  try { smallWordsDraw(ctx, k, G, cut, x, y, width, tp, cp); } finally { REC = rec; }
+  const before = alignAt(G, x, width);
+  try { smallWordsDraw(ctx, k, G, cut, x, y, width, tp, cp); } finally { REC = rec; alignBack(before); }
 }
 function smallWordsDraw(ctx, k, G, cut, x, y, width, tp, cp) {
   const f = G.f;
@@ -1027,13 +1041,12 @@ function titleBlock(ctx, k, G, book, x, y, width, light) {
    on the outer side stays the page's own. */
 function col(G, left, right, w) {
   const width = Math.min(w, right - left);
-  return { x: G.al === "right" ? right - width : left, w: width };
+  return { x: G.al === "right" ? right - width : G.al === "center" ? left + (right - left - width) / 2 : left, w: width };
 }
 /* A block of words set at the side the page asks for. */
 function aligned(G, x, w, fn) {
-  const before = ALIGN;
-  if (G.al === "right") ALIGN = x + w;
-  try { return fn(); } finally { ALIGN = before; }
+  const before = alignAt(G, x, w);
+  try { return fn(); } finally { alignBack(before); }
 }
 function titleHeight(G) {
   const pt = titlePt(G);
@@ -1058,8 +1071,7 @@ function titleTop(G, top, bottom) {
    first, so Bottom sets its last line on the foot of the area and Middle
    centres it. */
 function titleArea(ctx, k, G, book, x, w, top, bottom, light, withNote) {
-  const before = ALIGN;
-  if (G.al === "right") ALIGN = x + w;
+  const before = alignAt(G, x, w);
   try {
     const f = G.f;
     const pt = titlePt(G);
@@ -1109,11 +1121,11 @@ function titleArea(ctx, k, G, book, x, w, top, bottom, light, withNote) {
     if (nl.length) {
       ctx.fillStyle = light ? "#ebe6dc" : G.c.soft;
       setFont(ctx, k, stack(G.bf), npt, 400, false);
-      if (ALIGN != null) ALIGN = x + w;
+      if (ALIGN != null) ALIGN = ALIGNC ? x + w / 2 : x + w;
       drawLines(ctx, k, nl, x, by + gap, nlead);
     }
     } finally { REC = rec2; }
-  } finally { ALIGN = before; }
+  } finally { alignBack(before); }
 }
 
 function closingList(ctx, k, G, book, list, x, width, top0, bottom0) {
@@ -1243,7 +1255,8 @@ function drawSheet(ctx, k, sh, G0, book, st, pics, preview) {
       } else {
         r = photoContain(ctx, k, img(c.pick), c.pick, x, M.top + 8 * f, w, ph * 0.63, true);
       }
-      smallWords(ctx, k, G, c, r.x, r.y + r.h + 11 * f, Math.min(r.w, 150 * f));
+      const sc = col(G, r.x, r.x + r.w, 150 * f);
+      smallWords(ctx, k, G, c, sc.x, r.y + r.h + 11 * f, sc.w);
     });
   } else if (sh.t === "F") {
     if (sh.cuts.length) photoCover(ctx, k, img(sh.cuts[0].pick), 0, 0, pw, ph);
@@ -1356,14 +1369,16 @@ function drawWeb(ctx, k, sh, G, book, img, extraOf) {
       sh.cuts.forEach((c, i) => {
         const y = M.top + i * slot;
         const r = place(c, M.outer, y, pw - M.outer * 2, slot - words - 6 * f, false);
-        smallWords(ctx, k, G, c, r.x, r.y + r.h + 10 * f, Math.min(r.w, 150 * f));
+        const sc = col(G, r.x, r.x + r.w, 150 * f);
+        smallWords(ctx, k, G, c, sc.x, r.y + r.h + 10 * f, sc.w);
       });
     } else {
       const gap = M.inner, w = (pw - M.outer * 2 - gap) / 2;
       sh.cuts.forEach((c, i) => {
         const x = M.outer + i * (w + gap);
         const r = place(c, x, M.top, w, ph - M.top - M.bottom - words, true);
-        smallWords(ctx, k, G, c, r.x, r.y + r.h + 10 * f, Math.min(r.w, 150 * f));
+        const sc = col(G, r.x, r.x + r.w, 150 * f);
+        smallWords(ctx, k, G, c, sc.x, r.y + r.h + 10 * f, sc.w);
       });
     }
   } else if (sh.t === "F") {
@@ -3266,16 +3281,22 @@ function buildLayout(node) {
       }
       html += `</span>`;
     }
-    if (hasWords(sh, G)) {
+    const wordsHere = hasWords(sh, G);
+    if (wordsHere) {
       const own = (v.pos || {})[sh.id] || "";
       const pb = (id, label, title) => `<button class="${own === id ? "on" : ""}" data-pos="${id}" title="${esc(title)}">${label}</button>`;
       html += `<span class="vly-vsep"></span><span class="lab2">WORDS</span><span class="vly-tseg pos">`
         + pb("", "Auto", `As set in Style - ${P.vly_textpos}`)
         + TEXT_POS.map(t => pb(t.id, t.label, `On this page only: words at the ${t.id}`)).join("")
         + `</span>`;
+    }
+    // the side the words are set to - and under a framed picture, too
+    if (wordsHere || sh.t === "E") {
       const al = (v.align || {})[sh.id] || "left";
+      if (!wordsHere) html += `<span class="vly-vsep"></span><span class="lab2">WORDS</span>`;
       html += `<span class="vly-tseg al">`
         + `<button class="${al === "left" ? "on" : ""}" data-al="left" title="Words set flush left">Left</button>`
+        + `<button class="${al === "center" ? "on" : ""}" data-al="center" title="Words centred, on this page">Center</button>`
         + `<button class="${al === "right" ? "on" : ""}" data-al="right" title="Words set flush right, on this page">Right</button>`
         + `</span>`;
     }
@@ -7006,7 +7027,7 @@ function buildLayout(node) {
     const alb = e.target.closest("[data-al]");
     if (alb) {
       const st = state();
-      if (alb.dataset.al === "right") st.align[sh.id] = "right";
+      if (alb.dataset.al === "right" || alb.dataset.al === "center") st.align[sh.id] = alb.dataset.al;
       else delete st.align[sh.id];
       paint();
       return;

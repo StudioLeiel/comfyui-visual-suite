@@ -194,6 +194,12 @@ read back from the PNG — a Series Lab render rebuilt anchor by anchor, the
 swept capsule marked — with a button to copy it. No other viewer can do
 this: only ComfyUI knows.
 
+**Back to the Lab.** **→ Lab** puts the recipe that made a picture back on the
+Series Lab's bench — its prompt, LoRAs and strengths, sampler and the other
+settings, the capsules it swapped in. Pick the best of a sweep and render more
+of it, or render it again after rewriting the scene: the prompt is the scene
+as the Book holds it now.
+
 ![Comparing two renders](docs/images/image-viewer/05-compare.png)
 
 ### [Visual Series Report](docs/series-report.md)

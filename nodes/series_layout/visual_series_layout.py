@@ -900,11 +900,16 @@ def _idml_body(folder, series, model, link_paths):
                 for pi, p in enumerate(paras):
                     role = p.get("role") or "Body"
                     styles.setdefault(role, p)
+                    al = p.get("align")
                     attrs = 'AppliedParagraphStyle="ParagraphStyle/%s" Justification="%s"' % (
-                        _x(role), "RightAlign" if p.get("align") == "right" else "LeftAlign")
+                        _x(role), {"right": "RightAlign", "center": "CenterAlign"}.get(al, "LeftAlign"))
                     if p.get("indent"):
-                        attrs += ' %s="%.3f"' % ("LeftIndent" if p.get("align") == "right" else "RightIndent",
-                                                 max(0.0, _pt(p["indent"])))
+                        ind = max(0.0, _pt(p["indent"]))
+                        if al == "center":
+                            # a narrower measure, kept in the middle of the frame
+                            attrs += ' LeftIndent="%.3f" RightIndent="%.3f"' % (ind / 2, ind / 2)
+                        else:
+                            attrs += ' %s="%.3f"' % ("LeftIndent" if al == "right" else "RightIndent", ind)
                     if p.get("before") is not None:
                         attrs += ' SpaceBefore="%.3f"' % max(0.0, _pt(p["before"]))
                     if p.get("rule"):

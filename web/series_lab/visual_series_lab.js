@@ -3637,6 +3637,68 @@ app.registerExtension({
         return added;
       }
 
+      /* A picture sent back from the Image Viewer ("→ Lab"): the recipe that
+         made it, read from its PNG, becomes a new recipe on the bench - the
+         same prompt, LoRAs and strengths, option chips and swapped capsules.
+         The prompt is the scene as the Book holds it now, so a scene whose
+         words were rewritten renders the new words with the old settings. */
+      function takeFromViewer(detail) {
+        const wired = promptSlots();
+        const opts = scanWorkflowOptions(node);
+        const book = seriesBook();
+        let lostPrompt = 0, lostOpts = 0;
+        for (const r of detail.recipes || []) {
+          /* the prompt: by its slot, and failing that by its name */
+          let pn = Number(r.prompt_slot) || 0;
+          if (pn >= BOOK_BASE && !bookPrompt(pn)) {
+            const named = book && Array.isArray(book.prompts)
+              ? book.prompts.find((q) => q.name === r.prompt_name) : null;
+            pn = named ? BOOK_BASE + named.id : 0;
+          }
+          if (!pn || !wired.includes(pn)) { lostPrompt += 1; continue; }
+          const row = {
+            id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            no: nextNumber(),
+            loras: (r.loras || []).filter((l) => l && l.name)
+              .map((l) => ({ name: l.name, strength: Number(l.strength) })),
+            opts: [],
+            repeat: Math.max(1, state.draft.repeat || 1),
+            prompt: pn,
+            sweep: null,
+            staged: false,
+          };
+          for (const c of r.chips || []) {
+            const o = opts.find((x) => x.key === c.key);
+            if (!o) { lostOpts += 1; continue; }
+            if (row.opts.some((x) => x.key === o.key)) continue;
+            let v = c.value;
+            if (o.kind === "bool") v = String(v).toLowerCase() === "true";
+            else if (o.kind === "number") v = clampOpt(o.nodeId, o.widget, v);
+            row.opts.push({ key: o.key, nodeId: o.nodeId, title: o.title, widget: o.widget,
+                            kind: o.kind, choices: o.choices, values: [v], out: true });
+          }
+          const sw = r.swap && Array.isArray(r.swap.caps) ? r.swap.caps : [];
+          if (sw.length) {
+            row.sweep = { view: sw[0].kind, takes: [{ caps: sw.map((c) =>
+              ({ kind: c.kind, id: c.cap, name: c.name })) }] };
+          }
+          /* the per-recipe words, on or off as the picture had them */
+          const used = new Set((r.triggers || []).map((w) => String(w).toLowerCase()));
+          row.trig = {};
+          for (const k of Object.keys(state.trigVar || {})) row.trig[k] = used.has(k);
+          if (!row.loras.length && !row.opts.length && !row.sweep) { lostPrompt += 1; continue; }
+          warmTriggers(row.loras);
+          state.queue.push(row);
+          detail.added += 1;
+        }
+        if (lostPrompt) detail.notes.push(`${lostPrompt} left out: its prompt is not in this Lab's Book or shelf`);
+        if (lostOpts) detail.notes.push(`${lostOpts} ${lostOpts === 1 ? "setting" : "settings"} left out: the node is no longer in this workflow`);
+        state.live.status = `${detail.added} from the Image Viewer`;
+        writeStore();
+        paint();
+      }
+      node._vslTakeFromViewer = takeFromViewer;
+
       /* Fetch the words for a recipe as it is queued. Collecting them at
          render time is too late: that runs synchronously, and a LoRA nobody
          had hovered over yet would simply contribute nothing. */
@@ -7722,6 +7784,20 @@ for (const ev of ["execution_error", "execution_interrupted"]) {
     }
   });
 }
+
+/* "→ Lab" in the Image Viewer. One Lab takes the recipes: the one selected
+   on the canvas, or else the first. */
+window.addEventListener("leiel-to-lab", (e) => {
+  const d = e.detail;
+  if (!d || d.taken) return;
+  const labs = ((app.graph && app.graph._nodes) || [])
+    .filter((n) => n && typeof n._vslTakeFromViewer === "function" && n.mode !== 2 && n.mode !== 4);
+  if (!labs.length) return;
+  const sel = (app.canvas && app.canvas.selected_nodes) || {};
+  const lab = labs.find((n) => sel[n.id]) || labs[0];
+  d.taken = true;
+  try { lab._vslTakeFromViewer(d); } catch (err) { console.error(err); }
+});
 
 api.addEventListener("visual_series_lab.progress", (e) => {
   const d = e.detail || {};

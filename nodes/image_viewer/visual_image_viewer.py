@@ -839,10 +839,23 @@ def _from_lab(graph, lab_id, lab, bookmod):
     for e in current.get("loras") or []:
         if isinstance(e, dict) and e.get("name"):
             loras.append({"name": str(e["name"]), "strength": e.get("strength", 1.0)})
+    # the recipe as the Series Lab sent it, so the viewer can hand it back to
+    # a Lab's queue: the prompt, the LoRAs, the capsules swapped in, and the
+    # option chips (node::widget = value) - not the frame, the Lab sets that
+    chips = []
+    for c in current.get("chips") or []:
+        if isinstance(c, dict) and "::" in str(c.get("key") or ""):
+            chips.append({"key": str(c["key"]), "value": str(c.get("value"))})
+    swap = current.get("swap") if isinstance(current.get("swap"), dict) else None
+    recipe = {"prompt_slot": slot, "prompt_name": str(current.get("prompt_name") or ""),
+              "series_name": str(current.get("series_name") or ""),
+              "loras": loras, "chips": chips, "triggers": words,
+              "swap": swap}
     return {"prompt": text, "how": "series lab", "sections": sections,
             "triggers": words, "loras": loras,
             "prompt_name": str(current.get("prompt_name") or ""),
-            "series_name": str(current.get("series_name") or "")}
+            "series_name": str(current.get("series_name") or ""),
+            "lab": recipe}
 
 
 def _meta(path):

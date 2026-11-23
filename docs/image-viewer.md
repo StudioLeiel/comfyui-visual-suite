@@ -396,12 +396,14 @@ the picture was made with - the same as dropping the file on ComfyUI.
 ## A picture for a Series Book
 
 With a Series Book on the canvas, right click a picture - in the grid or open
-large. The menu reads the picture first: when it was rendered by a Series Lab
-from a Book prompt, **Its own scene** and **Its own series** send it to the
-very prompt and series it was made from, whichever is open. **The open
-prompt** and **The open series** are there as well. The Book keeps a small
-copy: the prompt's shows on its card with its note, the series' beside the
-series' note and in the Files panel.
+large - to make it a thumbnail in the Book, under **Series Book · set as
+thumbnail**. The menu reads the picture first: when it was rendered by a
+Series Lab from a Book scene, **Thumbnail of its scene** and **Thumbnail of
+its series** set it on the very scene and series it was made from, whichever
+is open. **Thumbnail of the open scene** and **Thumbnail of the open series**
+set it on whatever the Book has open. The Book keeps a small copy: a scene's
+shows on its card with its note, a series' beside the series' note and in the
+Files panel.
 
 ## To the Idea Box
 
@@ -416,6 +418,26 @@ scheduler as keywords, so a render can be found there by what made it and laid
 beside a reference to compare. Renders from one folder - one band here: the scene, the LoRA, the
 sampler, the enhancer - go in as one idea with several pictures, and one sent
 later from that folder goes in beside them.
+
+## Back to the Series Lab
+
+**→ Lab**, on the second bar, on the blue bar when several are selected, and
+on the right-click menu of any picture - that picture, or all of the selected
+when it is one of them - sends a render back to the [Visual Series
+Lab](series-lab.md) as a new recipe on its bench, made the way the picture
+was: the same prompt, the same LoRAs at the same strengths, the same option
+chips - sampler, enhancer on or off and its values, whatever the recipe set -
+the capsules it swapped in, and its per-recipe words on or off as they were.
+Pick the best of a sweep, send it, and render more of it, or render it again
+after rewriting the scene.
+
+The prompt is the scene as the Book holds it now, not the words the picture
+was made with, so a scene rewritten since renders its new words with the
+settings that worked. The seed is not carried: the recipe makes new pictures,
+as many as the Lab's recipe count. Pictures made the same way go as one
+recipe. A picture not rendered by a Series Lab has no recipe to send; a
+setting whose node is no longer in the workflow is left out, and the message
+says so. With two Labs on the canvas, the selected one takes it.
 
 ## Copying a picture
 

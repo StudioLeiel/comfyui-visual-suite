@@ -439,6 +439,12 @@ apart for every workflow (see above).
 file to what is already there rather than replacing it, so two plans can be
 merged.
 
+A single render can come back too. **→ Lab** in the [Visual Image
+Viewer](image-viewer.md) puts the recipe that made a picture on the bench:
+its prompt, LoRAs, option chips, swapped capsules and per-recipe words, with
+the count of the recipe being built. The prompt is found by its scene in the
+Book, and by name when the number has changed.
+
 That makes a queue a template rather than a backup. A setup that compares five
 LoRAs at four images each can be exported once, and the next series only needs
 its prompts swapped.

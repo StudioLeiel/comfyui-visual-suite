@@ -213,9 +213,15 @@ full spread in print and a framed picture in a feed.
    - **WORDS** - on a page with words of its own: **Auto** follows the Style,
      **Top**, **Middle** and **Bottom** set this page alone; **Bottom** sets the
      last line on the foot of the page
-   - **Left**, **Right** - the words of this page set flush left, or flush right
-     against the page's outer margin - on a cover spread, or words set on a
-     picture across the spread, against the right edge of the spread
+   - **Left**, **Center**, **Right** - the words of this page set flush left,
+     centred, or flush right against the page's outer margin - on a cover
+     spread, or words set on a picture across the spread, against the right
+     edge of the spread. Centred, the column sits in the middle of its area
+     and every line, the number and the short rule are centred in it. On a
+     **Framed** page the number, title and caption under each picture follow
+     it too - there **WORDS** shows only these three, in print and on the web
+     alike, Square and Portrait included. An InDesign document keeps the
+     setting as the paragraphs' own alignment
 6. On the opener, choose how it is laid out, and under it the **COVER** - any
    pick of the series, or **Auto** for the first portrait pick. Alt+click on a
    pick in CUTS chooses the cover too.

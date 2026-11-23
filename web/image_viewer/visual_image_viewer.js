@@ -185,6 +185,8 @@ const CSS = `
 /* the Idea Box's own part: silver, as My works is there */
 .viv-ctx .h.ib{color:#c9cfd8}
 .viv-ctx button.ib:hover{background:#c9cfd81f;color:#f3f5f8}
+.viv-ctx .h.lq{color:#e9b48c}
+.viv-ctx button.lq:hover{background:#d9783c24;color:#ffd9bd}
 .viv{display:flex;flex-direction:column;width:100%;height:100%;box-sizing:border-box;
   background:#121315;border:1px solid #26282d;border-radius:8px;overflow:hidden;
   font:12px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;color:#cfd2d8;outline:none}
@@ -575,6 +577,10 @@ const CSS = `
 /* to the Idea Box's My works: silver, as My works is there */
 .viv-btn.idea{border-color:#5d636c;color:#d9dee6}
 .viv-btn.idea:hover{border-color:#c9cfd8;color:#f3f5f8;background:#1b1e22}
+/* back to the Series Lab's queue: orange, as the Lab is */
+.viv-btn.lab{border-color:#7a4a2c;color:#e9b48c}
+.viv-btn.lab:hover{border-color:#d9783c;color:#ffd9bd;background:#2a1a10}
+.viv.bin .viv-btn.lab{display:none!important}
 .viv-meta{position:absolute;top:32px;right:0;bottom:0;width:min(400px,46%);z-index:3;display:none;
   flex-direction:column;background:rgba(18,19,22,.97);border-left:1px solid #2b2d33;
   font:12px/1.5 system-ui,"Segoe UI",sans-serif;color:#cfd2d8;user-select:text}
@@ -810,6 +816,8 @@ function buildViewer(node) {
   copyBtn.style.display = "none";
   const ideaBtn = el("button", "viv-btn idea", "→ Idea Box");
   ideaBtn.title = "Send to the Idea Box, into My works - the pictures selected, or the one shown large -\nwith the LoRAs and settings in its notes, to lay beside the references there";
+  const labBtn = el("button", "viv-btn lab", "→ Lab");
+  labBtn.title = "Send to the Series Lab's queue - the pictures selected, or the one shown large -\nas recipes made the way they were: the same prompt, LoRAs and settings. They wait on the bench";
   const trashBtn = el("button", "viv-btn trash", "");
   trashBtn.style.display = "none";
   const zoomOut = el("button", "viv-btn sq", "−");
@@ -832,7 +840,7 @@ function buildViewer(node) {
   filterBox.title = "Show only the renders whose settings mention every word - a LoRA, a trigger word, a sampler, a word of the prompt or a folder. A word starting with - leaves those out. Enter to filter, Esc to clear";
   const filterLab = el("label", "viv-flab", "Filter");
   filterLab.addEventListener("click", () => filterBox.focus());
-  bar2.append(seqBtn, seg, pickBtn, copyBtn, listBtn, zoomOut, zoomIn, modeBtn, fsBtn, ideaBtn, trashBtn, filterLab, filterBox, info, qBtn);
+  bar2.append(seqBtn, seg, pickBtn, copyBtn, listBtn, zoomOut, zoomIn, modeBtn, fsBtn, ideaBtn, labBtn, trashBtn, filterLab, filterBox, info, qBtn);
 
   const body = el("div", "viv-body");
   const grid = el("div", "viv-grid");
@@ -923,7 +931,9 @@ function buildViewer(node) {
   const selClear = el("button", "viv-btn", "Clear  (Esc)");
   const selIdea = el("button", "viv-btn idea", "→ Idea Box");
   selIdea.title = "Send them to the Idea Box, into My works";
-  selBar.append(selLab, el("span", "sp", ""), selAll, selPick, selCopy, selIdea, selDel, selPurge, selClear);
+  const selLabQ = el("button", "viv-btn lab", "→ Lab");
+  selLabQ.title = "Send them to the Series Lab's queue, as recipes made the way they were";
+  selBar.append(selLab, el("span", "sp", ""), selAll, selPick, selCopy, selIdea, selLabQ, selDel, selPurge, selClear);
   const osd = el("div", "viv-osd", "");
   const dirToast = el("div", "viv-flashdir", "");
   const stage = el("div", "viv-stage b");
@@ -1034,6 +1044,7 @@ function buildViewer(node) {
         ${row(K("Delete"), "delete it - it goes into a _deleted folder beside it")}
         ${row(K("Ctrl+Z"), "bring back what was deleted, undo a pick")}
         ${row("Copy picks", "copy the picks into one folder - a series folder in input")}
+        ${row("→ Lab", "send the pictures selected - or the one shown large, or the one right-clicked - to the Series Lab's bench, each as a recipe made the way it was: prompt, LoRAs, settings")}
         ${row("→ Idea Box", "send the pictures selected - or the one shown large, or the one right-clicked - into the Idea Box's My works, with what made them in their notes")}
         ${row(K("Ctrl") + "+click  " + K("Shift") + "+click", "select several - Shift+click a box selects the run from the last one ticked; the blue bar acts on all of them")}
         ${row("drag on empty space", "select what the box touches - " + K("Shift") + " adds to it, " + K("Ctrl") + " (from anywhere) unselects")}
@@ -3239,6 +3250,41 @@ function buildViewer(node) {
       toast(`${n ? `${n} sent, then ` : ""}not sent: ${e && e.message || e}`, false);
     }
   }
+  /* ---- back to the Series Lab: each picture's recipe - the prompt, the
+     LoRAs and strengths, the capsules swapped in, the option chips - read
+     from the PNG and put on the Lab's bench as a new recipe. The Lab does
+     the rest; it listens for "leiel-to-lab". Pictures made the same way go
+     as one recipe. */
+  async function sendToLab(items) {
+    items = items.filter(Boolean);
+    if (!items.length) { flash("select pictures, or open one large, to send it to the Series Lab"); return; }
+    const recipes = [], seen = new Set();
+    let none = 0;
+    for (const item of items) {
+      const m = await metaOf(item);
+      const r = m && m.lab;
+      if (!r) { none += 1; continue; }
+      const sig = JSON.stringify([r.prompt_slot, r.prompt_name, r.loras, r.chips, r.swap, (r.triggers || []).slice().sort()]);
+      if (seen.has(sig)) continue;
+      seen.add(sig);
+      recipes.push(r);
+    }
+    if (!recipes.length) {
+      toast(items.length === 1 ? "this picture was not rendered by a Series Lab - there is no recipe in it"
+        : "none of these was rendered by a Series Lab - there is no recipe in them", false);
+      return;
+    }
+    const detail = { recipes, taken: false, added: 0, notes: [] };
+    window.dispatchEvent(new CustomEvent("leiel-to-lab", { detail }));
+    if (!detail.taken) { toast("no Series Lab on the canvas to send it to", false); return; }
+    const n = detail.added;
+    const msg = [`${n} ${n === 1 ? "recipe" : "recipes"} on the Series Lab's bench`];
+    if (recipes.length < items.length - none) msg.push("pictures made the same way went as one");
+    if (none) msg.push(`${none} without a Lab recipe left out`);
+    for (const t of detail.notes) msg.push(t);
+    toast(msg.join(" - "), false);
+  }
+
   const ideaTargets = () => (S.sel.size ? S.items.filter((it) => S.sel.has(it.name))
     : S.mode === "large" && S.current >= 0 ? [S.items[S.current]] : []);
 
@@ -4190,6 +4236,8 @@ function buildViewer(node) {
   selPick.addEventListener("click", (e) => { e.stopPropagation(); pickSelected(); });
   selIdea.addEventListener("click", (e) => { e.stopPropagation(); sendToIdeaBox(ideaTargets()); });
   ideaBtn.addEventListener("click", (e) => { e.stopPropagation(); sendToIdeaBox(ideaTargets()); });
+  selLabQ.addEventListener("click", (e) => { e.stopPropagation(); sendToLab(ideaTargets()); });
+  labBtn.addEventListener("click", (e) => { e.stopPropagation(); sendToLab(ideaTargets()); });
   selCopy.addEventListener("click", (e) => { e.stopPropagation(); askCopy(selNames()); });
   selDel.addEventListener("click", (e) => { e.stopPropagation(); deleteSelected(); });
   selPurge.addEventListener("click", (e) => { e.stopPropagation(); purgeSelected(); });
@@ -4334,13 +4382,18 @@ function buildViewer(node) {
     const ideaItems = many ? S.items.filter((it) => S.sel.has(it.name)) : item ? [item] : [];
     const escH = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     ctx = el("div", "viv-ctx");
-    ctx.innerHTML = (book ? `<div class="h">Series Book</div>`
-      + `<div class="own"><button disabled data-to="own">Its own scene<small>reading the picture...</small></button></div>`
+    ctx.innerHTML = (book ? `<div class="h">Series Book · set as thumbnail</div>`
+      + `<div class="own"><button disabled data-to="own">Thumbnail of its scene<small>reading the picture...</small></button></div>`
       + `<div class="sep"></div>`
-      + `<button data-to="prompt">The open prompt<small>whatever scene is open in the book</small></button>`
-      + `<button data-to="series">The open series<small>shown beside the series' note</small></button>` : "")
+      + `<button data-to="prompt">Thumbnail of the open scene<small>the scene open in the Book now - on its card</small></button>`
+      + `<button data-to="series">Thumbnail of the open series<small>the series open in the Book now - beside its note and in Files</small></button>` : "")
       + (ideaItems.length ? (book ? `<div class="sep ib"></div>` : "") + `<div class="h ib">Idea Box</div>`
         + `<button class="ib" data-idea="1">→ Idea Box<small>${many ? `the ${ideaItems.length} selected` : "this picture"} → My works › ${escH(openName() || "Image Viewer")}</small></button>` : "");
+    if (ideaItems.length) {
+      ctx.insertAdjacentHTML("beforeend", `<div class="sep ib"></div><div class="h lq">Series Lab</div>`
+        + `<button class="lq" data-lab="1">→ Lab<small>${many ? `the ${ideaItems.length} selected` : "this picture"} → a recipe on the bench, made the same way</small></button>`);
+      ctx.querySelector("button[data-lab]").addEventListener("click", (ev) => { ev.stopPropagation(); ctxClose(); sendToLab(ideaItems); });
+    }
     const ib = ctx.querySelector("button[data-idea]");
     if (ib) ib.addEventListener("click", (ev) => { ev.stopPropagation(); ctxClose(); sendToIdeaBox(ideaItems); });
     const src = img.src;
@@ -4349,12 +4402,12 @@ function buildViewer(node) {
       window.dispatchEvent(new CustomEvent("leiel-set-picture", { detail: {
         src, to,
         prompt_name: meta ? meta.prompt_name : "", series_name: meta ? meta.series_name : "" } }));
-      flash(to === "series" ? "sent to the open series" : to === "own-series" ? `sent to series "${meta.series_name}"`
-        : to === "own" ? `sent to "${meta.prompt_name}"` : "sent to the open prompt");
+      flash(to === "series" ? "thumbnail of the open series" : to === "own-series" ? `thumbnail of series "${meta.series_name}"`
+        : to === "own" ? `thumbnail of scene "${meta.prompt_name}"` : "thumbnail of the open scene");
       ctxClose();
     };
     const wire = () => {
-      for (const b of ctx.querySelectorAll("button:not([disabled]):not([data-idea])")) {
+      for (const b of ctx.querySelectorAll("button:not([disabled]):not([data-idea]):not([data-lab])")) {
         if (b.__wired) continue;
         b.__wired = true;
         b.addEventListener("click", (ev) => { ev.stopPropagation(); send(b.dataset.to); });
@@ -4368,12 +4421,12 @@ function buildViewer(node) {
         meta = m && m.prompt_name ? m : null;
         const own = box.querySelector(".own");
         if (!meta) {
-          own.innerHTML = `<button disabled>Its own scene<small>this picture names no Series Book prompt</small></button>`;
+          own.innerHTML = `<button disabled>Thumbnail of its scene<small>this picture was not made from a Book scene</small></button>`;
           return;
         }
         const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-        own.innerHTML = `<button data-to="own">Its own scene<small>${esc(meta.prompt_name)}</small></button>`
-          + (meta.series_name ? `<button data-to="own-series">Its own series<small>${esc(meta.series_name)}</small></button>` : "");
+        own.innerHTML = `<button data-to="own">Thumbnail of its scene<small>${esc(meta.prompt_name)} - on its card</small></button>`
+          + (meta.series_name ? `<button data-to="own-series">Thumbnail of its series<small>${esc(meta.series_name)} - beside its note and in Files</small></button>` : "");
         wire();
       }).catch(() => {});
     } else if (book) {

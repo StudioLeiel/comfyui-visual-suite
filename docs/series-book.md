@@ -319,10 +319,12 @@ when none is open). Drop a picture onto it to set it, right click it to take
 it off. An empty box shows only under the pointer, and a single click on it
 sets a picture.
 
-From a Visual Image Viewer, right click any picture: **Its own scene** and
-**Its own series** send it to the prompt and series it was rendered from (by
-their names, as the Series Lab recorded them in the picture); **The open
-prompt** and **The open series** send it to what is open here. Pictures and
+From a Visual Image Viewer, right click any picture to make it a thumbnail
+here, under **Series Book · set as thumbnail**: **Thumbnail of its scene** and
+**Thumbnail of its series** set it on the scene and series it was rendered
+from (by their names, as the Series Lab recorded them in the picture);
+**Thumbnail of the open scene** and **Thumbnail of the open series** set it on
+what is open here. Pictures and
 notes are kept small inside the book, its series files and its book files.
 
 In **Files**, a book or series file with a picture shows it small before its
