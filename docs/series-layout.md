@@ -769,6 +769,23 @@ package's Fonts installed, the type is the same as here; the pages are a start
 to be finished in InDesign - bleed the pictures that run to the edge, adjust
 the text, export the print PDF from there.
 
+### To the Idea Box
+
+**Idea Box**, beside Export, sends what is made here to the
+[Visual Idea Box](idea-box.md). A small window asks how:
+
+| | |
+| --- | --- |
+| **Format** (Print, Web) | **JPEG** or **PNG** - each spread or frame an idea of its own - or one **PDF** of them, to page through in the Idea Box |
+| **Pages** (Print, Web) | **This spread** (frame) - the one shown now - or **Every spread** |
+| **Motion** | The film is exported first, at the size shown and high quality, as Export would write it, and then sent |
+
+Pages are drawn as an export draws them, 2400 pixels on the long side, and
+each carries the series and its number in its notes. A PDF and a film are also
+written into the output folder, as an export is. Everything sent is one's
+own work, so it goes into the Idea Box's **My works**, under the series' name —
+not with the new references waiting to be sorted.
+
 ## What is kept
 
 The series on show, print or web, the size of each, the colour, where the

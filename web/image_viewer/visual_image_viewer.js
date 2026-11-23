@@ -182,6 +182,9 @@ const CSS = `
 .viv-ctx button[disabled]{cursor:default;opacity:.55;}
 .viv-ctx button[disabled]:hover{background:none;color:#d8dbe0;}
 .viv-ctx .sep{height:1px;background:#2a2d33;margin:4px 6px;}
+/* the Idea Box's own part: silver, as My works is there */
+.viv-ctx .h.ib{color:#c9cfd8}
+.viv-ctx button.ib:hover{background:#c9cfd81f;color:#f3f5f8}
 .viv{display:flex;flex-direction:column;width:100%;height:100%;box-sizing:border-box;
   background:#121315;border:1px solid #26282d;border-radius:8px;overflow:hidden;
   font:12px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;color:#cfd2d8;outline:none}
@@ -504,7 +507,7 @@ const CSS = `
 .viv-binbar .sp{flex:1}
 .viv-binbar .viv-btn.go{border-color:#c86a5d;color:#ffd0c8;background:#3a1d18}
 .viv.bin .viv-grid{background:#160f0e}
-.viv.bin .viv-capk,.viv.bin .viv-btn.picks,.viv.bin .viv-btn.copyp{display:none!important}
+.viv.bin .viv-capk,.viv.bin .viv-btn.picks,.viv.bin .viv-btn.copyp,.viv.bin .viv-btn.idea{display:none!important}
 .viv-capdel.purge{display:none}
 .viv.bin .viv-capdel.purge{display:inline-block}
 .viv.bin .viv-capdel:not(.purge){margin-left:6px}
@@ -569,6 +572,9 @@ const CSS = `
 .viv-cp-lab{font:700 9.5px system-ui,sans-serif;color:#7d828b;letter-spacing:.7px;text-transform:uppercase;margin:0 0 4px}
 .viv-cp-row .viv-seg .viv-btn.on{background:#2a2416}
 .viv-btn.copyp{border-color:#6b5a33;color:#f0d9a8}
+/* to the Idea Box's My works: silver, as My works is there */
+.viv-btn.idea{border-color:#5d636c;color:#d9dee6}
+.viv-btn.idea:hover{border-color:#c9cfd8;color:#f3f5f8;background:#1b1e22}
 .viv-meta{position:absolute;top:32px;right:0;bottom:0;width:min(400px,46%);z-index:3;display:none;
   flex-direction:column;background:rgba(18,19,22,.97);border-left:1px solid #2b2d33;
   font:12px/1.5 system-ui,"Segoe UI",sans-serif;color:#cfd2d8;user-select:text}
@@ -634,6 +640,9 @@ const CSS = `
 .viv-meta .sec .k .cp.keep+.cp{margin-left:4px}
 .viv-meta .sec .k .cp.keep{border-color:#3f6a58;color:#a8dcc4;background:#122019}
 .viv-meta .sec .k .cp.keep:hover{border-color:#5fc08a;background:#16291f}
+.viv-meta .sec .k .cp.keep.kept{border-color:#6b5a33;color:#e0b85a;background:#1b1912}
+.viv-meta .sec .k .cp.keep.kept:hover{border-color:#e0b85a;color:#f3dcaa;background:#2a2316}
+.viv-meta .sec .k .cp.keep.done{border-color:#5fc08a;color:#c9f2d9;background:#15281e}
 .viv-meta .sec p{margin:0;color:#c9cdd4}
 .viv-meta table{border-collapse:collapse;width:100%}
 .viv-meta td{padding:2px 0;vertical-align:top}
@@ -799,6 +808,8 @@ function buildViewer(node) {
   const copyBtn = el("button", "viv-btn copyp", "Copy picks");
   copyBtn.title = "Copy the picks of this folder into another one - a series folder in input, say";
   copyBtn.style.display = "none";
+  const ideaBtn = el("button", "viv-btn idea", "→ Idea Box");
+  ideaBtn.title = "Send to the Idea Box, into My works - the pictures selected, or the one shown large -\nwith the LoRAs and settings in its notes, to lay beside the references there";
   const trashBtn = el("button", "viv-btn trash", "");
   trashBtn.style.display = "none";
   const zoomOut = el("button", "viv-btn sq", "−");
@@ -821,7 +832,7 @@ function buildViewer(node) {
   filterBox.title = "Show only the renders whose settings mention every word - a LoRA, a trigger word, a sampler, a word of the prompt or a folder. A word starting with - leaves those out. Enter to filter, Esc to clear";
   const filterLab = el("label", "viv-flab", "Filter");
   filterLab.addEventListener("click", () => filterBox.focus());
-  bar2.append(seqBtn, seg, pickBtn, copyBtn, listBtn, zoomOut, zoomIn, modeBtn, fsBtn, trashBtn, filterLab, filterBox, info, qBtn);
+  bar2.append(seqBtn, seg, pickBtn, copyBtn, listBtn, zoomOut, zoomIn, modeBtn, fsBtn, ideaBtn, trashBtn, filterLab, filterBox, info, qBtn);
 
   const body = el("div", "viv-body");
   const grid = el("div", "viv-grid");
@@ -910,7 +921,9 @@ function buildViewer(node) {
   const selDel = el("button", "viv-btn del", "Delete");
   const selPurge = el("button", "viv-btn del", "Delete forever");
   const selClear = el("button", "viv-btn", "Clear  (Esc)");
-  selBar.append(selLab, el("span", "sp", ""), selAll, selPick, selCopy, selDel, selPurge, selClear);
+  const selIdea = el("button", "viv-btn idea", "→ Idea Box");
+  selIdea.title = "Send them to the Idea Box, into My works";
+  selBar.append(selLab, el("span", "sp", ""), selAll, selPick, selCopy, selIdea, selDel, selPurge, selClear);
   const osd = el("div", "viv-osd", "");
   const dirToast = el("div", "viv-flashdir", "");
   const stage = el("div", "viv-stage b");
@@ -1021,6 +1034,7 @@ function buildViewer(node) {
         ${row(K("Delete"), "delete it - it goes into a _deleted folder beside it")}
         ${row(K("Ctrl+Z"), "bring back what was deleted, undo a pick")}
         ${row("Copy picks", "copy the picks into one folder - a series folder in input")}
+        ${row("→ Idea Box", "send the pictures selected - or the one shown large, or the one right-clicked - into the Idea Box's My works, with what made them in their notes")}
         ${row(K("Ctrl") + "+click  " + K("Shift") + "+click", "select several - Shift+click a box selects the run from the last one ticked; the blue bar acts on all of them")}
         ${row("drag on empty space", "select what the box touches - " + K("Shift") + " adds to it, " + K("Ctrl") + " (from anywhere) unselects")}
         ${row("drag a picture", "into another folder - " + K("Ctrl") + " at the drop copies")}
@@ -2003,15 +2017,33 @@ function buildViewer(node) {
              picture as its card - the moment it is worth keeping is the
              moment it is on screen */
           if (book && typeof book.leielKeepWords === "function" && sec.kind) {
-            const kb = el("button", "cp keep", "Drawer");
-            kb.title = "Keep this anchor in the Series Book's drawer, with this picture as its card";
+            /* Words already a card in the drawer read Kept, so a picture is
+               never kept twice by mistake; pointed at, the button offers to
+               put this picture on that card instead */
+            let kept = null;
+            try { kept = typeof book.leielKeptWords === "function" ? book.leielKeptWords(sec.kind, sec.text) : null; } catch (err) { kept = null; }
+            const kb = el("button", "cp keep" + (kept ? " kept" : ""), kept ? "Kept" : "Drawer");
+            const setKept = (name) => {
+              kept = { name };
+              kb.classList.add("kept");
+              kb.textContent = "Kept";
+              kb.title = `In the Series Book's drawer as "${name}" - click to make this picture its card's picture`;
+            };
+            if (kept) setKept(kept.name);
+            else kb.title = "Keep this anchor in the Series Book's drawer, with this picture as its card";
+            kb.addEventListener("mouseenter", () => { if (kept) kb.textContent = "Replace image"; });
+            kb.addEventListener("mouseleave", () => { if (kept) kb.textContent = "Kept"; });
             kb.addEventListener("click", async (e) => {
               e.stopPropagation();
               let r = null;
-              try { r = await book.leielKeepWords(sec.kind, sec.name || "", sec.text, rawURL(item)); } catch (err) { r = null; }
+              try { r = await book.leielKeepWords(sec.kind, sec.name || "", sec.text, rawURL(item), !!kept); } catch (err) { r = null; }
               if (!r) { flash("the book could not keep it"); return; }
               flash(r.msg);
-              if (r.ok) { kb.classList.add("done"); kb.textContent = "Kept"; }
+              if (r.ok) {
+                setKept(r.name || sec.name || "");
+                kb.classList.add("done");
+                setTimeout(() => kb.classList.remove("done"), 900);
+              }
             });
             k.append(kb);
           }
@@ -3136,6 +3168,80 @@ function buildViewer(node) {
     diffBox.classList.add("has");
   }
 
+  /* ---- to the Idea Box: one's own renders into My works, under the series
+     they belong to, each with what made it in its notes and its LoRAs and
+     sampler as keywords - to be laid beside the references there. */
+  async function sendToIdeaBox(items) {
+    items = items.filter(Boolean);
+    if (!items.length) { flash("select pictures, or open one large, to send it to the Idea Box"); return; }
+    const series = openName() || "Image Viewer";
+    const short = (n) => String(n).replace(/\\/g, "/").split("/").pop().replace(/\.(safetensors|ckpt|pt|pth|bin|gguf)$/i, "");
+    let n = 0, joined = 0;
+    /* Renders of one band of the viewer - one folder: the scene, the LoRA,
+       the sampler, the enhancer, as the Series Lab files them - are one idea
+       there: a picture from a folder already sent goes in beside the others
+       from it. The folder is read from the "File:" line of the notes; notes
+       without one are matched whole. */
+    const how = (memo) => {
+      const lines = String(memo || "").split("\n");
+      const file = lines.find((l) => /^File: /.test(l));
+      const dir = file ? file.slice(6).replace(/\\/g, "/").replace(/\/[^/]*$/, "") : "";
+      if (file && dir && dir !== file.slice(6)) return `dir:${dir}`;
+      return lines.filter((l) => !/^File: /.test(l)).join("\n").trim();
+    };
+    const same = new Map();
+    try {
+      const lr = await api.fetchApi("/leiel_idea/list");
+      const lj = await lr.json();
+      for (const it of (lj && lj.items) || []) {
+        if (it.work && it.kind === "image" && (it.wfolder || "") === series) same.set(how(it.memo), it.id);
+      }
+    } catch (e) { /* none to go beside */ }
+    try {
+      for (const item of items) {
+        flash(`to the Idea Box - ${n + 1} of ${items.length}…`);
+        const res = await fetch(rawURL(item));
+        if (!res.ok) throw new Error(`could not read ${item.name}`);
+        const blob = await res.blob();
+        const m = await metaOf(item) || {};
+        const lines = [(m.prompt_name || String(item.name).replace(/\.[^.]+$/, "")), series];
+        const loras = (m.loras || []).map((l) => `${short(l.name)} ${l.strength}`);
+        if (loras.length) lines.push(`LoRA: ${loras.join(" · ")}`);
+        const set = (m.settings || []).filter((x) => x.label !== "seed").map((x) => `${x.label} ${x.value}`);
+        if (set.length) lines.push(set.join(" · "));
+        const enh = (m.enhancers || []).map((e) => `${String(e.title || "enhancer").replace(/\s*\([^)]*\)\s*$/, "")} ${e.on ? "on" : "off"}`);
+        if (enh.length) lines.push(enh.join(" · "));
+        lines.push(`File: ${item.name}`);
+        const sig = how(lines.join("\n"));
+        if (same.has(sig)) {
+          const q2 = new URLSearchParams({ id: same.get(sig), name: item.name, memo: lines.join("\n") });
+          const r2 = await api.fetchApi(`/leiel_idea/more_add?${q2}`, { method: "POST", body: blob });
+          const j2 = await r2.json().catch(() => ({ ok: false }));
+          if (j2.ok) { n += 1; joined += 1; continue; }
+          same.delete(sig);                       // that one is gone: a new idea, then
+        }
+        const q = new URLSearchParams({ name: item.name, via: "viewer", memo: lines.join("\n"), work: "1", wfolder: series });
+        const r = await api.fetchApi(`/leiel_idea/add?${q}`, { method: "POST", body: blob });
+        const j = await r.json().catch(() => ({ ok: false }));
+        if (!j.ok) throw new Error(j.error || "is the Visual Idea Box installed?");
+        if (j.item) same.set(sig, j.item.id);
+        /* the LoRAs and the sampler, as keywords to find it by */
+        const tags = [...(m.loras || []).map((l) => short(l.name)),
+          ...(m.settings || []).filter((x) => x.label === "sampler" || x.label === "scheduler").map((x) => x.value)];
+        if (tags.length && j.item) {
+          await api.fetchApi("/leiel_idea/update", { method: "POST", body: JSON.stringify({ id: j.item.id, changes: { tags } }) });
+        }
+        n += 1;
+      }
+      toast(`${n} ${n === 1 ? "picture" : "pictures"} in the Idea Box - My works › ${series}`
+        + (joined ? ` - ${joined} beside one made the same way` : ""), false);
+    } catch (e) {
+      toast(`${n ? `${n} sent, then ` : ""}not sent: ${e && e.message || e}`, false);
+    }
+  }
+  const ideaTargets = () => (S.sel.size ? S.items.filter((it) => S.sel.has(it.name))
+    : S.mode === "large" && S.current >= 0 ? [S.items[S.current]] : []);
+
   /* ---- selecting several */
   const selNames = () => S.items.filter((it) => S.sel.has(it.name)).map((it) => it.name);
   function paintSel() {
@@ -4082,6 +4188,8 @@ function buildViewer(node) {
   trashBtn.addEventListener("click", () => setBin(!S.binView));
   selAll.addEventListener("click", (e) => { e.stopPropagation(); selectAll(); });
   selPick.addEventListener("click", (e) => { e.stopPropagation(); pickSelected(); });
+  selIdea.addEventListener("click", (e) => { e.stopPropagation(); sendToIdeaBox(ideaTargets()); });
+  ideaBtn.addEventListener("click", (e) => { e.stopPropagation(); sendToIdeaBox(ideaTargets()); });
   selCopy.addEventListener("click", (e) => { e.stopPropagation(); askCopy(selNames()); });
   selDel.addEventListener("click", (e) => { e.stopPropagation(); deleteSelected(); });
   selPurge.addEventListener("click", (e) => { e.stopPropagation(); purgeSelected(); });
@@ -4211,20 +4319,30 @@ function buildViewer(node) {
     const holder = t ? t.closest(".viv-cell, .viv-stage") : null;
     const img = holder ? holder.querySelector("img") : null;
     if (!img || !img.src || /^data:,?$/.test(img.src)) return;
-    if (!document.querySelector(".lsb-pbox")) return;      // no Series Book open
-    e.preventDefault();
-    e.stopPropagation();
-    ctxClose();
     /* which picture: a grid cell carries its index, the large view is the
        current one */
     const item = holder.classList.contains("viv-cell") ? S.items[Number(holder.dataset.i)]
       : (holder.classList.contains("b") ? S.items[S.current] : null);
+    const book = !!document.querySelector(".lsb-pbox");   // a Series Book open
+    if (!book && !item) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ctxClose();
+    /* the Idea Box: this picture - or, when it is one of several selected,
+       all of them - into My works */
+    const many = item && S.sel.size > 1 && S.sel.has(item.name);
+    const ideaItems = many ? S.items.filter((it) => S.sel.has(it.name)) : item ? [item] : [];
+    const escH = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     ctx = el("div", "viv-ctx");
-    ctx.innerHTML = `<div class="h">Series Book</div>`
+    ctx.innerHTML = (book ? `<div class="h">Series Book</div>`
       + `<div class="own"><button disabled data-to="own">Its own scene<small>reading the picture...</small></button></div>`
       + `<div class="sep"></div>`
       + `<button data-to="prompt">The open prompt<small>whatever scene is open in the book</small></button>`
-      + `<button data-to="series">The open series<small>shown beside the series' note</small></button>`;
+      + `<button data-to="series">The open series<small>shown beside the series' note</small></button>` : "")
+      + (ideaItems.length ? (book ? `<div class="sep ib"></div>` : "") + `<div class="h ib">Idea Box</div>`
+        + `<button class="ib" data-idea="1">→ Idea Box<small>${many ? `the ${ideaItems.length} selected` : "this picture"} → My works › ${escH(openName() || "Image Viewer")}</small></button>` : "");
+    const ib = ctx.querySelector("button[data-idea]");
+    if (ib) ib.addEventListener("click", (ev) => { ev.stopPropagation(); ctxClose(); sendToIdeaBox(ideaItems); });
     const src = img.src;
     let meta = null;
     const send = (to) => {
@@ -4236,7 +4354,7 @@ function buildViewer(node) {
       ctxClose();
     };
     const wire = () => {
-      for (const b of ctx.querySelectorAll("button:not([disabled])")) {
+      for (const b of ctx.querySelectorAll("button:not([disabled]):not([data-idea])")) {
         if (b.__wired) continue;
         b.__wired = true;
         b.addEventListener("click", (ev) => { ev.stopPropagation(); send(b.dataset.to); });
@@ -4244,7 +4362,7 @@ function buildViewer(node) {
     };
     wire();
     const box = ctx;
-    if (item) {
+    if (item && book) {
       metaOf(item).then((m) => {
         if (ctx !== box) return;
         meta = m && m.prompt_name ? m : null;
@@ -4258,7 +4376,7 @@ function buildViewer(node) {
           + (meta.series_name ? `<button data-to="own-series">Its own series<small>${esc(meta.series_name)}</small></button>` : "");
         wire();
       }).catch(() => {});
-    } else {
+    } else if (book) {
       box.querySelector(".own").remove();
       box.querySelector(".sep").remove();
     }

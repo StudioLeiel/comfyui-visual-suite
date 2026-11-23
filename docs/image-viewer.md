@@ -358,8 +358,10 @@ came from one.
 
 With a Series Book on the canvas, each anchor has a **Drawer** button too: it
 keeps that anchor in the book's Drawer with this very picture as its card - the
-render that made it worth keeping. If the same words are already in the drawer,
-the card takes this picture instead.
+render that made it worth keeping. An anchor whose words are already a card
+in the drawer reads **Kept** instead, in gold, so a picture is never kept
+twice by mistake: point at it and it reads **Replace image**, and a click puts
+this picture on that card in place of the one it had.
 
 With a Series Book on the canvas, each anchor also wears the number its
 capsule has on the book's shelf - `02-2`, `01+` - in the colour of its kind,
@@ -400,6 +402,20 @@ very prompt and series it was made from, whichever is open. **The open
 prompt** and **The open series** are there as well. The Book keeps a small
 copy: the prompt's shows on its card with its note, the series' beside the
 series' note and in the Files panel.
+
+## To the Idea Box
+
+**→ Idea Box**, on the second bar, on the blue bar when several are
+selected, and on the right-click menu of any picture - that picture, or all
+of the selected when it is one of them - sends one's own renders to the [Visual Idea Box](idea-box.md), into
+**My works**: the pictures selected, or the one open large. They go under the
+series the folder belongs to, each with what made it in its notes - its
+prompt's name, the series, the LoRAs and their strengths, sampler, scheduler,
+steps and CFG, the enhancer on or off, the file - and its LoRAs, sampler and
+scheduler as keywords, so a render can be found there by what made it and laid
+beside a reference to compare. Renders from one folder - one band here: the scene, the LoRA, the
+sampler, the enhancer - go in as one idea with several pictures, and one sent
+later from that folder goes in beside them.
 
 ## Copying a picture
 

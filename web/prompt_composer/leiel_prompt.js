@@ -70,8 +70,9 @@ const IMG_CUSTOM_H = 34;
 const IMG_CUSTOM_GAP = 5;
 
 function customExtra(sec) {
-  const chosen = sec.q || questionFor(sec.title);
-  return chosen === "custom" ? IMG_CUSTOM_H + IMG_CUSTOM_GAP : 0;
+  /* The question of one's own is asked in the Reader now, not under the
+     anchor's picture, so the strip never grows for it. */
+  return 0;
 }
 
 /* The height of the strip itself: what the picture was measured to need, plus
@@ -182,6 +183,38 @@ async function uploadImage(file) {
     type: d.type || "input",
     stamp: Date.now(),
   };
+}
+
+/* A picture dragged from another node on this page - the Visual Idea Box,
+   the Image Viewer - arrives as an address, not a file. One of this server
+   is read here and handed on as the file it is. */
+async function fileFromAddress(url) {
+  url = String(url || "").trim();
+  if (!url) return null;
+  try {
+    const u = new URL(url, location.href);
+    if (u.origin !== location.origin) return null;
+    const r = await fetch(u.href);
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    /* the type is not always said (Windows and .webp): the first bytes of
+       the file say what picture it is */
+    let type = /^image\//.test(blob.type) ? blob.type : "";
+    if (!type) {
+      const h = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+      const at = (i, ...v) => v.every((x, k) => h[i + k] === x);
+      if (at(0, 0xff, 0xd8, 0xff)) type = "image/jpeg";
+      else if (at(0, 0x89, 0x50, 0x4e, 0x47)) type = "image/png";
+      else if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) type = "image/webp";
+      else if (at(0, 0x47, 0x49, 0x46)) type = "image/gif";
+      else if (at(0, 0x42, 0x4d)) type = "image/bmp";
+    }
+    if (!type) return null;
+    const ext = (type.split("/")[1] || "png").replace("jpeg", "jpg");
+    return new File([blob], `dropped.${ext}`, { type });
+  } catch (e) {
+    return null;
+  }
 }
 
 /* A landscape picture wants a short wide strip and a portrait one a tall
@@ -307,6 +340,14 @@ function layerTitle(sec) {
   return `Five layers - reading ${names[key] || key} only, `
        + `leaving ${LAYER_ORDER.filter(x => x !== key)
             .map(x => names[x]).join(", ")} to their own sections`;
+}
+
+/* Whether a section's name says which layer it is - Quality, Pose, Camera...
+   Only those are chosen for a reading by default: "LoRA Trigger" and
+   "ABSOLUTE" would otherwise be asked to describe the whole picture. */
+function hasLayerHint(title) {
+  const t = (title || "").toLowerCase();
+  return VLM.hints.some(([word]) => t.includes(word));
 }
 
 function questionFor(title) {
@@ -3403,6 +3444,122 @@ const CSS = `
 /* the spacing between the panels, dragged */
 .lvp-wrap.gapzone{cursor:row-resize;}
 .lvp-wrap.anch-shut .lvp-bar,.lvp-wrap.anch-shut .lvp-list,.lvp-wrap.anch-shut .lvp-fr,.lvp-wrap.anch-shut .lvp-pastebox{display:none !important;}
+/* ---------- the Reader: one place a picture is read from ----------
+   A panel of its own above the toolbar. The picture sits on the left, the
+   anchors it can be read into are listed on the right, each with the
+   question it asks. Hairlines and one gold rule, like the Series Layout. */
+.lvp-wrap.anch-shut .lvr-room{display:none !important;}
+.lvr-room{flex:0 0 auto;min-width:0;}
+.lvp-wrap.is-book .lvr-room{margin-left:6px;padding-left:7px;border-left:2px solid #3a3322;margin-top:-5px;padding-top:6px;}
+.lvr-rbox{background:#14120d;border:1px solid #2f2a1d;border-top:2px solid #c9a453;border-radius:6px;overflow:hidden;}
+.lvr-room.shut .lvr-rbox{border-top-color:#4a3f26;}
+.lvr-rhead{display:flex;align-items:center;gap:9px;height:28px;padding:0 10px 0 8px;cursor:pointer;user-select:none;}
+.lvr-rhead:hover{background:#1b1811;}
+.lvr-rhead .tw{font-size:19px;line-height:1;color:#c9a453;width:20px;text-align:center;transition:transform .15s;}
+.lvr-room.shut .lvr-rhead .tw{transform:rotate(-90deg);}
+.lvr-rhead .lab{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#c9a453;}
+.lvr-rhead .hint{font-size:10px;color:#7d7259;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.lvr-rhead .sp{flex:1 1 auto;}
+.lvr-rmini:empty{display:none;}
+.lvr-rmini{display:inline-flex;height:18px;}
+.lvr-rmini img{height:18px;width:auto;max-width:40px;object-fit:cover;border-radius:2px;display:block;}
+.lvr-room:not(.shut) .lvr-rmini{display:none;}
+.lvr-model{height:20px;padding:0 12px;border-radius:999px;border:1px solid #4a3f26;background:#1a1710;
+  color:#bda877;font-family:inherit;font-size:9.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;cursor:pointer;}
+.lvr-model:hover{border-color:#c9a453;color:#f0d9a8;}
+.lvr-model.loaded{border-color:#c9a453;color:#f3dcaa;}
+.lvr-room.shut .lvr-rbody,.lvr-room.shut .lvr-rgrip{display:none;}
+.lvr-rbody{display:flex;gap:12px;padding:6px 10px 4px;border-top:1px solid #26221a;box-sizing:border-box;}
+.lvr-well{flex:0 0 auto;position:relative;display:flex;align-items:center;justify-content:center;
+  border:1px dashed #3d3624;border-radius:5px;background:#0e0d0a;cursor:pointer;box-sizing:border-box;
+  color:#6e6550;font-size:10px;line-height:1.6;text-align:center;padding:6px;}
+.lvr-well.has{border-style:solid;border-color:#2a261c;padding:0;}
+.lvr-well:hover{border-color:#c9a453;color:#c9a453;}
+.lvr-well.over{border-color:#e6c476;background:#e6c47614;}
+.lvr-well img{max-width:100%;max-height:100%;display:block;object-fit:contain;}
+.lvr-wx{position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;border:1px solid #4a3f26;
+  background:#14120dd9;color:#bda877;font-size:10px;cursor:pointer;display:none;align-items:center;justify-content:center;padding:0;}
+.lvr-well.has:hover .lvr-wx{display:inline-flex;}
+.lvr-wx:hover{border-color:#e08a7a;color:#f0947c;}
+.lvr-rside{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;}
+.lvr-rlab{flex:0 0 auto;display:flex;align-items:baseline;gap:8px;height:20px;font-size:9px;font-weight:700;
+  letter-spacing:.8px;text-transform:uppercase;color:#7d7259;}
+.lvr-rlab i{font-style:normal;font-weight:400;letter-spacing:0;text-transform:none;color:#5c5444;font-size:10px;}
+.lvr-rlab .sp{flex:1;}
+.lvr-rlab button{background:none;border:0;padding:0;font-family:inherit;font-size:9px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;color:#7d7259;cursor:pointer;}
+.lvr-rlab button:hover{color:#c9a453;}
+.lvr-rows{flex:1 1 auto;min-height:0;overflow:auto;border-top:1px solid #2a261c;}
+.lvr-row{display:flex;align-items:center;gap:9px;min-height:26px;padding:0 4px;border-bottom:1px solid #221f17;
+  cursor:pointer;color:#7d7462;}
+.lvr-row:hover{background:#1a1710;}
+.lvr-row .ck{flex:0 0 auto;width:11px;height:11px;border:1px solid #5a4f36;border-radius:2px;box-sizing:border-box;
+  display:inline-flex;align-items:center;justify-content:center;}
+.lvr-row .ck svg{display:none;}
+.lvr-row.on .ck{background:#c9a453;border-color:#c9a453;}
+.lvr-row.on .ck svg{display:block;}
+.lvr-row .nm{flex:0 0 150px;min-width:0;font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lvr-row.on .nm{color:#f3dcaa;}
+/* the two columns named once, over the list */
+.lvr-rcols{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:9px;height:20px;padding:0 4px;
+  background:#14120d;border-bottom:1px solid #2a261c;font-size:9px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;color:#6b6252;}
+.lvr-rcols .ck{flex:0 0 11px;}
+.lvr-rcols .nm{flex:0 0 150px;}
+.lvr-rcols .rd{flex:1 1 auto;padding-left:2px;}
+/* what the anchor reads: said quietly after its name, a list only when clicked */
+.lvr-row select{flex:0 1 auto;min-width:0;field-sizing:content;max-width:220px;appearance:none;-webkit-appearance:none;
+  height:18px;background:none;border:0;border-radius:3px;padding:0 4px;margin-left:-2px;
+  font-family:inherit;font-size:10.5px;color:#4f4836;cursor:pointer;text-overflow:ellipsis;}
+.lvr-row select::before{content:"";}
+.lvr-row.on select{color:#8a7d5e;}
+.lvr-row select:hover,.lvr-row select:focus{outline:none;color:#e6c476;background:#211d14;}
+.lvr-row select option,.lvr-row select optgroup{background:#1b1b1b;color:#ddd;}
+.lvr-row .st{flex:0 0 58px;margin-left:auto;text-align:right;font-size:10px;color:#5c5444;white-space:nowrap;}
+.lvr-row .st.busy{color:#d9b26a;}
+.lvr-row .st.done{color:#9bb88f;}
+.lvr-row.cq{cursor:default;padding-left:24px;min-height:30px;}
+.lvr-row.cq:hover{background:none;}
+.lvr-row.cq input{flex:1 1 auto;min-width:0;height:22px;box-sizing:border-box;background:#1a1710;border:1px solid #332d1f;
+  border-radius:4px;color:#e2d6b8;font-family:inherit;font-size:11px;padding:0 7px;}
+.lvr-row.cq input:focus{outline:none;border-color:#c9a453;}
+.lvr-ract{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding-top:7px;}
+.lvr-go{height:24px;padding:0 20px;border-radius:999px;border:1px solid #c9a453;background:#c9a453;color:#17140c;
+  font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;}
+.lvr-go:hover{background:#e0bd6c;border-color:#e0bd6c;}
+.lvr-go:disabled,.lvr-go:disabled:hover{background:#221f16;border-color:#2f2a1d;color:#5e5640;cursor:default;}
+.lvr-go.waiting:disabled{color:#8a7a52;}
+.lvr-halt{height:24px;padding:0 14px;border-radius:999px;border:1px solid #6a3c32;background:none;color:#e08a7a;
+  font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;}
+.lvr-halt:hover{border-color:#e08a7a;}
+.lvr-rnote{flex:1 1 auto;min-width:0;font-size:10px;color:#7c7261;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lvr-rnote.busy{color:#d9b26a;}
+.lvr-rnote.err{color:#e6a0a0;}
+.lvr-rgrip{height:7px;cursor:ns-resize;}
+/* the toolbar sits in a box of its own, the same as the Reader above it.
+   Drawn behind the buttons rather than on the bar itself, so in the Book the
+   bar keeps the rule down its left side that hangs it from the Editing line */
+.lvp-wrap .lvp-bar{position:relative;isolation:isolate;padding:6px 9px;}
+.lvp-wrap .lvp-bar::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:#14120d;border:1px solid #2f2a1d;border-radius:6px;}
+.lvp-wrap.is-book .lvp-bar{padding:12px 9px 6px 16px;}
+.lvp-wrap.is-book .lvp-bar::before{top:6px;left:7px;}
+.lvr-room.narrow .lvr-rlab i,.lvr-room.narrow .lvr-row .gl{display:none;}
+.lvr-room.narrow .lvr-rbody{gap:9px;}
+.lvr-room.narrow .lvr-row{gap:7px;}
+.lvr-room.narrow .lvr-row select{max-width:110px;}
+.lvr-room.narrow .lvr-row .nm,.lvr-room.narrow .lvr-rcols .nm{flex-basis:110px;}
+.lvr-room.narrow .lvr-rcols{gap:7px;}
+.lvr-room.narrow .lvr-row .st{flex:0 0 auto;margin-left:0;}
+.lvr-rgrip:hover{background:#2a2416;}
+/* the anchor's own picture is only looked at now */
+.lvr-bar .lvr-pl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#6b6252;}
+.lvr-bar .lvr-sp{flex:1 1 auto;}
+.lvr-up{--hue:#e6c476;height:var(--ctl-h);box-sizing:border-box;background:var(--ctl-bg);border:1px solid var(--ctl-bd);
+  border-radius:4px;color:var(--ctl-ink);font-family:inherit;font-size:9px;font-weight:600;letter-spacing:.3px;
+  padding:0 7px;cursor:pointer;}
+.lvr-up:hover{border-color:var(--hue);color:var(--hue);}
+
 .lsb-load{display:flex;flex-direction:column;gap:4px;padding:8px 10px;margin:4px 0;
   border:1px solid #3a3e46;border-radius:7px;background:#0d0e11;}
 .lsb-load .lh{display:flex;align-items:center;justify-content:space-between;
@@ -3751,6 +3908,13 @@ const CSS = `
   flex:0 0 auto;opacity:0;transition:opacity .12s;}
 .lvp-sec:hover .lsb-var{opacity:1;}
 .lsb-var:hover{color:#f0d9a8;border-color:#d9b26a;border-style:solid;}
+.lsb-capn{display:inline-flex;align-items:baseline;gap:6px;min-width:0;max-width:340px;flex:0 1 auto;
+  margin-left:2px;padding:1px 9px;border-radius:999px;border:1px solid var(--kc,#555a62);
+  background:#14161a;white-space:nowrap;overflow:hidden;}
+.lsb-capn i{font-style:normal;font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--kc,#9aa0a9);
+  font-variant-numeric:tabular-nums;flex:0 0 auto;}
+.lsb-capn b{font-size:10px;font-weight:600;color:#e6e6e6;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.lvp-sec.off .lsb-capn{opacity:.5;}
 .lsb-shared{font-size:8.5px;font-weight:600;letter-spacing:.3px;color:var(--k);
   border:1px solid var(--k);border-radius:999px;padding:1px 6px;margin-left:4px;
   white-space:nowrap;flex:0 0 auto;opacity:.85;}
@@ -3895,7 +4059,59 @@ app.registerExtension({
       if (BOOK) node.leielBook = () => book;
       /* the anchor check, for the Series Lab to read a sweep's takes with */
       if (BOOK) { node.leielCheck = anchorCheck; node.leielShape = latentShape; node.leielCapNos = capNumbers; node.leielCapFor = capOfWords; node.leielUseWords = useWords; node.leielPutOne = putOne;
-        node.leielKeepWords = async (kind, name, text, src) => { const r = await keepWords(kind, name, text, src); say(r.msg, r.ok ? undefined : "err"); return r; }; }
+        node.leielKeepWords = async (kind, name, text, src, repic) => { const r = await keepWords(kind, name, text, src, repic); say(r.msg, r.ok ? undefined : "err"); return r; };
+        /* whether these words are a card in the drawer already - the Image
+           Viewer shows Kept on such an anchor instead of Drawer */
+        node.leielKeptWords = (kind, text) => {
+          const x = (drawerStore.items || []).find(i => i.kind === kind && sameText(i.text, text));
+          return x ? { name: x.name, pic: !!x.thumb } : null;
+        }; }
+      /* The Visual Idea Box starts a series from an idea: a new series with
+         the idea's line as its name, its words in the production notes - the
+         series note is printed by the Series Layout, so it is left for the
+         series' own note - and its picture as the series picture, opened on
+         an empty first scene. */
+      /* The Visual Idea Box puts a picture into the Reader of the open
+         prompt, ready to be read: the panel opened, the picture in it.
+         Reading is left to Read, so the anchors can be chosen first. */
+      if (BOOK) node.leielPutReaderImage = async (src) => {
+        if (!book) return { ok: false, msg: "the Series Book is not ready yet" };
+        if (!activePrompt()) return { ok: false, msg: "the Series Book has no prompt open" };
+        const file = await fileFromAddress(src);
+        if (!file) return { ok: false, msg: "the picture could not be read" };
+        try {
+          const ref = await uploadImage(file);
+          const m = await measureImage(imgUrl(ref), 400);
+          const r = roomOf();
+          r.img = ref; r.ar = m.ar;
+          roomDone = new Set(); roomNote = null;
+          node.properties = node.properties || {};
+          node.properties.lvr_room_open = true;
+          if (!anchorsOpen()) setAnchorsOpen(true);
+          touch(); render(); save();
+          fitNodeToContent();
+          say("picture from the Idea Box in the Reader - choose the anchors and press Read");
+          return { ok: true, title: "Reader", where: "reader" };
+        } catch (err) {
+          return { ok: false, msg: String((err && err.message) || err) };
+        }
+      };
+      if (BOOK) node.leielSeedSeries = async (name, memo, src) => {
+        if (!book) return { ok: false, msg: "the Series Book is not ready yet" };
+        const thumb = src ? await drawerThumbFrom(src) : null;
+        writeBack();
+        const g = newGroup(String(name || "").trim().slice(0, 60) || undefined);
+        const m = String(memo || "").trim();
+        if (m) { g.memo = m.slice(0, 20000); g.memoOpen = true; }
+        if (thumb) g.thumb = thumb;
+        const p = startPrompt(g, "Scene 1", null);
+        book.active = p.id;
+        reopen();
+        touch(); save();
+        fitNodeToContent();
+        say(`series ${g.no} "${g.name}" started from the Idea Box - paste its first scene`);
+        return { ok: true, no: g.no, name: g.name };
+      };
       /* A Series Lab on the "series" wire sets a series' colour here, so the
          book and the shelf show the same series in the same colour. */
       /* The Series Lab sets a prompt's frame from its queue too. */
@@ -3950,8 +4166,21 @@ app.registerExtension({
          - belongs to the open prompt's anchors, not to the book. */
       root.innerHTML = `
         ${BOOK ? `<div class="lsb-left"><div class="lsb-book"></div><div class="lsb-book lsb-drbook lsb-drunder"></div></div><div class="lsb-split" title="Drag to share the width between the book and the anchors - double click for the default"></div><div class="lsb-side"><div class="lsb-book lsb-drbook lsb-drside"></div><div class="lsb-now"></div>` : ""}
+        <div class="lvr-room">
+          <div class="lvr-rbox">
+            <div class="lvr-rhead" title="Click to open or close the Reader">
+              <span class="tw">&#9662;</span>
+              <span class="lab">Reader</span>
+              <span class="lvr-rmini"></span>
+              <span class="hint"></span>
+              <span class="sp"></span>
+              <button class="lvr-model reader" title="Which model reads your images, and how">Model</button>
+            </div>
+            <div class="lvr-rbody"></div>
+            <div class="lvr-rgrip" title="Drag to make the Reader taller or shorter"></div>
+          </div>
+        </div>
         <div class="lvp-bar">
-          <button class="lvp-btn reader" title="Which model reads your images, and how">Reader</button>
           <button class="lvp-btn fxb" title="Show every mark, and colour the structure. Press again to read the plain text - nothing is lost either way">Style</button>
           <button class="lvp-btn brush" title="Format brush - click styled text to pick its formatting up, then drag over other text to apply it. Escape puts it down"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.6 1.9a2.2 2.2 0 0 1 3.1 3.1l-1.4 1.4 .7 .7-1.1 1.1-.7-.7-4.6 4.6-2.9 .8 .8-2.9 4.6-4.6-.7-.7 1.1-1.1 .7 .7z" fill="currentColor"/><circle class="drop" cx="3.2" cy="12.8" r="1.6" fill="currentColor"/></svg></button>
           <span class="lvp-sep"></span>
@@ -4084,6 +4313,7 @@ app.registerExtension({
         const doc = { sections: clean, fx: state.fx, trTo: state.trTo,
                       trUnit: state.trUnit, reader: state.reader };
         if (BOOK) doc.book = book;
+        else if (state.room) doc.room = state.room;
         w.value = JSON.stringify(doc);
         snapPush(clean, "auto");
         if (BOOK) { paintBook(); scheduleSeriesSave(); scheduleAutoBook(); }
@@ -4643,6 +4873,18 @@ app.registerExtension({
         return id;
       }
 
+      /* the Reader's picture and its chosen anchors, kept on a prompt */
+      function roomFrom(r) {
+        if (!r || typeof r !== "object") return null;
+        const out = {};
+        if (r.img && typeof r.img === "object" && r.img.filename) {
+          out.img = { filename: String(r.img.filename), subfolder: String(r.img.subfolder || ""),
+                      type: String(r.img.type || "input"), stamp: Number(r.img.stamp) || 0 };
+          if (Number(r.ar) > 0) out.ar = Number(r.ar);
+        }
+        if (Array.isArray(r.to)) out.to = r.to.map(String).slice(0, 60);
+        return Object.keys(out).length ? out : null;
+      }
       function sanitizeBook(b) {
         if (!b || typeof b !== "object" || !b.caps || !Array.isArray(b.prompts)) return null;
         const out = { v: 2, seq: Number(b.seq) || 0, caps: {}, prompts: [], groups: [],
@@ -4708,7 +4950,8 @@ app.registerExtension({
                              ...(String(p.note || "").trim() ? { note: String(p.note).slice(0, 4000) } : {}),
                              ...(typeof p.thumb === "string" && /^data:image\//.test(p.thumb) && p.thumb.length < 400000 ? { thumb: p.thumb } : {}),
                              no: Number.isInteger(p.no) && p.no > 0 ? p.no : 0,
-                             ...(ORIENTS.includes(p.orient) && p.orient !== "all" ? { orient: p.orient } : {}) });
+                             ...(ORIENTS.includes(p.orient) && p.orient !== "all" ? { orient: p.orient } : {}),
+                             ...(roomFrom(p.room) ? { room: roomFrom(p.room) } : {}) });
           max = Math.max(max, id);
         }
         if (!out.prompts.length) return null;
@@ -4875,6 +5118,28 @@ app.registerExtension({
 
       /* Said on the section itself, where the typing happens: this text is
          not only this prompt's. */
+      /* Beside a section's title, the capsule it holds - its number and its
+         name, as on the shelf - so the anchors read as the capsules they are */
+      function capNameTag(s, nos) {
+        if (!book || !s._cap || !book.caps[s._cap]) return "";
+        const c = book.caps[s._cap];
+        const no = nos && nos[c.id] ? nos[c.id].label : "";
+        if (!c.name && !no) return "";
+        return `<span class="lsb-capn" title="The capsule in this section, as on the shelf: ${escapeHtml(no ? no + " " : "")}${escapeHtml(c.name || "")}">`
+          + (no ? `<i>${escapeHtml(no)}</i>` : "") + `<b>${escapeHtml(c.name || "")}</b></span>`;
+      }
+      /* a capsule renamed on the shelf: the names beside the section titles
+         follow at once */
+      function refreshCapNames() {
+        const nos = capNumbers();
+        const els = root.querySelectorAll(".lvp-list > .lvp-sec");
+        state.sections.forEach((s, i) => {
+          const tag = els[i] && els[i].querySelector(".lsb-capn");
+          if (!tag) return;
+          const html = capNameTag(s, nos);
+          if (html) tag.outerHTML = html; else tag.remove();
+        });
+      }
       function sharedBadge(s) {
         if (!book || !s._cap || !book.caps[s._cap]) return "";
         const n = useCounts().get(s._cap) || 0;
@@ -8948,6 +9213,7 @@ app.registerExtension({
             renameInline(el, c.name, (v) => {
               c.name = v;
               touch(); save();
+              refreshCapNames();
             });
           });
           el.querySelector(".x")?.addEventListener("click", (e) => {
@@ -8989,7 +9255,7 @@ app.registerExtension({
          straight from the Visual Image Viewer's prompt panel, which passes
          the very render the words were read from. A card with the same
          words already kept is given the picture if it had none. */
-      async function keepWords(kind, name, text, src) {
+      async function keepWords(kind, name, text, src, repic) {
         text = String(text || "").trim();
         if (!DRAWER_KINDS.includes(kind)) {
           return { ok: false, msg: `a ${KIND_LABEL[kind] || kind} anchor stays with its series - the drawer keeps the other kinds` };
@@ -9003,10 +9269,12 @@ app.registerExtension({
         const into = folder ? ` - into ${fName(folder)}` : "";
         const had = drawerStore.items.find(x => x.kind === kind && sameText(x.text, text));
         if (had) {
-          const newPic = thumb && (!had.thumb || src !== viewerPicture());
+          const newPic = thumb && (repic || !had.thumb || src !== viewerPicture());
           if (newPic) {
             drawerWrite(drawerStore.items.map(i => i.id === had.id ? { ...i, thumb } : i));
-            return { ok: true, name: had.name, had: true, msg: `already in the drawer as "${had.name}" - it has this picture now` };
+            return { ok: true, name: had.name, had: true, msg: repic
+              ? `"${had.name}" in the drawer - its picture replaced with this one`
+              : `already in the drawer as "${had.name}" - it has this picture now` };
           }
           return { ok: true, name: had.name, had: true, msg: `already in the drawer, as "${had.name}"` };
         }
@@ -10019,6 +10287,7 @@ app.registerExtension({
         if ("fx" in p) state.fx = p.fx !== false;
         if (typeof p.trTo === "string") state.trTo = p.trTo;
         if (p.reader && typeof p.reader === "object") state.reader = p.reader;
+        if (!BOOK && p.room && typeof p.room === "object") state.room = p.room;
         if (TR_UNITS.some(u => u[0] === p.trUnit)) state.trUnit = p.trUnit;
         /* In the Book the book is the document and the sections are only the
            open prompt drawn out of it. A layout saved by a plain Composer -
@@ -12438,6 +12707,386 @@ app.registerExtension({
         trPaintSrc(el, r);
       }
 
+      /* ---------- the Reader ----------
+         One picture, read once, into the anchors chosen for it. Each anchor
+         keeps asking its own question - the questions stay separate on
+         purpose, one answer for every layer at once is how scene nouns end up
+         in the subject - but the picture, the choosing and the button live in
+         one panel instead of in every anchor.
+
+         Where it is kept: on the open prompt in the Book, so every scene
+         remembers the picture it was read from, and on the node in the
+         Composer. Which anchors to read into is kept by their names, because
+         a name is what survives a prompt being opened again. */
+      let roomDone = new Set();     // anchors the last reading filled
+      let roomNote = null;          // what the last reading had to say
+      const ROOM_H = 196, ROOM_MIN = 128, ROOM_MAX = 560;
+      function roomOf() {
+        if (BOOK) {
+          const p = activePrompt();
+          if (!p) return (node._lvrLoose || (node._lvrLoose = {}));
+          return p.room || (p.room = {});
+        }
+        return state.room || (state.room = {});
+      }
+      function roomOpen() { return node.properties?.lvr_room_open !== false; }
+      function roomH() {
+        const h = Number(node.properties?.lvr_room_h);
+        /* until it is dragged, tall enough to list every anchor */
+        const fits = Math.min(380, state.sections.length * 27 + 86);
+        return Math.max(ROOM_MIN, Math.min(ROOM_MAX, h > 0 ? h : Math.max(ROOM_H, fits)));
+      }
+      function setRoomOpen(on) {
+        node.properties = node.properties || {};
+        node.properties.lvr_room_open = !!on;
+        render();
+        requestAnimationFrame(fitNodeToContent);
+      }
+      const roomKey = (x) => String(x.title || "").trim().toLowerCase();
+      function roomTargets() {
+        const r = roomOf();
+        if (Array.isArray(r.to)) {
+          const want = new Set(r.to);
+          return state.sections.filter(x => want.has(roomKey(x)));
+        }
+        return state.sections.filter(x => x.on && hasLayerHint(x.title));
+      }
+
+      /* A picture arriving at an anchor - read into it, or dropped on it to
+         look at - is measured once and laid out by its shape. Portrait goes
+         beside the text, landscape above it, until the anchor has been told
+         otherwise. The box only ever grows here, and only while the picture
+         is on show. */
+      function placePicture(s, m) {
+        s.imgAR = m.ar;
+        s.imgH = m.h;
+        if (!s.imgLayLock) s.imgSide = m.ar < 0.9;
+        if (s.imgSide) {
+          if (s.imgOpen) {
+            const want = Math.min(SIDE_FIRST_H, Math.max(160, m.h || SIDE_FIRST_H));
+            s.h = Math.max(s.h, want + SIDE_CHROME_Y + customExtra(s) - 6);
+          }
+          s.imgW = sideWidthFor(s, s.h + 6);
+        }
+      }
+
+      /* Somewhere a picture can be put: clicked for a file, dropped on, pasted
+         into while the pointer is over it, or dragged from the Idea Box. */
+      function wireWell(well, take, tell) {
+        well.addEventListener("click", (e) => {
+          if (e.target.closest("button")) return;
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = "image/*";
+          input.addEventListener("change", () => take(input.files[0]));
+          input.click();
+        });
+        const t = { el: well, take, say: tell, drop: well };
+        well.addEventListener("pointerenter", () => { PASTE.hover = t; });
+        well.addEventListener("pointerleave", () => {
+          if (PASTE.hover && PASTE.hover.el === well) PASTE.hover = null;
+        });
+        well.addEventListener("pointerdown", () => { PASTE.last = t; });
+        ["dragenter", "dragover"].forEach(k =>
+          well.addEventListener(k, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            well.classList.add("over");
+          }));
+        ["dragleave", "dragend"].forEach(k =>
+          well.addEventListener(k, () => well.classList.remove("over")));
+        well.addEventListener("drop", async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          well.classList.remove("over");
+          const dt = e.dataTransfer;
+          const file = dt && dt.files && dt.files[0];
+          if (file) { take(file); return; }
+          /* a picture from another node on the page comes as its address */
+          const url = dt && (((dt.getData("text/uri-list") || "").split(/\r?\n/)
+            .find(x => x.trim() && !x.startsWith("#"))) || dt.getData("text/plain"));
+          if (!url) return;
+          const got = await fileFromAddress(url);
+          if (got) take(got);
+          else tell("this picture cannot be dropped here - save it and drop the file", "err");
+        });
+      }
+
+      const CHECK_SVG = `<svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M2 5.2 4.2 7.3 8 2.9" fill="none" stroke="#17140c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+      function roomQuestionOptions(s) {
+        const chosen = s.q || questionFor(s.title);
+        const opt = (k, v) =>
+          `<option value="${k}"${k === chosen ? " selected" : ""}>${escapeHtml(v.label)}</option>`;
+        const inGroup = LAYER_ORDER.filter(k => VLM.questions[k]);
+        const rest = Object.keys(VLM.questions).filter(k => !inGroup.includes(k));
+        return (inGroup.length
+            ? `<optgroup label="Read only">`
+              + inGroup.map(k => opt(k, VLM.questions[k])).join("")
+              + `</optgroup>`
+            : "")
+          + rest.map(k => opt(k, VLM.questions[k])).join("")
+          + `<option value="custom"${chosen === "custom" ? " selected" : ""}>Your own question…</option>`;
+      }
+
+      let roomKnown = 0;
+      function roomHeight() {
+        const el = root.querySelector(".lvr-room");
+        if (!el || !anchorsOpen()) return 0;
+        if (el.offsetHeight) roomKnown = el.offsetHeight;
+        return roomKnown;
+      }
+
+      function paintRoom() {
+        const room = root.querySelector(".lvr-room");
+        if (!room) return;
+        const r = roomOf();
+        const open = roomOpen();
+        const targets = roomTargets();
+        const want = new Set(targets.map(x => x.id));
+        room.classList.toggle("shut", !open);
+
+        const hint = room.querySelector(".lvr-rhead .hint");
+        const mini = room.querySelector(".lvr-rmini");
+        const n = targets.length;
+        const anchors = `${n} anchor${n === 1 ? "" : "s"}`;
+        hint.textContent = readRun
+          ? `reading ${readRun.i} / ${readRun.n} - ${readRun.title}`
+          : open
+            ? "one picture, read into the anchors you choose"
+            : (r.img ? `picture in - reads into ${anchors}` : "drop a picture here to read it");
+        mini.innerHTML = !open && r.img ? `<img src="${imgUrl(r.img)}" alt="">` : "";
+        const model = room.querySelector(".lvr-model");
+        if (model) model.classList.toggle("loaded", !!VLM.loaded);
+
+        const body = room.querySelector(".lvr-rbody");
+        if (!open) { body.innerHTML = ""; return; }
+        const H = roomH();
+        body.style.height = H + "px";
+        const inner = H - 10;
+        /* beside the book the panel is narrow: the picture takes less of it
+           and the list drops what it can do without */
+        const roomW = room.clientWidth || 720;
+        const narrow = roomW < 640;
+        room.classList.toggle("narrow", narrow);
+        const half = Math.max(narrow ? 120 : 160, (roomW - 40) * (narrow ? 0.36 : 0.5));
+        const wellW = r.img && r.ar > 0
+          ? Math.round(Math.max(110, Math.min(half, inner * r.ar)))
+          : Math.round(Math.min(half, Math.max(150, inner * 0.8)));
+
+        const rows = state.sections.map((x) => {
+          const on = want.has(x.id);
+          const key = x.q || questionFor(x.title);
+          let st = "", stc = "";
+          if (readRun && readRun.cur === x.id) { st = "reading"; stc = "busy"; }
+          else if (readRun && on && !roomDone.has(x.id)) { st = "waiting"; }
+          else if (roomDone.has(x.id)) { st = "read"; stc = "done"; }
+          const row = `<div class="lvr-row${on ? " on" : ""}" data-id="${x.id}">
+              <span class="ck">${CHECK_SVG}</span>
+              <span class="nm">${escapeHtml(x.title)}</span>
+              <select class="lvr-rq" title="What this anchor reads from the picture - click to change">${roomQuestionOptions(x)}</select>
+              <span class="st ${stc}">${st}</span>
+            </div>`;
+          const cq = key === "custom" && on
+            ? `<div class="lvr-row cq" data-id="${x.id}"><input class="lvr-rcq" spellcheck="false" placeholder="What should it describe?" value="${escapeHtml(x.qText || "")}"></div>`
+            : "";
+          return row + cq;
+        }).join("");
+
+        const run = readRun && readRun.owner === "room";
+        body.innerHTML = `
+          <div class="lvr-well${r.img ? " has" : ""}" style="width:${wellW}px" title="${r.img ? "Click to choose another picture" : "Click to choose a picture"}">
+            ${r.img
+              ? `<img src="${imgUrl(r.img)}" alt=""><button class="lvr-wx" title="Take the picture out">&#10005;</button>`
+              : `drop or paste a picture<br>or click to choose${BOOK ? "<br>- or drag one from the Idea Box" : ""}`}
+          </div>
+          <div class="lvr-rside">
+            <div class="lvr-rlab">Read into <i>each anchor asks its own question</i><span class="sp"></span>
+              <button class="lvr-all" title="Choose every anchor">All</button>
+              <button class="lvr-none" title="Choose none">None</button>
+            </div>
+            <div class="lvr-rows"><div class="lvr-rcols"><span class="ck"></span><span class="nm">Anchor</span><span class="rd">Reads</span></div>${rows}</div>
+            <div class="lvr-ract">
+              <button class="lvr-go"${r.img && n && !readRun && !BUSY.on ? "" : " disabled"}>${
+                run ? `Reading ${readRun.i} / ${readRun.n}` : `Read${n ? " " + n : ""}`}</button>
+              ${run ? `<button class="lvr-halt" title="Stop after the reading that is running">Stop</button>` : ""}
+              <span class="lvr-rnote"></span>
+            </div>
+          </div>`;
+
+        const note = body.querySelector(".lvr-rnote");
+        const tell = (msg, kind) => {
+          note.className = "lvr-rnote" + (kind ? " " + kind : "");
+          note.textContent = msg || "";
+          note.title = msg || "";
+        };
+        const go = body.querySelector(".lvr-go");
+        if (VLM.problem) tell(VLM.problem, "err");
+        else if (run) tell(`reading ${readRun.title}…`, "busy");
+        else if (BUSY.on) {
+          go.classList.add("waiting");
+          go.title = "ComfyUI is rendering - reading now would run the card out of memory. This comes back when the queue is done.";
+          tell("waiting for the render to finish", "busy");
+        } else if (roomNote) tell(roomNote.msg, roomNote.kind);
+        else if (!r.img) tell("put a picture on the left");
+        else if (!n) tell("choose an anchor to read into");
+
+        const take = async (file) => {
+          if (!file || !/^image\//.test(file.type)) return;
+          try {
+            tell("uploading…", "busy");
+            const ref = await uploadImage(file);
+            const m = await measureImage(imgUrl(ref), 400);
+            const rr = roomOf();
+            rr.img = ref; rr.ar = m.ar;
+            roomDone = new Set(); roomNote = null;
+            touch(); save(); paintRoom();
+          } catch (err) {
+            tell(String(err.message || err), "err");
+          }
+        };
+        wireWell(body.querySelector(".lvr-well"), take, tell);
+        body.querySelector(".lvr-wx")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const rr = roomOf();
+          delete rr.img; delete rr.ar;
+          roomDone = new Set(); roomNote = null;
+          touch(); save(); paintRoom();
+        });
+
+        const setTo = (ids) => {
+          roomOf().to = state.sections.filter(x => ids.has(x.id)).map(roomKey);
+          roomDone = new Set(); roomNote = null;
+          touch(); save(); paintRoom();
+        };
+        body.querySelector(".lvr-all").addEventListener("click", () => {
+          if (!readRun) setTo(new Set(state.sections.map(x => x.id)));
+        });
+        body.querySelector(".lvr-none").addEventListener("click", () => {
+          if (!readRun) setTo(new Set());
+        });
+        for (const row of body.querySelectorAll(".lvr-row:not(.cq)")) {
+          row.addEventListener("click", (e) => {
+            if (readRun || e.target.closest("select")) return;
+            const id = Number(row.dataset.id);
+            const ids = new Set(want);
+            if (ids.has(id)) ids.delete(id); else ids.add(id);
+            setTo(ids);
+          });
+          const sel = row.querySelector("select");
+          sel.addEventListener("pointerdown", e => e.stopPropagation());
+          sel.addEventListener("change", () => {
+            const x = state.sections.find(y => y.id === Number(row.dataset.id));
+            if (!x) return;
+            x.q = sel.value;
+            touch(); save(); paintRoom();
+            if (x.q === "custom") body.querySelector(`.lvr-row.cq[data-id="${x.id}"] input`)?.focus();
+          });
+        }
+        for (const inp of body.querySelectorAll(".lvr-rcq")) {
+          const x = state.sections.find(y => y.id === Number(inp.closest(".lvr-row").dataset.id));
+          inp.addEventListener("input", () => { if (x) { x.qText = inp.value; save(); } });
+          ["keydown", "keyup", "keypress", "pointerdown"].forEach(k =>
+            inp.addEventListener(k, e => e.stopPropagation()));
+        }
+        body.querySelector(".lvr-halt")?.addEventListener("click", () => {
+          if (!readRun) return;
+          readRun.stop = true;
+          tell("stopping after this one…", "busy");
+        });
+        go.addEventListener("click", roomRead);
+      }
+
+      async function roomRead() {
+        const r = roomOf();
+        if (!r.img || BUSY.on || readRun) return;
+        const jobs = [];
+        for (const x of roomTargets()) {
+          const question = questionOf(x);
+          if (!question) {
+            roomNote = { msg: `${x.title} has no question - write one beside it`, kind: "err" };
+            paintRoom();
+            return;
+          }
+          jobs.push({ sec: x, question });
+        }
+        if (!jobs.length) return;
+        const ref = r.img;
+        roomNote = null;
+        roomDone = new Set();
+        readRun = { owner: "room", i: 1, n: jobs.length, title: jobs[0].sec.title,
+                    cur: jobs[0].sec.id, stop: false };
+        paintRoom();
+        let failed = "", got = 0;
+        try {
+          for (let i = 0; i < jobs.length; i++) {
+            const { sec, question } = jobs[i];
+            readRun.i = i + 1;
+            readRun.title = sec.title;
+            readRun.cur = sec.id;
+            paintRoom();
+            const text = await readImage(ref, question, readerSettings());
+            if (!text) { failed = `${sec.title}: the reader returned nothing.`; }
+            else {
+              sec.text = normalizeText(text);
+              sec.html = escapeHtml(sec.text);
+              /* the picture stays in the Reader; the anchor gets only words */
+              /* a section filling itself in should be seen doing it */
+              sec.collapsed = false;
+              roomDone.add(sec.id);
+              got++;
+              touch(); save(); updateFoot();
+            }
+            if (readRun.stop && i < jobs.length - 1) { failed = "stopped"; break; }
+            render();
+          }
+        } catch (err) {
+          failed = String(err.message || err);
+        } finally {
+          readRun = null;
+        }
+        roomNote = failed
+          ? { msg: failed === "stopped" ? `stopped - ${got} read` : failed, kind: failed === "stopped" ? "" : "err" }
+          : { msg: `read into ${got} anchor${got === 1 ? "" : "s"}`, kind: "" };
+        render();
+      }
+
+      /* the head opens and closes the panel; the grip under it sets its height */
+      {
+        const room = root.querySelector(".lvr-room");
+        room.querySelector(".lvr-rhead").addEventListener("click", (e) => {
+          if (e.target.closest("button")) return;
+          setRoomOpen(!roomOpen());
+        });
+        const grip = room.querySelector(".lvr-rgrip");
+        grip.addEventListener("pointerdown", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const startY = e.clientY, startH = roomH(), zoom = uiScale(grip);
+          const body = room.querySelector(".lvr-rbody");
+          gripDragging = true;
+          grip.setPointerCapture(e.pointerId);
+          const move = (ev) => {
+            node.properties = node.properties || {};
+            node.properties.lvr_room_h = Math.round(Math.max(ROOM_MIN,
+              Math.min(ROOM_MAX, startH + (ev.clientY - startY) / zoom)));
+            body.style.height = roomH() + "px";
+            fitNodeToContent();
+          };
+          const up = () => {
+            gripDragging = false;
+            grip.releasePointerCapture(e.pointerId);
+            grip.removeEventListener("pointermove", move);
+            grip.removeEventListener("pointerup", up);
+            paintRoom();
+            fitNodeToContent();
+          };
+          grip.addEventListener("pointermove", move);
+          grip.addEventListener("pointerup", up);
+        });
+        /* greyed out while ComfyUI renders, back on its own when the queue
+           empties */
+        const busy = () => { if (root.isConnected && !readRun) paintRoom(); };
+        BUSY.listeners.add(busy);
+      }
+
       /* ---------- render ---------- */
       function render() {
         /* The Book has no per-section sockets: what leaves it is the whole
@@ -12460,6 +13109,9 @@ app.registerExtension({
         (node._lvaBusyOff || []).forEach(off => off());
         node._lvaBusyOff = [];
         list.innerHTML = "";
+        /* the capsule each section holds, named after its title - worked out
+           once for the whole pass */
+        const capNos = BOOK && book ? capNumbers() : {};
         state.sections.forEach((s, i) => {
           const linked = extLinked(s);
           /* the box is dead weight when an input replaces it, or when bypassed */
@@ -12507,90 +13159,30 @@ app.registerExtension({
               <div class="lvp-tr-body"></div>
             </div>`;
 
-          /* One chip per section, lit when this picture will fill it. The
-             section holding the picture starts as the only lit one, so a
-             single press behaves exactly as it always did. */
-          const targetChips = (sec) => {
-            const want = new Set(readTargetsOf(sec, state.sections).map(x => x.id));
-            return state.sections.map((x) => {
-              const key = x.q || questionFor(x.title);
-              const lit = want.has(x.id);
-              const label = key === "custom" ? "own question"
-                : ((VLM.questions[key] || {}).label || key);
-              return `<button class="lvr-t${lit ? " on" : ""}" data-id="${x.id}"`
-                + ` title="${escapeHtml(x.title)} - asks its own question: `
-                + `${escapeHtml(label)}. Chosen sections are overwritten.">`
-                + `${escapeHtml(x.title)}</button>`;
-            }).join("");
-          };
-
+          /* The anchor's picture is for looking at. Reading happens once, in
+             the Reader above the toolbar, and the picture that was read is
+             left here beside the words it produced. */
           const imgBox = () => {
-            const chosen = s.q || questionFor(s.title);
-            /* "Read only" is said once, above the layers, instead of once inside
-               each of them. The heading carries the restriction for everything
-               under it, and what does not belong under it - the whole picture,
-               a question of your own - sits outside the group and is visibly
-               a different kind of thing. */
-            const opt = (k, v) =>
-              `<option value="${k}"${k === chosen ? " selected" : ""}>${escapeHtml(v.label)}</option>`;
-            const inGroup = LAYER_ORDER.filter(k => VLM.questions[k]);
-            const rest = Object.keys(VLM.questions).filter(k => !inGroup.includes(k));
-            const opts =
-              (inGroup.length
-                ? `<optgroup label="Read only">`
-                  + inGroup.map(k => opt(k, VLM.questions[k])).join("")
-                  + `</optgroup>`
-                : "")
-              + rest.map(k => opt(k, VLM.questions[k])).join("")
-              + `<option value="custom"${chosen === "custom" ? " selected" : ""}>Custom…</option>`;
-            /* And once more on the picture. The eye is on the photograph, not
-               on the control row above it, so the scope is stated where the
-               looking actually happens - the way a contact sheet is annotated
-               rather than the way a form is labelled. */
-            const scopeKey = s.q || questionFor(s.title);
-            const scopeName = { quality: "quality", subject: "subject",
-                                pose: "pose", scene: "scene", camera: "camera",
-                                all: "whole picture" }[scopeKey];
-            const badge = s.img && scopeName
-              ? `<span class="lvr-badge">${layerGlyph(scopeKey)}`
-                + `<b>${escapeHtml(scopeName)}</b></span>`
-              : "";
             const thumb = s.img
-              ? `<img src="${imgUrl(s.img)}" alt="">${badge}`
-              : `drop or paste an image here<br>or click to choose`;
-            /* one axis is fixed and the other follows the section: down the
-               page in ROW mode, across it in SIDE mode */
+              ? `<img src="${imgUrl(s.img)}" alt="">`
+              : `drop or paste a picture to look at${BOOK ? "<br>- or drag one from the Idea Box" : ""}<br>reading is done in the Reader above`;
             const geom = s.imgSide
               ? `width:${imgSideWidth(s)}px`
               : `height:${stripHeight(s)}px`;
             return `
             <div class="lvr-img" style="${geom}">
               <div class="lvr-bar">
-                <span class="lvr-layers" title="${escapeHtml(layerTitle(s))}"
-                  >${layerGlyph(s.q || questionFor(s.title))}</span>
-                <select class="lvr-q" title="Reads only this layer of the picture and ignores the rest - the section's name picks it, and you can change it here">${opts}</select>
-                <button class="lvr-read"${s.img && !readRun ? "" : " disabled"}>${
-                  readRun && readRun.owner === s.id
-                    ? `${readRun.i} / ${readRun.n}` : "Read"}</button>
-                ${readRun && readRun.owner === s.id
-                  ? `<button class="lvr-stop" title="Stop after the reading that is running">Stop</button>`
-                  : ""}
+                <span class="lvr-pl">Picture</span>
+                <span class="lvr-sp"></span>
+                ${s.img ? `<button class="lvr-up" title="Put this picture in the Reader, to read it again">To Reader</button>` : ""}
                 <button class="lvr-lay${s.imgSide ? "" : " on"}" data-side="0"
                   title="Picture above the text">${ICON_ROW}</button>
                 <button class="lvr-lay${s.imgSide ? " on" : ""}" data-side="1"
                   title="Picture beside the text">${ICON_SIDE}</button>
-                ${s.img ? `<button class="lvr-x" title="Take the image out">&#10005;</button>` : ""}
-                <span class="lvr-note"></span>
+                ${s.img ? `<button class="lvr-x" title="Take the picture out">&#10005;</button>` : ""}
               </div>
-              ${s.img ? `<div class="lvr-targets">
-                <span class="lvr-tlab">read into</span>
-                ${targetChips(s)}
-              </div>` : ""}
-              ${chosen === "custom"
-                ? `<textarea class="lvr-custom" spellcheck="false" placeholder="What should it describe?">${escapeHtml(s.qText || "")}</textarea>`
-                : ""}
               <div class="lvr-stage">
-                <div class="lvr-drop" title="${s.img ? "Click to replace" : "Click to choose an image"}">${thumb}</div>
+                <div class="lvr-drop" title="${s.img ? "Click to replace" : "Click to choose a picture"}">${thumb}</div>
               </div>
             </div>
             <div class="lvr-grip" title="Drag to resize the picture"></div>`;
@@ -12640,7 +13232,7 @@ app.registerExtension({
                    title="${s.on ? "Click to bypass this section" : "Bypassed - click to enable"}"
                    >B</div>
               <div class="lvp-imgb imgb${s.imgOpen ? " on" : ""}"
-                   title="Read a reference image into this section"
+                   title="Show a picture beside this anchor's words, to look at - reading is done in the Reader above"
                    >IMG</div>
               <div class="lvp-trb trb${s.tr ? " on" : ""}"
                    title="${linked
@@ -12651,7 +13243,9 @@ app.registerExtension({
                     >${s.collapsed ? "&#9654;" : "&#9660;"}</span>
               <span class="lvp-swatch" title="Section colour">&#9679;</span>
               <input class="t" value="${escapeHtml(s.title)}" spellcheck="false"
+                     ${BOOK ? `style="flex-basis:${Math.min(170, Math.max(112, Math.round(String(s.title || "").length * 6.6 + 12)))}px;width:auto"` : ""}
                      ${s.on ? "" : "disabled"}>
+              ${BOOK ? capNameTag(s, capNos) : ""}
               ${BOOK ? sharedBadge(s) : ""}
               ${BOOK ? `<span class="lsb-var" title="Make a variant: keep this capsule as it is and go on editing a copy of it - another pose, another camera, for the same scene">+ variant</span>` : ""}
               <span style="flex:1"></span>
@@ -12807,86 +13401,37 @@ app.registerExtension({
 
           if (s.imgOpen) {
             const drop = el.querySelector(".lvr-drop");
-            const qSel = el.querySelector(".lvr-q");
-            const readBtn = el.querySelector(".lvr-read");
-            const noteEl = el.querySelector(".lvr-note");
-            const custom = el.querySelector(".lvr-custom");
             const xBtn = el.querySelector(".lvr-x");
-
-            const say = (msg, kind) => {
-              if (!noteEl) return;
-              noteEl.className = "lvr-note" + (kind ? " " + kind : "");
-              noteEl.textContent = msg;
-            };
-            if (noteEl && VLM.problem) say(VLM.problem, "err");
+            const tell = (msg, kind) => { if (msg) say(msg, kind); };
 
             const take = async (file) => {
               if (!file || !/^image\//.test(file.type)) return;
               try {
-                say("uploading…", "busy");
                 s.img = await uploadImage(file);
                 const m = await measureImage(imgUrl(s.img), list.clientWidth || 400);
-                s.imgAR = m.ar;
-                s.imgH = m.h;
-                /* Portrait goes beside the text, landscape above it - but only
-                   until the button is pressed, after which the section keeps
-                   what was asked for no matter what is dropped on it next. */
-                if (!s.imgLayLock) s.imgSide = m.ar < 0.9;
-                if (s.imgSide) {
-                  /* Beside the text the picture is as tall as the box. An
-                     empty box is a few lines high, which made a portrait a
-                     sliver nobody could see - so the box is opened to a size
-                     the picture can be read at, and only ever grows here. */
-                  const want = Math.min(SIDE_FIRST_H, Math.max(160, m.h || SIDE_FIRST_H));
-                  s.h = Math.max(s.h, want + SIDE_CHROME_Y + customExtra(s) - 6);
-                  s.imgW = sideWidthFor(s, s.h + 6);
-                }
+                placePicture(s, m);
                 touch(); render(); save();
                 fitNodeToContent();
               } catch (err) {
-                say(String(err.message || err), "err");
+                tell(String(err.message || err), "err");
               }
             };
+            wireWell(drop, take, tell);
 
-            drop.addEventListener("click", () => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.accept = "image/*";
-              input.addEventListener("change", () => take(input.files[0]));
-              input.click();
-            });
-            /* A screenshot in the clipboard is the same thing as a dropped
-               file once it is out of the clipboard, so it goes down the same
-               path - upload, measure, choose an arrangement. */
-            const claim = () => { PASTE.last = { el: drop, take, say, drop }; };
-            drop.addEventListener("pointerenter", () => {
-              PASTE.hover = { el: drop, take, say, drop };
-            });
-            drop.addEventListener("pointerleave", () => {
-              if (PASTE.hover && PASTE.hover.el === drop) PASTE.hover = null;
-            });
-            drop.addEventListener("pointerdown", claim);
-
-            ["dragenter", "dragover"].forEach(k =>
-              drop.addEventListener(k, (e) => {
-                e.preventDefault(); e.stopPropagation();
-                drop.classList.add("over");
-              }));
-            ["dragleave", "dragend"].forEach(k =>
-              drop.addEventListener(k, () => drop.classList.remove("over")));
-            drop.addEventListener("drop", (e) => {
-              e.preventDefault(); e.stopPropagation();
-              drop.classList.remove("over");
-              take(e.dataTransfer && e.dataTransfer.files[0]);
+            el.querySelector(".lvr-up")?.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (!s.img) return;
+              const r = roomOf();
+              r.img = s.img; r.ar = s.imgAR || 0;
+              roomDone = new Set();
+              roomNote = { msg: `the picture from ${s.title} is in the Reader`, kind: "" };
+              setRoomOpen(true);
+              touch(); render(); save();
             });
 
             if (xBtn) xBtn.addEventListener("click", () => {
-              /* The strip was measured for a particular picture - a tall
-                 portrait can push it to 560px. Taking the picture out used to
-                 leave that height behind, so an empty strip sat there at the
-                 size of something that is no longer in it and crushed the
-                 writing box underneath. Back to the default until there is
-                 another picture to measure. */
+              /* back to the default size until there is another picture to
+                 measure, so an empty strip does not keep a portrait's height */
               s.img = null;
               s.imgH = IMG_H;
               s.imgAR = 0;
@@ -12901,12 +13446,9 @@ app.registerExtension({
                 const wantSide = layBtn.dataset.side === "1";
                 if (wantSide === !!s.imgSide) return;      // already there
                 s.imgSide = wantSide;
-                /* an explicit choice, so dropping another picture in must not
-                   quietly move it back */
+                /* an explicit choice, so a new picture must not move it back */
                 s.imgLayLock = true;
                 if (s.imgSide) {
-                  /* the strip's own height becomes the body's height, so the
-                     picture comes out of the move about the size it went in */
                   s.h = Math.max(s.h, stripHeight(s) - 6);
                   s.imgW = sideWidthFor(s, s.h + 6);
                 }
@@ -12914,22 +13456,10 @@ app.registerExtension({
               });
             });
 
-            qSel.addEventListener("change", () => {
-              s.q = qSel.value; touch(); render(); save();
-            });
-            qSel.addEventListener("pointerdown", e => e.stopPropagation());
-
-            if (custom) {
-              custom.addEventListener("input", () => { s.qText = custom.value; save(); });
-              ["keydown", "keyup", "keypress", "pointerdown"].forEach(k =>
-                custom.addEventListener(k, e => e.stopPropagation()));
-            }
-
             const igrip = el.querySelector(".lvr-grip");
             if (igrip) igrip.addEventListener("pointerdown", (e) => {
               e.preventDefault(); e.stopPropagation();
-              /* the grip is under the picture in ROW mode and beside it in
-                 SIDE mode, so it drags down the page or across it */
+              /* under the picture in ROW mode and beside it in SIDE mode */
               const side = !!s.imgSide;
               const startY = side ? e.clientX : e.clientY;
               const startH = side ? imgSideWidth(s)
@@ -12954,120 +13484,6 @@ app.registerExtension({
               };
               igrip.addEventListener("pointermove", move);
               igrip.addEventListener("pointerup", up);
-            });
-
-            /* Greyed out while ComfyUI is working, and back on its own the
-               moment the queue empties - nobody should have to remember to
-               come back and re-enable it. The "reading" flag keeps the two
-               reasons for being disabled from undoing each other. */
-            let reading = false;
-            const setReadState = () => {
-              if (!readBtn) return;
-              const blocked = BUSY.on && !reading && !readRun;
-              readBtn.disabled = reading || BUSY.on || !s.img || !!readRun;
-              /* The note under the strip carries the same word, but a tall
-                 picture pushes it out of sight - so the button says it too. */
-              readBtn.textContent = readRun && readRun.owner === s.id
-                ? `${readRun.i} / ${readRun.n}`
-                : (reading ? "Reading" : "Read");
-              readBtn.classList.toggle("waiting", blocked);
-              readBtn.title = blocked
-                ? "ComfyUI is rendering - reading now would run the card out of "
-                  + "memory. This comes back when the queue is done."
-                : "";
-              if (blocked) say("waiting for the render to finish", "busy");
-              else if (noteEl && noteEl.textContent
-                       === "waiting for the render to finish") say("");
-            };
-            setReadState();
-            BUSY.listeners.add(setReadState);
-            /* the listener outlives the button unless it is taken off the set */
-            (node._lvaBusyOff || (node._lvaBusyOff = [])).push(
-              () => BUSY.listeners.delete(setReadState));
-
-            /* The chips decide where the answers land. Stored on the section
-               that holds the picture, so a workflow reopens with the same
-               targets it was designed with. */
-            for (const chip of el.querySelectorAll(".lvr-t")) {
-              chip.addEventListener("click", () => {
-                if (readRun) return;
-                const id = Number(chip.dataset.id);
-                const have = new Set(readTargetsOf(s, state.sections).map(x => x.id));
-                if (have.has(id)) have.delete(id); else have.add(id);
-                /* kept in section order so the reading runs top to bottom */
-                s.readTo = state.sections.filter(x => have.has(x.id)).map(x => x.id);
-                touch(); render(); save();
-              });
-            }
-
-            const stopBtn = el.querySelector(".lvr-stop");
-            if (stopBtn) {
-              stopBtn.addEventListener("click", () => {
-                if (!readRun) return;
-                readRun.stop = true;
-                say("stopping after this one…", "busy");
-              });
-            }
-
-            /* Re-announced on every render: the run survives the rebuild, so
-               the new note has to be told where the run got to. */
-            if (readRun && readRun.owner === s.id) {
-              say(`reading ${readRun.i} / ${readRun.n} - ${readRun.title}`, "busy");
-            } else if (readNote && readNote.owner === s.id) {
-              say(readNote.msg, readNote.kind);
-            }
-
-            readBtn.addEventListener("click", async () => {
-              if (!s.img || BUSY.on || readRun) return;
-
-              const jobs = [];
-              for (const x of readTargetsOf(s, state.sections)) {
-                const question = questionOf(x);
-                if (!question) {
-                  say(`${x.title} has no question to ask.`, "err");
-                  return;
-                }
-                jobs.push({ sec: x, question });
-              }
-
-              readNote = null;
-              readRun = { owner: s.id, i: 1, n: jobs.length,
-                          title: jobs[0].sec.title, stop: false };
-              render();
-              let failed = "";
-              try {
-                for (let i = 0; i < jobs.length; i++) {
-                  const { sec, question } = jobs[i];
-                  readRun.i = i + 1;
-                  readRun.title = sec.title;
-                  render();
-                  const text = await readImage(s.img, question, readerSettings());
-                  if (!text) { failed = `${sec.title}: the reader returned nothing.`; }
-                  else {
-                    sec.text = normalizeText(text);
-                    sec.html = escapeHtml(sec.text);
-                    /* a section filling itself in should be seen doing it -
-                       reading a picture is how a series gets designed, and a
-                       collapsed section hides the one thing worth watching */
-                    sec.collapsed = false;
-                    touch(); save(); updateFoot();
-                  }
-                  if (readRun.stop && i < jobs.length - 1) {
-                    failed = "stopped";
-                    break;
-                  }
-                  render();
-                }
-              } catch (err) {
-                failed = String(err.message || err);
-              } finally {
-                readRun = null;
-                render();
-              }
-              if (failed) {
-                readNote = { owner: s.id, msg: failed, kind: "err" };
-                render();
-              }
             });
           }
 
@@ -13368,6 +13784,7 @@ app.registerExtension({
                 && c.src !== sectionText(s).trim()) trSchedule(s, 120);
           }
         });
+        paintRoom();
         updateFoot();
         refreshToolbar();
         /* Deliberate shrinking has to take the node's height back, not hand
@@ -13434,7 +13851,9 @@ app.registerExtension({
         const frH = (fr && fr.offsetHeight) ? fr.offsetHeight + WRAP_GAP : 0;
         const pb = root.querySelector(".lvp-pastebox");
         const pbH = (pb && pb.offsetHeight) ? pb.offsetHeight + WRAP_GAP : 0;
-        return WRAP_PAD * 2 + barH + WRAP_GAP + frH + pbH + stackH() + WRAP_GAP + footH;
+        const rmH = roomHeight();
+        return WRAP_PAD * 2 + barH + WRAP_GAP + frH + pbH + (rmH ? rmH + WRAP_GAP : 0)
+          + stackH() + WRAP_GAP + footH;
       }
 
       /* The book panel's share of the node, measured like the rest of the
@@ -15126,31 +15545,38 @@ app.registerExtension({
         line in capitals. Inside a sentence the same brackets stay prompt
         syntax.</p>
 
-        <h5>IMG &mdash; reading a picture</h5>
-        <p><b>IMG</b> in a section header opens a strip for the picture. Drop a
-        reference image on the square - or copy a screenshot and paste it, with
-        the pointer over the strip you mean - then choose which part of it to
-        read and press <b>Read</b>. The answer replaces the text in that
-        section.</p>
-        <p>A landscape picture opens above the box and a portrait one beside
-        it, which is where each has room. The two small squares in the strip
-        &mdash; bars lying down, bars standing up &mdash; move it the other way, and once you have pressed it that section keeps
-        what you chose whatever you drop on it next. The grip resizes the
-        picture in either arrangement &mdash; downwards above the box, sideways
-        beside it.</p>
-        <p>The question is chosen for you from the section's name &mdash; a
-        section called <i>Camera Anchor</i> opens on the camera question, which
-        describes angle, distance, depth of field and light and leaves the
-        subject and the setting alone. Pick a different one, or
-        <b>Custom&hellip;</b> to write your own. One picture for each section,
-        each read for one layer, is what this node is for. <i>Subject Anchor</i>
-        reads how the person looks and what they wear; <i>Pose Anchor</i> reads
-        only what the body is doing, so a pose can be taken from one picture
-        and the clothes from another.</p>
-        <p><b>READER</b> in the toolbar chooses the model, the quantization and
-        how long an answer may run, and unloads the model when you want the
-        memory back. Reading needs <code>transformers</code> installed in the
-        environment ComfyUI runs in; the button says so if it is missing.</p>
+        <h5>READER &mdash; reading a picture</h5>
+        <p>The <b>Reader</b> panel above the toolbar is the one place a picture
+        is read. Drop a reference image on its square - or click it, paste a
+        screenshot with the pointer over it, or drag one from the Idea Box.
+        On the right every anchor is listed with the question it asks; tick
+        the ones the picture should fill and press <b>Read</b>. Each ticked
+        anchor is asked its own question in turn, top to bottom, and its text
+        is replaced. <b>All</b> and <b>None</b> tick or clear the list; at
+        first only the anchors whose names say a layer - Quality, Subject,
+        Pose, Scene, Camera - are ticked.</p>
+        <p>The question is chosen from the anchor's name &mdash; <i>Camera
+        Anchor</i> reads angle, distance, depth of field and light and leaves
+        the subject and the setting alone. What each anchor reads is written
+        beside its name, under <i>Reads</i>; click it to change it, or pick
+        <b>Your own question&hellip;</b> and write it in the line that opens
+        under the anchor. <i>Subject Anchor</i> reads how the person looks and
+        what they wear; <i>Pose Anchor</i> only what the body is doing, so a
+        pose can be taken from one picture and the clothes from another.</p>
+        <p>Click the panel's head to fold it away - folded, it still shows the
+        picture it holds - and drag its lower edge to make it taller. In the
+        Series Book each scene keeps its own picture and its own ticks.
+        <b>MODEL</b> on the head chooses the model, the quantization and how
+        long an answer may run, and unloads the model when you want the memory
+        back. Reading needs <code>transformers</code> installed in the
+        environment ComfyUI runs in; the panel says so if it is missing.</p>
+        <h5>IMG &mdash; looking at the picture</h5>
+        <p><b>IMG</b> in an anchor's header opens a place for a picture beside
+        its words, only to look at - drop or paste one there. The Reader's
+        picture stays in the Reader; a reading puts only words in the anchors. A landscape picture
+        opens above the box and a portrait one beside it; the two small squares
+        move it the other way, and the grip resizes it. <b>To Reader</b> puts
+        that picture back in the Reader to read it again.</p>
 
         <h5>SEARCH</h5>
         <p>Typing searches as you go. <b>FIND</b> and the arrows walk the hits

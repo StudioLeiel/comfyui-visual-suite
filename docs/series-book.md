@@ -19,8 +19,11 @@ the same series.
 
 The Book keeps each piece of writing once. Prompts that share a capsule share
 the text itself rather than a copy of it: edit the Subject in one prompt and
-every prompt using it has changed. A section whose capsule is shared says so
-in its header - `shared · 6` - so the reach of an edit is never a surprise.
+every prompt using it has changed. Each section names, beside its title, the
+capsule it holds - its number and name as on the shelf, `03-4 Imperial Cold
+Light` - and one whose capsule is shared says so too - `shared · 6` - so the
+reach of an edit is never a surprise. A capsule renamed on the shelf is
+renamed there at once.
 
 ---
 
@@ -160,6 +163,39 @@ A few months of work leaves a long list. **Files** keeps it short:
 - **Notes on hover.** Rest the pointer on a row and the series' note shows -
   the note written under the series name. A book file shows the note of each
   series it holds, so a book can be told apart before it is opened.
+
+### A series from the Idea Box
+
+**Start a series with this** in the [Visual Idea Box](idea-box.md) opens a new
+series here: the idea's line as its name and its picture as the series picture.
+The line, the notes, the folders and the address go into the **Production
+notes**; the series note is left empty for the series' own words, since the
+Series Layout prints it. It starts on an empty first scene, so its pack can be
+pasted in straight away.
+
+A picture in the Idea Box can also be read straight into the anchors: drag it
+from the box onto the picture square of the **Reader** - the panel between the
+*Editing* line and the toolbar - tick the anchors and press **Read**. The whole
+picture comes, not the copy on screen. **Read in Book** in the box does it in
+one press: the picture lands in the Reader of the open prompt, ready to read.
+
+### The Reader
+
+Pictures are read in one place, the **Reader** under the *Editing* line. The
+picture is on the left; on the right every anchor of the open prompt is listed,
+under *Anchor*, with what it reads beside it under *Reads* - Quality, Subject, Pose,
+Scene, Camera, the whole picture, or a question of your own. Click that word
+to change it. Tick the anchors the picture should fill and press
+**Read**; each is asked its own question and its capsule's words are replaced.
+At first only the anchors whose names say a layer are ticked. Each scene keeps
+its own picture and its own ticks, so going back to a scene shows what it was
+read from. Fold the panel with its head, make it taller with its lower edge,
+and choose the model with **Model**.
+
+The Reader's picture stays in the Reader; a reading puts only words in the
+anchors. **IMG** in an anchor's header opens a place for a picture beside its
+words, only to look at - the anchor has no reading controls of its own - and
+**To Reader** sends that picture up to be read.
 
 ### Opening a series opens its pictures
 

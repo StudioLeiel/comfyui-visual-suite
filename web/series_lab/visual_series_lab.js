@@ -26,6 +26,51 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
+/* The LoRA shelf, kept on the server rather than in the workflow.
+
+   A series is saved and opened from the Series Book now, so a shelf that
+   lived inside the workflow came back empty every time a series was opened,
+   and the workflow had to be saved again only to keep it. It lives in
+   user/visual_series_lab/lora_shelf.json instead: one shelf, and the groups
+   it is sorted into, for every Series Lab on every workflow. When the server
+   does not answer (ComfyUI not restarted since the update) the shelf goes on
+   being kept in the workflow, as before. */
+const LSHELF = { loaded: false, failed: false, exists: false, loading: null,
+                 picked: [], groups: [], subs: new Set(), saveT: 0 };
+function lshelfLoad() {
+  if (LSHELF.loading) return LSHELF.loading;
+  LSHELF.loading = api.fetchApi("/visual_series_lab/shelf", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("no route"))))
+    .then((d) => {
+      if (!d || !Array.isArray(d.picked)) throw new Error("not a shelf");
+      LSHELF.picked = d.picked;
+      LSHELF.groups = Array.isArray(d.groups) ? d.groups : [];
+      LSHELF.exists = !!d.exists;
+      LSHELF.loaded = true;
+    })
+    .catch(() => { LSHELF.loaded = true; LSHELF.failed = true; });
+  return LSHELF.loading;
+}
+/* Written a moment after the last change, and every other Lab on the page
+   is told at once so they all show the same shelf. */
+function lshelfSave(from) {
+  if (LSHELF.failed) return;
+  LSHELF.exists = true;
+  clearTimeout(LSHELF.saveT);
+  LSHELF.saveT = setTimeout(() => {
+    api.fetchApi("/visual_series_lab/shelf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ picked: LSHELF.picked, groups: LSHELF.groups }),
+    }).catch(() => { /* kept in the workflow as well */ });
+  }, 350);
+  for (const fn of LSHELF.subs) {
+    if (fn === from) continue;
+    try { fn(); } catch (e) { /* a Lab that has gone away */ }
+  }
+}
+const lshelfCopy = (list) => list.map((x) => ({ name: x.name, strength: x.strength }));
+
 /* The colour of the series on the Series Book, so every node of the suite
    wears the same one: the series named, when the Book shows it, else the
    series open in the Book. Empty when no Book is on the canvas. */
@@ -463,7 +508,7 @@ const CSS = `
   background:#1d1e22;border:1px solid #2c2e33;border-left:3px solid var(--sb);cursor:pointer;
   user-select:none;min-width:0;}
 .vsl-sghead:hover{background:#232429;}
-.vsl-sghead .tw{color:var(--sb);font-size:8px;width:9px;flex:0 0 auto;transition:transform .12s;}
+.vsl-sghead .tw{color:var(--sb);font-size:14px;line-height:1;width:14px;text-align:center;flex:0 0 auto;transition:transform .12s;}
 .vsl-sgrp.shut .vsl-sghead .tw{transform:rotate(-90deg);}
 .vsl-sghead .no{font:700 10px ui-monospace,Consolas,monospace;color:var(--sfg);flex:0 0 auto;}
 .vsl-sghead .nm{font-size:11px;font-weight:700;color:#e2e4e8;white-space:nowrap;overflow:hidden;
@@ -476,6 +521,29 @@ const CSS = `
 .vsl-sgpal i{width:14px;height:14px;border-radius:50%;cursor:pointer;border:1px solid #0008;}
 .vsl-sgpal i:hover,.vsl-sgpal i.on{box-shadow:0 0 0 2px #fff;}
 .vsl-sgbody{display:flex;flex-wrap:wrap;gap:4px;padding-left:4px;}
+/* LoRA groups on the LoRAs Shelf: the same folding band as a series on the
+   prompt shelf, in the LoRAs' own violet */
+.vsl-sgrp.lgrp{--sb:#7b6ce0;--sbg:#2f2b45;--sfg:#b9aef5;margin:4px 0 2px;}
+.vsl-sgrp.lgrp .vsl-sghead .nm{color:#d6cffb;}
+.vsl-sgrp.lgrp .vsl-sghead .gx{flex:0 0 auto;width:16px;height:16px;border-radius:4px;display:inline-flex;
+  align-items:center;justify-content:center;color:#6c6f78;font-size:10px;margin-left:2px;}
+.vsl-sgrp.lgrp .vsl-sghead .gx:hover{color:#ff8a8a;background:#3a2222;}
+.vsl-sgrp.lgrp .vsl-sghead .gx.armed{color:#fff;background:#a83a3a;}
+.vsl-sgrp.lgrp .vsl-sgbody{min-height:6px;}
+/* the same groups in the LoRA picker of a queued recipe */
+.vsl-pkgrp{margin:3px 0 1px;gap:3px;}
+.vsl-pkbody{display:flex;flex-direction:column;gap:3px;padding-left:9px;}
+.vsl-pkgrp.shut .vsl-pkbody{display:none;}
+.vsl-lgempty{font-size:10px;color:#6c6f78;padding:2px 2px 3px;}
+/* with groups the shelf grows long: it scrolls inside its own height */
+.vsl-chips.pool{flex:1 1 auto;min-height:0;}
+/* while a LoRA is dragged a folded group stays folded - its band is the
+   place to drop it - and only an open one shows its dashed outline */
+.vsl-chips.pool.lgdrag .vsl-sgrp.lgrp:not(.shut) .vsl-sgbody{border:1px dashed #4a4470;border-radius:6px;padding:4px;}
+.vsl-chips.pool .vsl-sgrp.lgrp.over .vsl-sghead,.vsl-chips.pool .vsl-sgrp.lgrp.over .vsl-sgbody{border-color:#b9aef5;background:#2f2b45;}
+.vsl-chips.pool.over-loose{outline:1px dashed #7b6ce0;outline-offset:2px;border-radius:6px;}
+.vsl-chip.c-lora[draggable="true"]{cursor:grab;}
+.vsl-btn.wide.poolclear.armed{background:#5a2020;border-color:#e06a6a;color:#ffd6d6;}
 .vsl-sgrp.shut .vsl-sgbody{display:none;}
 .vsl-chip.c-n6.sg{border-color:var(--sb);background:var(--sbg);color:var(--sfg);}
 /* the prompt picker: number badge, then the name - tinted by the series */
@@ -1590,6 +1658,9 @@ app.registerExtension({
           } else if (v && typeof v === "object") {
             state.queue = Array.isArray(v.queue) ? v.queue : [];
             state.picked = Array.isArray(v.picked) ? v.picked : [];
+            /* once the shared shelf is in, a workflow's old copy never
+               replaces it */
+            if (node._vslShelfReady) state.picked = lshelfCopy(LSHELF.picked);
             if (v.done && typeof v.done === "object") state.done = v.done;
             if (Array.isArray(v.optFavs)) optFavMerge(v.optFavs);
             if (v.promptNames && typeof v.promptNames === "object") {
@@ -1649,6 +1720,14 @@ app.registerExtension({
          each of those places having to remember to say so. The comparison
          keeps it to an actual write when something actually changed. */
       const persist = () => {
+        /* the shelf itself goes to the server, for every workflow */
+        if (node._vslShelfReady && LSHELF.loaded && !LSHELF.failed) {
+          const mine = JSON.stringify(lshelfCopy(state.picked));
+          if (mine !== JSON.stringify(lshelfCopy(LSHELF.picked))) {
+            LSHELF.picked = lshelfCopy(state.picked);
+            lshelfSave(node._vslShelfSub);
+          }
+        }
         if (!store) return;
         const doc = JSON.stringify({
           v: STORE_V,
@@ -2671,6 +2750,7 @@ app.registerExtension({
           dropSealedSockets();
           setTimeout(dropSealedSockets, 0);
           readStore();
+          applyShelf();
           warmQueueTriggers();
           try { paintOptView(); } catch (e) { /* not built yet */ }
           paint();
@@ -2688,10 +2768,11 @@ app.registerExtension({
             <div class="vsl-chips prompts"></div>
           </div>
           <div class="vsl-zone">
-            <h4>LoRAs Shelf <span class="hint">click to put in the recipe</span></h4>
-            <div class="vsl-chips pool"></div>
+            <h4>LoRAs Shelf <span class="hint">click to put in the recipe · drag into a group</span></h4>
+            <div class="vsl-chips pool vsl-scroll"></div>
             <div class="vsl-bar2">
               <button class="vsl-btn wide poolclear">CLEAR ALL</button>
+              <button class="vsl-btn wide poolgroup" title="Add a group to sort the LoRAs into - drag a LoRA onto a group to put it there, back onto the shelf to take it out">+ GROUP</button>
               <button class="vsl-btn wide big browse">BROWSE</button>
             </div>
           </div>
@@ -4227,8 +4308,7 @@ app.registerExtension({
         box.appendChild(head);
         const inUse = new Set((row.loras || []).map((l) => l.name));
         let any = false;
-        for (const l of state.loras) {
-          if (inUse.has(l.name) && l.name !== (current && current.name)) continue;
+        const pickBtn = (l) => {
           any = true;
           const b = document.createElement("button");
           b.className = "vsl-btn" +
@@ -4250,7 +4330,38 @@ app.registerExtension({
             writeStore();
             paint();
           });
-          box.appendChild(b);
+          return b;
+        };
+        const offered = state.loras.filter((l) =>
+          !(inUse.has(l.name) && l.name !== (current && current.name)));
+        /* The shelf's own groups, in the shelf's order: the ones in no group
+           first, then each group under a band that folds. A group opens
+           here as it is on the shelf - folded there, folded here - and the
+           one holding the LoRA being swapped always opens. Folding here does
+           not change the shelf. */
+        const groups = LSHELF.failed ? [] : LSHELF.groups;
+        const home = new Map();
+        for (const g of groups) for (const n of g.items) if (!home.has(n)) home.set(n, g.id);
+        for (const l of offered) if (!home.has(l.name)) box.appendChild(pickBtn(l));
+        for (const g of groups) {
+          const members = offered.filter((l) => home.get(l.name) === g.id);
+          if (!members.length) continue;
+          const grp = document.createElement("div");
+          const holds = current && members.some((l) => l.name === current.name);
+          grp.className = "vsl-sgrp lgrp vsl-pkgrp" + (g.shut && !holds ? " shut" : "");
+          const head = document.createElement("div");
+          head.className = "vsl-sghead";
+          head.innerHTML = `<span class="tw">\u25BE</span><span class="nm"></span><span class="ct">${members.length}</span>`;
+          head.querySelector(".nm").textContent = g.name;
+          head.addEventListener("click", (e) => {
+            e.stopPropagation();
+            grp.classList.toggle("shut");
+          });
+          const body = document.createElement("div");
+          body.className = "vsl-pkbody";
+          for (const l of members) body.appendChild(pickBtn(l));
+          grp.append(head, body);
+          box.appendChild(grp);
         }
         if (!any) {
           const e2 = document.createElement("label");
@@ -5071,30 +5182,110 @@ app.registerExtension({
           e.innerHTML = "<b>No LoRAs yet</b>" +
             "Press <i>BROWSE</i> to pick from every LoRA on disk - folders, " +
             "pictures, favourites and all. What you pick stays on this shelf " +
-            "and is saved with the workflow.";
+            "for every workflow, and can be sorted into groups.";
           elPool.appendChild(e);
         }
-        for (const l of state.loras) {
+        const loraChip = (l) => {
           const used = state.draft.loras.some((x) => x.name === l.name);
           const c = chip("c-lora", shortName(l.name), strengthText(l.strength), {
             muted: used,
-            title: l.name + "\nclick to reserve, x to take off the shelf",
+            title: l.name + "\nclick to reserve, x to take off the shelf\ndrag into a group to sort it",
             onClick: () => addLoraToDraft(l),
             onRemove: () => {
               /* Off the shelf and out of everywhere it was going to be used:
                  the recipe being built and every row waiting in the queue.
-                 Taking it off the shelf and leaving it queued was the one
-                 way to render a LoRA that the panel no longer showed. Its
-                 trigger words follow on their own - that box is read from
-                 the recipe and the queue, so a name gone from both takes its
-                 words with it. A LoRA the loader still has switched on comes
-                 back on the next scan, which is the loader's business, not
-                 this node's. */
+                 Its trigger words follow on their own. A LoRA the loader
+                 still has switched on comes back on the next scan, which is
+                 the loader's business, not this node's. */
               dropLoraEverywhere(l.name);
             },
           });
           attachHoverPreview(c, l.name);
-          elPool.appendChild(c);
+          if (!LSHELF.failed) {
+            c.draggable = true;
+            c.addEventListener("dragstart", (e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData("text/x-vsl-lora", l.name);
+              e.dataTransfer.effectAllowed = "move";
+              setTimeout(() => elPool.classList.add("lgdrag"), 0);
+            });
+            c.addEventListener("dragend", () => {
+              elPool.classList.remove("lgdrag", "over-loose");
+              for (const g of elPool.querySelectorAll(".lgrp.over")) g.classList.remove("over");
+            });
+          }
+          return c;
+        };
+        /* Groups: a LoRA sits in at most one. The ones in no group come
+           first, where new picks land; the groups follow in the order they
+           were made. */
+        const groups = LSHELF.failed ? [] : LSHELF.groups;
+        const home = new Map();
+        for (const g of groups) for (const n of g.items) if (!home.has(n)) home.set(n, g.id);
+        for (const l of state.loras) if (!home.has(l.name)) elPool.appendChild(loraChip(l));
+        for (const g of groups) {
+          const members = state.loras.filter((l) => home.get(l.name) === g.id);
+          const box = document.createElement("div");
+          box.className = "vsl-sgrp lgrp" + (g.shut ? " shut" : "");
+          const head = document.createElement("div");
+          head.className = "vsl-sghead";
+          head.title = "click to fold · double click the name to rename";
+          head.innerHTML = `<span class="tw">\u25BE</span><span class="nm"></span><span class="ct">${members.length}</span><span class="gx" title="Remove the group - its LoRAs stay on the shelf">x</span>`;
+          head.querySelector(".nm").textContent = g.name;
+          head.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (e.target.closest(".gx")) return;
+            g.shut = !g.shut;
+            lshelfSave(null);
+          });
+          const rename = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            openEditor(["group name"], [""], null, [g.name], head, (v) => {
+              const t = String(v[0] || "").trim();
+              if (t) { g.name = t.slice(0, 80); lshelfSave(null); }
+            }, { placeholder: "Group" });
+          };
+          head.querySelector(".nm").addEventListener("dblclick", rename);
+          head.addEventListener("contextmenu", rename);
+          const gx = head.querySelector(".gx");
+          gx.addEventListener("click", (e) => {
+            e.stopPropagation();
+            /* the second click removes; the first only arms it */
+            if (!gx.classList.contains("armed")) {
+              gx.classList.add("armed");
+              gx.title = "click again to remove the group";
+              setTimeout(() => gx.classList.remove("armed"), 3000);
+              return;
+            }
+            LSHELF.groups = LSHELF.groups.filter((x) => x !== g);
+            lshelfSave(null);
+          });
+          const body = document.createElement("div");
+          body.className = "vsl-sgbody";
+          if (!members.length) {
+            const em = document.createElement("span");
+            em.className = "vsl-lgempty";
+            em.textContent = "drag LoRAs here";
+            body.appendChild(em);
+          }
+          for (const l of members) body.appendChild(loraChip(l));
+          box.append(head, body);
+          box.addEventListener("dragover", (e) => {
+            if (!e.dataTransfer.types.includes("text/x-vsl-lora")) return;
+            e.preventDefault(); e.stopPropagation();
+            elPool.classList.remove("over-loose");
+            box.classList.add("over");
+          });
+          box.addEventListener("dragleave", (e) => {
+            if (!box.contains(e.relatedTarget)) box.classList.remove("over");
+          });
+          box.addEventListener("drop", (e) => {
+            const n = e.dataTransfer.getData("text/x-vsl-lora");
+            if (!n) return;
+            e.preventDefault(); e.stopPropagation();
+            moveLoraToGroup(n, g.id);
+          });
+          elPool.appendChild(box);
         }
 
         elOpts.innerHTML = "";
@@ -6022,6 +6213,15 @@ app.registerExtension({
         it. Search looks at the file names first and falls back to the folders
         when nothing is named that; several words all have to match, and
         spaces, underscores and dashes count as the same thing.</p>
+        <p><b>CLEAR ALL</b> asks first: the first press shows how many it will
+        take off, and only a second press within a few seconds clears.</p>
+        <p>The shelf is kept apart from the workflow, the same in every
+        workflow and every Series Lab, so opening a series never empties it.
+        <b>+ GROUP</b> adds a group; drag a LoRA onto a group to sort it, back
+        onto the shelf to take it out. Click a group to fold it, double click
+        its name to rename it, and press its x twice to remove it - its LoRAs
+        stay on the shelf. The LoRA list of a queued recipe shows the same
+        groups.</p>
         <p><b>Trigger words</b> are read from the LoRAs themselves. Click one
         to leave it out. While a render is on its way, the words actually
         going with it are lit and the rest are dimmed.</p>
@@ -6500,8 +6700,27 @@ app.registerExtension({
       });
       $(".poolclear").addEventListener("click", (e) => {
         e.stopPropagation();
+        /* Asked twice. The shelf is shared by every workflow now, so one
+           stray press used to empty it everywhere at once. The first press
+           only arms the button; a second within a few seconds clears. */
+        const btn = e.currentTarget;
+        if (!btn.classList.contains("armed")) {
+          if (!state.loras.length) return;
+          btn.classList.add("armed");
+          btn.textContent = "CLEAR " + state.loras.length + "?";
+          btn.title = "click again to take all " + state.loras.length + " LoRAs off the shelf";
+          clearTimeout(btn._armT);
+          btn._armT = setTimeout(() => {
+            btn.classList.remove("armed");
+            btn.textContent = "CLEAR ALL";
+          }, 3500);
+          return;
+        }
+        clearTimeout(btn._armT);
+        btn.classList.remove("armed");
+        btn.textContent = "CLEAR ALL";
         /* Clearing the shelf clears what the shelf was feeding, for the same
-           reason one chip does. */
+           reason one chip does. The groups stay, empty. */
         for (const l of state.loras.slice()) dropLoraEverywhere(l.name, true);
         state.picked = [];
         state.loras = [];
@@ -6512,6 +6731,68 @@ app.registerExtension({
         e.stopPropagation();
         openBrowser();
       });
+      /* A LoRA dropped on the shelf outside any group leaves its group. */
+      function moveLoraToGroup(name, gid) {
+        for (const g of LSHELF.groups) g.items = g.items.filter((x) => x !== name);
+        const g = gid && LSHELF.groups.find((x) => x.id === gid);
+        /* a folded group stays folded; its count says it went in */
+        if (g) g.items.push(name);
+        lshelfSave(null);
+      }
+      elPool.addEventListener("dragover", (e) => {
+        if (!e.dataTransfer.types.includes("text/x-vsl-lora")) return;
+        e.preventDefault();
+        elPool.classList.add("over-loose");
+      });
+      elPool.addEventListener("dragleave", (e) => {
+        if (!elPool.contains(e.relatedTarget)) elPool.classList.remove("over-loose");
+      });
+      elPool.addEventListener("drop", (e) => {
+        const n = e.dataTransfer.getData("text/x-vsl-lora");
+        elPool.classList.remove("over-loose", "lgdrag");
+        if (!n) return;
+        e.preventDefault();
+        moveLoraToGroup(n, null);
+      });
+      $(".poolgroup").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const btn = e.currentTarget;
+        if (LSHELF.failed) {
+          btn.title = "Groups need the server part of this update - restart ComfyUI once";
+          btn.textContent = "RESTART COMFYUI";
+          setTimeout(() => { btn.textContent = "+ GROUP"; }, 2600);
+          return;
+        }
+        openEditor(["group name"], [""], null, ["Group " + (LSHELF.groups.length + 1)], btn, (v) => {
+          const t = String(v[0] || "").trim() || ("Group " + (LSHELF.groups.length + 1));
+          LSHELF.groups.push({ id: "g" + Date.now().toString(36), name: t.slice(0, 80), shut: false, items: [] });
+          lshelfSave(null);
+        }, { placeholder: "Group" });
+      });
+
+      /* The shelf from the server replaces the one the workflow carried. The
+         very first time - no shelf file yet - the workflow's own shelf is
+         what it starts from, so nothing picked before the update is lost. */
+      const shelfSub = () => {
+        state.picked = lshelfCopy(LSHELF.picked);
+        if (!rescan()) paint();
+      };
+      function applyShelf() {
+        if (!LSHELF.loaded || LSHELF.failed) return;
+        node._vslShelfReady = true;
+        if (!LSHELF.exists) {
+          if (state.picked.length) {
+            LSHELF.picked = lshelfCopy(state.picked);
+            lshelfSave(shelfSub);
+          }
+          return;
+        }
+        state.picked = lshelfCopy(LSHELF.picked);
+        if (!rescan()) paint();
+      }
+      node._vslShelfSub = shelfSub;
+      LSHELF.subs.add(shelfSub);
+      lshelfLoad().then(applyShelf);
       const OPT_ICON = { flat: "\u25A6", pods: "\u25A2", lines: "\u2261" };
       function paintOptView() {
         elOptView.innerHTML =
@@ -7344,6 +7625,7 @@ app.registerExtension({
       const removed = node.onRemoved;
       node.onRemoved = function () {
         if (timer) { clearInterval(timer); timer = null; }
+        if (node._vslShelfSub) LSHELF.subs.delete(node._vslShelfSub);
         closeEditor();
         closeHelp();
         closeBrowser();

@@ -75,6 +75,32 @@ is used, up to ten.
 **LoRAs Shelf** — whatever was picked in `BROWSE`. Hover a chip to see its
 picture; click to reserve it for the recipe, `x` to take it off the shelf.
 
+The shelf does not belong to the workflow. It is kept in
+`user/visual_series_lab/lora_shelf.json` and is the same shelf in every
+workflow and every Series Lab on the canvas, so opening a series from the
+Series Book, or starting a new workflow, finds it as it was left - there is no
+need to save a workflow only to keep the LoRAs. The first time after the
+update, the shelf the open workflow carried becomes the shared one.
+
+**Groups.** `+ GROUP` adds a group to sort the shelf into - Film looks,
+Models, Lenses, whatever helps. Drag a LoRA onto a group to put it there - onto the band of a folded group,
+which stays folded and counts one more - and
+back onto the shelf outside the groups to take it out; a LoRA sits in one
+group at most. LoRAs in no group come first, where new picks from `BROWSE`
+land. Click a group's band to fold it, double click its name (or right click
+the band) to rename it, and its `x` - pressed twice - removes the group while
+its LoRAs stay on the shelf. The groups are kept in the same file. The LoRA list
+that opens from a queued recipe - to add a LoRA or swap one, and in a sweep -
+is sorted into the same groups: the LoRAs in no group first, then each group
+under a band that folds. A group folded on the shelf opens folded there too
+(click its band to open it), except the one holding the LoRA being swapped. The shelf
+scrolls once it is taller than its panel; drag the panel's edge to give it
+more room.
+
+`CLEAR ALL` asks first: the first press turns the button red and asks `CLEAR 33?`
+- how many LoRAs it will take off - and only a second press within a few seconds clears the
+shelf. The groups stay, empty.
+
 **Sample pictures on hover.** The card that opens over a LoRA chip - on the
 shelf, in a recipe or in the queue - also shows the model page's sample
 pictures as a strip under the preview. Move the pointer onto the card and
@@ -406,7 +432,8 @@ something else, so a chip never keeps the old thing's name.
 ## Keeping a plan
 
 Everything — the shelves, the recipe, the queue and how far it has got — is
-saved with the workflow.
+saved with the workflow, except the LoRAs Shelf and its groups, which are kept
+apart for every workflow (see above).
 
 `Export` writes the queue to a JSON file, anywhere you like. `Import` adds a
 file to what is already there rather than replacing it, so two plans can be

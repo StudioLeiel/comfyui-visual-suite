@@ -449,6 +449,92 @@ def _store_favorites(data):
     return clean
 
 
+# ---------------------------------------------------------------------------
+# The LoRA shelf, kept apart from any workflow.
+#
+# A series is saved and opened from the Series Book now, not as a workflow, so
+# a shelf that lived inside the workflow came back empty every time a series
+# was opened. It lives here instead, one shelf for every Series Lab: what is
+# on it, at what strength, and the groups it is sorted into.
+# ---------------------------------------------------------------------------
+SHELF_FILENAME = "lora_shelf.json"
+SHELF_MAX = 400
+SHELF_GROUPS_MAX = 60
+
+
+def _shelf_path():
+    return os.path.join(os.path.dirname(_favorites_path()), SHELF_FILENAME)
+
+
+def _shelf_name(item):
+    """Checked in its forward-slash form, kept as it was written - a LoRA
+    named by a loader on Windows carries backslashes, and a group has to
+    find it again by that same name."""
+    if not _sanitize_favorites([item]):
+        return None
+    return str(item).strip()
+
+
+def _sanitize_shelf(data):
+    if not isinstance(data, dict):
+        data = {}
+    picked, seen = [], set()
+    for row in data.get("picked") or []:
+        if not isinstance(row, dict):
+            continue
+        name = _shelf_name(row.get("name"))
+        if not name or name in seen:
+            continue
+        try:
+            strength = float(row.get("strength", 1))
+        except Exception:
+            strength = 1.0
+        if strength != strength or abs(strength) > 10:
+            strength = 1.0
+        seen.add(name)
+        picked.append({"name": name, "strength": round(strength, 3)})
+        if len(picked) >= SHELF_MAX:
+            break
+    groups, gids = [], set()
+    for g in data.get("groups") or []:
+        if not isinstance(g, dict):
+            continue
+        gid = str(g.get("id") or "").strip()[:40]
+        if not gid or gid in gids:
+            continue
+        items = []
+        for it in g.get("items") or []:
+            name = _shelf_name(it)
+            if name and name not in items:
+                items.append(name)
+        gids.add(gid)
+        groups.append({"id": gid, "name": str(g.get("name") or "Group")[:80],
+                       "shut": bool(g.get("shut")), "items": items[:SHELF_MAX]})
+        if len(groups) >= SHELF_GROUPS_MAX:
+            break
+    return {"v": 1, "picked": picked, "groups": groups}
+
+
+def _load_shelf():
+    path = _shelf_path()
+    if not os.path.isfile(path):
+        return {"v": 1, "picked": [], "groups": [], "exists": False}
+    with open(path, "r", encoding="utf-8") as fh:
+        out = _sanitize_shelf(json.load(fh))
+    out["exists"] = True
+    return out
+
+
+def _store_shelf(data):
+    clean = _sanitize_shelf(data)
+    path = _shelf_path()
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(clean, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
+    return clean
+
+
 def _load_favorites():
     """Read the list, moving an old in-node file across on first run."""
     path = _favorites_path()
@@ -506,6 +592,22 @@ def _register_routes():
                 return web.json_response({"ok": False, "error": "favorites must be a list"}, status=400)
             clean = _store_favorites(data)
             return web.json_response({"ok": True, "favorites": clean})
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
+    @routes.get("/visual_series_lab/shelf")
+    async def _get_shelf(request):
+        """The LoRA shelf and its groups, shared by every workflow."""
+        try:
+            return web.json_response(_load_shelf())
+        except Exception as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
+    @routes.post("/visual_series_lab/shelf")
+    async def _save_shelf(request):
+        try:
+            data = await request.json()
+            return web.json_response({"ok": True, "shelf": _store_shelf(data)})
         except Exception as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=500)
 

@@ -14,7 +14,7 @@
 
 """Visual Suite (Studio Leiel).
 
-Eleven nodes that share one design language. Each one lives in its own package
+Twelve nodes that share one design language. Each one lives in its own package
 under nodes/ and is loaded separately, so a node that fails to import - a
 frontend change, a missing dependency - takes only itself down and the rest
 of the suite still loads.
@@ -43,6 +43,7 @@ _MODULES = (
     "image_viewer",
     "series_report",
     "series_layout",
+    "idea_box",
 )
 
 _loaded = []

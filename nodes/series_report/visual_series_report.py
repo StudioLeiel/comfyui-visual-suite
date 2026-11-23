@@ -971,6 +971,72 @@ def _scene_key(row):
     return ""
 
 
+# A node switched off by its own "enabled" widget still writes every other
+# value it holds into the picture; none of them made the render. They are
+# counted as "off" instead, so a strength or a scale is only ever compared
+# among the renders that used it.
+_SWITCH_WIDGETS = ("enabled", "enable", "active")
+_OFF_VALUES = ("false", "0", "off", "no", "disabled", "none")
+
+
+def _live_opts(opts):
+    """The recipe's options as they acted: those of a node switched off read "off"."""
+    opts = list(opts or [])
+    dead = set()
+    for key, _label, value in opts:
+        node, sep, widget = str(key).rpartition("::")
+        if sep and node != "setting" and widget.strip().lower() in _SWITCH_WIDGETS \
+                and str(value).strip().lower() in _OFF_VALUES:
+            dead.add(node)
+    if not dead:
+        return opts
+    out = []
+    for key, label, value in opts:
+        node, sep, widget = str(key).rpartition("::")
+        if sep and node in dead and widget.strip().lower() not in _SWITCH_WIDGETS:
+            value = "off"
+        out.append([key, label, value])
+    return out
+
+
+def _axis_opts(opts):
+    """The options as they are counted. A node with its own on/off switch and
+    two or more other values - an enhancer's strength and scale - is counted
+    as one setting, its values read together ("0.5 · 1.85") or "off", since
+    they are chosen together and mean little apart. Other options stay as
+    they are."""
+    live = _live_opts(opts)
+    nodes, order = {}, []
+    for key, label, value in live:
+        node, sep, widget = str(key).rpartition("::")
+        if not sep or node == "setting":
+            continue
+        if node not in nodes:
+            nodes[node] = []
+            order.append(node)
+        nodes[node].append((widget, value))
+    joined = {}
+    for node in order:
+        ws = nodes[node]
+        switch = [v for w, v in ws if w.strip().lower() in _SWITCH_WIDGETS]
+        parts = [(w, v) for w, v in ws if w.strip().lower() not in _SWITCH_WIDGETS]
+        if not switch or len(parts) < 2:
+            continue
+        off = any(str(v).strip().lower() in _OFF_VALUES for v in switch)
+        joined[node] = [node + "::*", node + " - " + " · ".join(w for w, _v in parts),
+                        "off" if off else " · ".join(str(v) for _w, v in parts)]
+    out, put = [], set()
+    for key, label, value in live:
+        node, sep, _widget = str(key).rpartition("::")
+        if sep and node in joined:
+            if node not in put:
+                put.add(node)
+                out.append(joined[node])
+            continue
+        out.append([key, label, value])
+    return out
+
+
 def _facets(row):
     """Everything a render can be counted under: {axis key: [values]}."""
     rec = row["recipe"]
@@ -980,7 +1046,7 @@ def _facets(row):
         if name not in loras:
             loras.append(name)
     out = {"lora": loras}
-    for key, _label, value in rec.get("opts") or []:
+    for key, _label, value in _axis_opts(rec.get("opts")):
         out["opt:" + key] = [value]
     frame = _frame(row)
     if frame:
@@ -1984,7 +2050,7 @@ def _summary_body(series, filters, wall=None, history=None, trends=None):
         look = looks.get(r["fp"])
         if _stale(look):
             unmeasured.append(r["fp"])
-        for key, label, _value in r["recipe"].get("opts") or []:
+        for key, label, _value in _axis_opts(r["recipe"].get("opts")):
             labels.setdefault("opt:" + key, label)
         if _passes(facets, filters):
             _add(totals, state)
@@ -2349,7 +2415,7 @@ def _export_csv(series):
             secs, src = est[r["id"]], "estimated"
         else:
             secs, src = "", ""
-        opts = {k: val for k, _l, val in r["recipe"].get("opts") or []}
+        opts = {k: val for k, _l, val in _live_opts(r["recipe"].get("opts"))}
         loras = " + ".join("%s(%s)" % (_canon(n), s) for n, s in r["recipe"].get("loras") or [])
         out.writerow([r["series"], r["scene_no"], r["scene_name"], r["name"], states[r["id"]],
                       _frame(r), r["w"], r["h"], r["seed"], loras]

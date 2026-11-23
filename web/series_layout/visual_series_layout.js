@@ -1987,6 +1987,9 @@ const CSS = `
   font:inherit;font-size:11.5px;font-weight:700;letter-spacing:.4px;cursor:pointer}
 .vly-export:hover{background:#ecc66a}
 .vly-export[disabled]{opacity:.35;cursor:default}
+.vly-ideapop{width:min(540px,94vw)}
+.vly-ideapop .ex-opts{padding:16px 20px 8px;display:flex;flex-direction:column;gap:12px}
+.vly-ideapop .row2{grid-template-columns:92px 1fr}
 .vly-body{display:grid;grid-template-columns:252px minmax(0,1fr)}
 .vly-side{border-right:1px solid var(--line);background:var(--panel);padding:12px 0 14px;border-radius:0 0 0 8px}
 .vly-side-in>.vly-h{padding:0 14px}
@@ -2722,6 +2725,7 @@ function buildLayout(node) {
       <input class="opf" type="file" accept=".layout,application/json" style="display:none" />
       <button class="vly-pack links" title="Links - the pictures the layout uses, how sharp each prints, and the upscaled ones linked in their place">Links <b class="lc"></b></button>
       <button class="vly-pack pk" title="Package for print: the pictures the layout uses, its typefaces, a proof and a report, in one folder - upscale the pictures, then link them again">Package</button>
+      <button class="vly-pack ibx" title="Send to the Visual Idea Box - pages as JPEG, PNG or a PDF; in Motion the film, exported first">Idea Box</button>
       <button class="vly-export" title="Export as JPEG, PNG, PDF or an InDesign package">Export</button>
     </div>
     <div class="vly-body">
@@ -2771,6 +2775,7 @@ function buildLayout(node) {
   const tools = $(".vly-tools"), extraBox = $(".vly-extra"), extraTa = extraBox.querySelector("textarea");
   const stripH = $(".vly-strip .sh"), strip = $(".vly-strip-row"), note = $(".vly-note");
   const exportBtn = $(".vly-export"), packBtn = $(".vly-pack.pk"), linksBtn = $(".vly-pack.links");
+  const ideaBtn = $(".vly-pack.ibx");
   const full = $(".vly-full"), fullCanvas = full.querySelector("canvas");
   /* The full-screen view lives on the page itself: inside the node it would
      be scaled and moved with the canvas. */
@@ -6688,6 +6693,7 @@ function buildLayout(node) {
       MZ.recording = S.exporting = false;
       exportBtn.disabled = false;
     }
+    return { done, stopped };      // the Idea Box sends what was written
   }
 
   serSel.addEventListener("change", () => {
@@ -6784,6 +6790,154 @@ function buildLayout(node) {
   $(".fs").addEventListener("click", openFull);
   $(".mp").addEventListener("click", () => { P.vly_player = true; P.vly_mlib = true; paint(); });
   exportBtn.addEventListener("click", () => (isMotion() ? openMotionExport() : openExport()));
+
+  /* Idea Box: what is made here kept with the ideas. A small window asks
+     how: in Print and Web as JPEG or PNG pictures - the page shown now or
+     every page, each an idea of its own - or as one PDF; in Motion the film
+     is exported as it would be (this size, high quality) and then sent.
+     Everything sent waits with the new ones in the Idea Box, the series and
+     the page in its notes. */
+  const IDEA_LONG = 2400;          // pixels on the long side: enough to look closely, light to keep
+  function ideaOpts() {
+    const o = P.vly_idea && typeof P.vly_idea === "object" ? P.vly_idea : (P.vly_idea = {});
+    if (!["jpg", "png", "pdf"].includes(o.fmt)) o.fmt = "jpg";
+    if (!["this", "all"].includes(o.range)) o.range = "this";
+    return o;
+  }
+  async function ideaPost(url, body, isJson) {
+    const r = await api.fetchApi(url, isJson ? { method: "POST", body: JSON.stringify(body) } : { method: "POST", body });
+    const j = await r.json().catch(() => ({ ok: false }));
+    if (!j.ok) throw new Error(j.error || "is the Visual Idea Box installed?");
+    return j;
+  }
+  function openIdeaBox() {
+    if (!S.book || S.exporting) return;
+    closePop();
+    const o = ideaOpts();
+    const motion = isMotion();
+    const web = P.vly_cat === "web";
+    pop = document.createElement("div");
+    pop.className = "vly-pop vly-exp vly-ideapop";
+    pop.innerHTML = `
+      <div class="hd"><span class="tt">To the Idea Box</span><span class="kb">${motion ? "Motion" : web ? "Web" : "Print"}</span>
+        <span class="kb2">${esc(S.book.series)}</span>
+        <button class="xx" title="Close">${ICON.close}</button></div>
+      <div class="ex-opts"></div>
+      <div class="ft"><span class="w"></span>
+        <button class="pbtn cancel">Cancel</button>
+        <button class="pbtn ok go">Send</button></div>`;
+    document.body.appendChild(pop);
+    const opts = pop.querySelector(".ex-opts"), w = pop.querySelector(".ft .w");
+    const seg = (key, items, cur) => `<span class="pseg" data-k="${key}">` + items.map(([id, label, hint]) =>
+      `<button class="${id === cur ? "on" : ""}" data-v="${id}" title="${esc(hint || "")}">${esc(label)}</button>`).join("") + `</span>`;
+    const unit = web ? "frame" : "spread";
+    const fill = () => {
+      let html = "";
+      if (motion) {
+        const size = (MOTION_SIZES.find(s => s.id === P.vly_fmt.motion) || {});
+        html += `<div class="row2"><span class="lab">FILM</span><span class="fmtx">${esc((size.tag || P.vly_fmt.motion).replace("x", ":"))} · ${esc(size.label || "")} · High quality</span></div>`;
+        html += `<div class="row2 top"><span class="lab">NOTE</span><span class="note2">The film is exported first, as Export would write it - into output / ${esc(S.book.series)} / layout / motion - and then sent. It takes as long as the export does.</span></div>`;
+        w.textContent = "1 film → the Idea Box";
+      } else {
+        html += `<div class="row2"><span class="lab">FORMAT</span>${seg("fmt", [["jpg", "JPEG", "Each page a picture - light"],
+          ["png", "PNG", "Each page a picture - nothing lost"], ["pdf", "PDF", "One PDF of the pages, to page through in the Idea Box"]], o.fmt)}</div>`;
+        html += `<div class="row2"><span class="lab">PAGES</span>${seg("range", [["this", `This ${unit}`, ""], ["all", `Every ${unit}`, ""]], o.range)}</div>`;
+        const n = o.range === "all" ? S.sheets.length : 1;
+        html += `<div class="row2 top"><span class="lab">NOTE</span><span class="note2">${o.fmt === "pdf"
+          ? `One PDF, ${IDEA_LONG} pixels on the long side of each page. It is written into output / ${esc(S.book.series)} / layout as well.`
+          : `Each ${unit} is an idea of its own, ${IDEA_LONG} pixels on its long side, with the series and its number in the notes.`}</span></div>`;
+        w.textContent = o.fmt === "pdf" ? `1 PDF of ${n} ${unit}${n === 1 ? "" : "s"} → the Idea Box`
+          : `${n} ${o.fmt === "png" ? "PNG" : "JPEG"} picture${n === 1 ? "" : "s"} → the Idea Box`;
+      }
+      opts.innerHTML = html;
+    };
+    pop.addEventListener("click", (e) => {
+      if (e.target.closest(".xx") || e.target.closest(".cancel")) { closePop(); return; }
+      const b = e.target.closest(".pseg button");
+      if (b) { o[b.closest(".pseg").dataset.k] = b.dataset.v; fill(); return; }
+      if (e.target.closest(".go")) {
+        closePop();
+        if (motion) sendFilmToIdeaBox(); else sendPagesToIdeaBox(o.fmt, o.range);
+      }
+    });
+    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closePop(); } });
+    fill();
+  }
+
+  async function sendPagesToIdeaBox(fmt, range) {
+    const book = S.book;
+    S.exporting = true;
+    ideaBtn.disabled = exportBtn.disabled = true;
+    try {
+      await fontsFor(P.vly_font);
+      await logoReady();
+      const G = geo();
+      const v = view();
+      const all = buildSheets(book, v, G);
+      const at = Math.min(S.cur, all.length - 1);
+      const list = range === "all" ? all.map((sh, i) => [sh, i]) : [[all[at], at]];
+      const k = IDEA_LONG / Math.max(G.sheetW, G.sheetH);
+      const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+      let n = 0;
+      for (const [sh, i] of list) {
+        if (!sh) continue;
+        n++;
+        say(`Sending to the Idea Box - ${n} of ${list.length}…`);
+        const pics = await picsFor([sh], 0, true);
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(G.sheetW * k);
+        cv.height = Math.round(G.sheetH * k);
+        drawSheet(cv.getContext("2d"), k, sh, G, book, v, pics, false);
+        const no = String(i + 1).padStart(2, "0");
+        if (fmt === "pdf") {
+          await ideaPost(PDF_PAGE_URL, { token, index: n, data: cv.toDataURL("image/jpeg", 0.92) }, true);
+        } else {
+          const type = fmt === "png" ? "image/png" : "image/jpeg";
+          const blob = await new Promise(res => cv.toBlob(res, type, 0.92));
+          const memo = `${book.series} · ${no} ${sheetName(sh)}\n${G.fmt.label}${G.fmt.size ? " · " + G.fmt.size : ""}`;
+          /* one's own work: into My works, under its series */
+          const q = new URLSearchParams({ name: `${book.series} ${no}.${fmt}`, via: "layout", memo, work: "1", wfolder: book.series });
+          await ideaPost(`/leiel_idea/add?${q}`, blob, false);
+        }
+        cv.width = cv.height = 0;
+      }
+      if (fmt === "pdf") {
+        say("Writing the PDF…");
+        const j = await ideaPost(PDF_DONE_URL, { token, series: book.series, format: G.fmt.id, folder: "",
+          name: `${book.series} - Idea Box`, page: [G.sheetW, G.sheetH] }, true);
+        await ideaPost("/leiel_idea/add_file", { path: j.path, via: "layout", work: true, wfolder: book.series,
+          memo: `${book.series} · PDF\n${n} ${P.vly_cat === "web" ? "frame" : "spread"}${n === 1 ? "" : "s"} · ${G.fmt.label}` }, true);
+        say(`The PDF is in the Idea Box - My works › ${book.series}. (Also written: ${j.path})`);
+      } else {
+        say(`${n} ${n === 1 ? "page is" : "pages are"} in the Idea Box - My works › ${book.series}.`);
+      }
+    } catch (e) {
+      say(`Not sent: ${e && e.message || e}`, true);
+    } finally {
+      S.exporting = false;
+      ideaBtn.disabled = exportBtn.disabled = false;
+    }
+  }
+
+  async function sendFilmToIdeaBox() {
+    const mime = motionMime();
+    const res = await recordMotion([P.vly_fmt.motion], "", cleanName(S.book.series), 40, mime || "video/webm", null);
+    if (!res || !res.done.length) return;          // stopped, or it said why
+    try {
+      ideaBtn.disabled = true;
+      for (const path of res.done) {
+        say("Sending the film to the Idea Box…");
+        await ideaPost("/leiel_idea/add_file", { path, via: "layout", work: true, wfolder: S.book.series,
+          memo: `${S.book.series}\nFilm · ${path.split(/[\\/]/).pop()}` }, true);
+      }
+      say(`The film is in the Idea Box - My works › ${S.book.series}. (Also written: ${res.done.join(" · ")})`);
+    } catch (e) {
+      say(`Not sent: ${e && e.message || e}`, true);
+    } finally {
+      ideaBtn.disabled = false;
+    }
+  }
+  ideaBtn.addEventListener("click", openIdeaBox);
   packBtn.addEventListener("click", openPackage);
   linksBtn.addEventListener("click", openLinks);
   navL.addEventListener("click", () => (isMotion() ? mgo(MZ.cur - 1) : go(S.cur - 1)));

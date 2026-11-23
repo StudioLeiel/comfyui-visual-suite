@@ -5,3 +5,7 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# old copies kept while working - not part of the release
+_backup_*/
+Claude outputs/

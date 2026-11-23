@@ -182,6 +182,19 @@ than one value, one for frame. In each row the length is how many renders;
 gold, grey and red are picked, left and deleted; `13%  12/94  −12%` reads 13%
 picked, 12 picks of 94 renders, 12% deleted.
 
+A node switched off by its own **enabled** widget still writes every other
+value it holds into the picture, though none of them made the render. Those
+renders count under **off** for the node's other settings - an enhancer's
+strength and scale are compared only among the renders it was on for, and the
+renders it was off for stand together in one row. The same holds in every tab
+and in the CSV.
+
+Such a node - one with its own on/off switch and two or more other values -
+is counted as one setting, its values read together: **Krea2T Enhancer
+Advanced - strength · text_scale** has a row for `0.5 · 1.85`, one for
+`0.75 · 2.1`, and one for `off`, since the values are chosen together and mean
+little apart. The CSV keeps each value in a column of its own.
+
 A LoRA in nearly every render - the base model's, the series' person - has no
 renders without it to be compared against. Those are named in a gold box under
 the LoRA bars, **IN NEARLY EVERY RENDER · NOT COMPARED**, so their absence

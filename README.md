@@ -1,6 +1,6 @@
 # Visual Suite (Studio Leiel)
 
-Eleven nodes for ComfyUI, built for people who spend their day in the graph
+Twelve nodes for ComfyUI, built for people who spend their day in the graph
 rather than passing through it. They share one design language: the same palette, the
 same chips, the same `?` button that opens a manual on the node itself.
 
@@ -45,6 +45,31 @@ at a time: quality from one picture, clothes from another, a pose from a third,
 scene and camera from others. That part needs `transformers`; nothing else here does.
 
 ![Visual Prompt Composer](docs/images/prompt-composer/01-overview.png)
+
+### [Visual Idea Box](docs/idea-box.md)
+
+A box for ideas seen anywhere — kept in a second, sorted later, found again.
+
+Ideas for a series turn up everywhere but the graph: a picture on a web page, a
+frame of a film, a line someone says — and a week later they are gone. Here
+keeping one asks nothing: drag a picture from the browser onto the node, paste
+a screenshot with Ctrl+V, write a thought into the jot box, or let a screenshot
+tool save into the box's inbox folder. Pictures, films, YouTube and Vimeo
+links, sounds, PDFs and plain words are all kept the same way, and the address
+of a magazine story brings the whole story as one idea — every picture in the
+page's order, its credits as the notes.
+
+The new ones wait at the top until there is a minute, then go by one at a
+time — a few words on what caught the eye (the first line is the title), a
+folder by its number key, Enter for the next. The names in the notes become
+keywords, sorted by role — models, photographers, stylists, magazines — so one
+click finds every idea that shares them. Pin a reference beside your own
+renders to compare them, keep the sites you gather from one click away, and
+send a picture to the Series Book's Reader to be read into a prompt. **Start a
+series with this** opens a new series in the Series Book with the idea's
+picture and its words in the production notes.
+
+![Visual Idea Box](docs/images/idea-box/01-wall.png)
 
 ### [Visual Series Book](docs/series-book.md)
 
@@ -306,7 +331,7 @@ Each node is imported separately. If one fails - a ComfyUI frontend change, a
 bad edit - it is skipped with a message in the console and the others still
 load. The console line at startup says how many came up.
 
-Nodes that keep state (prompt presets, series favourites, custom size lists)
+Nodes that keep state (prompt presets, series favourites, custom size lists, the ideas in the Idea Box)
 write it to ComfyUI's `user/` directory, so updating or reinstalling the pack
 never deletes it.
 
@@ -321,6 +346,7 @@ it. The ids are invisible unless you read the workflow JSON.
 
 | Display name | Class id |
 | --- | --- |
+| Visual Idea Box (Studio Leiel) | `LeielIdeaBox` |
 | Visual Prompt Composer (Studio Leiel) | `LeielPromptComposer` |
 | Visual Series Book (Studio Leiel) | `LeielSeriesBook` |
 | Visual Series Lab (Studio Leiel) | `VisualSeriesLabSetup` |

@@ -36,7 +36,7 @@ Every section header carries the controls that matter for that section alone:
 | | |
 | --- | --- |
 | **B** | Bypass. The section stays where it is and drops out of the output. |
-| **IMG** | Opens the reference strip for this section. |
+| **IMG** | Shows the picture this section was read from (reading itself is done in the Reader). |
 | **TR** | Opens a translation of this section underneath it. |
 | **▾** | Fold the section down to its title. |
 | **●** | Section colour. |
@@ -325,7 +325,7 @@ pip install transformers accelerate
 ```
 
 Run that in the environment ComfyUI runs in, then restart. Without it the
-composer is unaffected and the `Read` button says plainly what is missing rather
+composer is unaffected and the Reader says plainly what is missing rather
 than failing quietly. Models are downloaded on first use and kept in the usual
 Hugging Face cache; `Qwen3-VL-4B-Instruct` is a good place to start.
 
@@ -340,7 +340,7 @@ decisions, and they usually come from different references.
 
 ![Four layers, four references](images/prompt-composer/02-layers.png)
 
-Here each section reads its own image and is asked its own question. A section
+Here each section is asked its own question of the picture it is given. A section
 called `Camera Anchor` is asked about the shape of the view - which way round
 the frame stands, how strongly nearness enlarges, the height it was taken from,
 how far round the subject the camera stands, where the subject is cut, how the
@@ -369,42 +369,49 @@ list of absences. They are stored beside the presets, where you can edit them.
 
 ## Reading an image
 
-`IMG` in a section header opens a strip for the picture. Drop a reference image
-on it - or copy a screenshot and paste, with the pointer over the strip you mean
-- then choose which part of it to read and press `Read`. The answer replaces the
-text in that section.
+Pictures are read in one place: the **Reader**, a panel of its own above the
+toolbar (in the Series Book, between the *Editing* line and the toolbar), and
+the toolbar under it sits in a box of the same kind. Its
+picture sits on the left; drop a reference image on it, click it to choose a
+file, or copy a screenshot and paste with the pointer over it. On the right is
+every section, each with the question it asks. Tick the sections the picture
+should fill and press `Read`.
 
 ![Choosing a layer](images/prompt-composer/03-layers-menu.png)
 
 The question is picked from the section's name, so a workflow already laid out
-as quality / subject / pose / scene / camera opens ready to use. The menu groups
-the five under `Read only`; `The whole picture` and `Custom...` sit outside that
-heading because the restriction does not apply to them. Beside the menu, five
-stacked bars show which of the five this reading takes and that the others are
-being left to their own sections, and the same mark sits on the picture itself.
+as quality / subject / pose / scene / camera opens ready to use, and those are
+the sections ticked at first - a `LoRA Trigger` or an `ABSOLUTE` is never asked
+to describe the whole picture unless you tick it. The list has two columns,
+*Anchor* and *Reads*: what each section reads - *Pose Details*, *Camera
+Details* - is written quietly beside its name and is only a list when you
+click it. It groups the five layers under `Read only`;
+`The whole picture` and `Your own question...` sit outside that heading
+because the restriction does not apply to them, and choosing your own opens a
+line under the section to write it in. `All` and `None` tick or clear the whole list.
 
-Under the strip is a row of chips, one for each section, headed `read into`.
-They decide where the answers land. The section holding the picture starts as
-the only lit one, so a single press behaves as it always did; light two or three
-more and one press reads the picture into all of them. Each chosen section is
-asked its own question - the one its name picks - so the layers stay separate
-exactly as they do when you read one at a time. The picture is only uploaded and
-the model only loaded once for the whole run, and a chosen section is
-overwritten whether or not it already holds text: choosing it is the instruction
-to read it again.
+One press reads the picture into every ticked section, each asked its own
+question, so the layers stay as separate as they would be read one at a time.
+The picture is uploaded and the model loaded once for the whole run, and a
+ticked section is overwritten whether or not it already holds text: ticking it
+is the instruction to read it again. While a run is going the button counts the
+readings off - `Reading 2 / 3` - each row says `reading`, `waiting` or `read`,
+and a `Stop` button appears. Stop finishes the reading that is already running
+and leaves the rest untouched. Sections fill top to bottom, and a collapsed one
+opens itself as its answer arrives.
 
-While a run is going the `Read` button counts the readings off - `2 / 3` - the
-note beside it names the section being read, and a `Stop` button appears. Stop
-finishes the reading that is already running and leaves the rest untouched, so
-what has been read stays. Sections fill in the order they sit in the node, top
-to bottom, and a collapsed one opens itself as its answer arrives: reading a
-reference is how a series gets designed, and there is no sense hiding the part
-worth watching.
+Click the Reader's head to fold it - folded, it still shows a small copy of the
+picture it holds - and drag its lower edge to make it taller. `Model` on its head
+chooses the model, the quantization and how long an answer may run, and unloads
+the model when you want the memory back. The ticks and the picture are saved
+with the node; in the Series Book each scene keeps its own.
 
-A landscape picture opens above the text and a portrait one beside it, which is
-where each has room. The two small squares in the strip move it the other way,
-and once you have pressed one that section keeps your choice whatever you drop
-on it next. The grip resizes the picture in either arrangement.
+The Reader's picture stays in the Reader: a reading puts only words in the
+sections. `IMG` in a section's header opens a place for a picture of its own,
+only to look at - drop or paste one there - beside or above the words: a landscape picture above the text
+and a portrait one beside it, the two small squares to move it the other way,
+the grip to resize it. `To Reader` sends that picture up to the Reader to be
+read.
 
 A picture can come from anywhere on the screen. Copy a screenshot and paste it
 straight in: a frame paused in a video, a photograph in an article, something a
