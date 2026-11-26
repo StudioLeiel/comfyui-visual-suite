@@ -852,6 +852,7 @@ const HELP_HTML = `
   <p><b>Read in Book</b> puts the picture into the Reader of the open prompt in one press.</p>
   <p><b>✎ Brief</b> over the wall puts the ideas shown as a request for the AI that writes the series - copied, with the pictures saved and numbered to attach.</p>
   <p><b>Start a series with this</b> opens a new series with the picture, and the notes in its production notes.</p>
+  <p><b>Capture the page</b> keeps a picture of the page itself in place of its share picture.</p>
   <p><b>More pictures</b>: with a picture idea open, drop or paste more pictures from the same page - or press <b>+</b> under it. They stay in one idea; <b>◉</b> makes one the picture on the wall.</p>
   <p>Words kept as an idea are changed in place - click on the page and type.</p>
   <p><b>Cancel</b> puts back what was changed on an idea since it was opened, and goes back to the wall.</p>
@@ -3475,6 +3476,14 @@ function buildBox(node) {
     src.appendChild(el("span", "vib-meta", `${VIA[it.via] ? VIA[it.via][0].toUpperCase() + VIA[it.via].slice(1) : "Kept"} · ${day(it.added)}`
       + (it.captured ? " · page captured" : "") + (it.used ? " · used in a series" : "")));
     const tools = el("div", "vib-tools");
+    /* the page itself in place of the picture it offers for sharing */
+    if (looksLikeURL(it.source) && !videoOf(it.source) && (it.kind === "image" || it.kind === "text")) {
+      const cap = el("button", "vib-btn vib-cap", capturing === it.id ? "Capturing the page…" : "Capture the page");
+      cap.title = "Open the page unseen in Edge or Chrome and keep a picture of it in place of this one - takes a few seconds";
+      cap.disabled = capturing === it.id;
+      cap.addEventListener("click", () => capturePage(it.id));
+      tools.appendChild(cap);
+    }
     /* the picture into the Series Book's Reader, to be read there */
     if (it.kind === "image" || (it.kind === "video" && S.picFor === it.id && S.picShown && S.picShown !== it.file)) {
       const rd = el("button", "vib-btn vib-cap", "Read in Book");
@@ -3675,15 +3684,8 @@ function buildBox(node) {
       if (r.ok) { takeItem(it, r.item); n += 1; } else err = r.error;
     }
     for (const u of urls) {
-      /* the browser reads the picture where the site lets it */
-      let b = null;
-      try {
-        const res = await fetch(u, { mode: "cors", credentials: "omit" });
-        b = res.ok ? await res.blob() : null;
-      } catch (e) { b = null; }
-      if (!b || !/^image\//.test(b.type)) { err = "this site does not let the picture be read - save it and drop the file"; continue; }
-      const q = new URLSearchParams({ id: it.id, name: "" });
-      const r = await (await api.fetchApi(`${MORE_ADD_URL}?${q}`, { method: "POST", body: b })).json();
+      const q = new URLSearchParams({ id: it.id, url: u });
+      const r = await (await api.fetchApi(`${MORE_ADD_URL}?${q}`, { method: "POST" })).json();
       if (r.ok) { takeItem(it, r.item); n += 1; } else err = r.error;
     }
     if (n) flash(`${n === 1 ? "a picture" : `${n} pictures`} added - ${1 + (it.more || []).length} in this idea`);
@@ -4304,13 +4306,9 @@ function buildBox(node) {
         if (/^image\//.test(blob.type)) return postBlob(blob, "", "", via, memo);
       } catch (e) { /* kept as a line below */ }
     } else {
-      /* a picture the site lets the browser read is kept as the picture;
-         anything else as its address */
-      try {
-        const r = await fetch(url, { mode: "cors", credentials: "omit" });
-        const blob = r.ok ? await r.blob() : null;
-        if (blob && /^(image|video|audio)\//.test(blob.type)) return postBlob(blob, "", url, via, memo);
-      } catch (e) { /* kept as a line below */ }
+      flash("reading the page - a story with many pictures takes a moment…");
+      const r = await post(ADD_URL_URL, { url, source: url, via, memo: memo || "" });
+      if (r.ok) return r;
     }
     return keepText(url, url, via);
   }

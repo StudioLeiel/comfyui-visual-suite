@@ -151,7 +151,15 @@ A queued recipe lands on the **bench**, where it waits. Drag it down into the
 **queue box** to have it rendered — only what is in the box runs, from the top
 down. Drag to reorder, or drag one back out to take it off the run.
 
-Each recipe keeps the number it was given when it was made. Not its position:
+**Folding a recipe.** A recipe with a sweep grows tall, and two of them can
+fill the box. Click **▾** at the left of its title row, or its number, to fold
+it to that row alone: its prompt and LoRAs are written in it, and its count and
+buttons stay where they were. Click again to open it. **Fold all** on the
+BENCH and QUEUE BOX lines folds every recipe there, and **Open all** opens
+them. A folded recipe renders the same; it is kept folded with the workflow.
+
+Each recipe keeps the number it was given when it was made - the gold badge
+at the left of its title row, orange on the recipe being rendered. Not its position:
 its own number, which never changes wherever it moves and whatever is deleted
 around it. That is what makes the rest of this safe. Renumbering on every change
 would mean that pulling one recipe out leaves you unsure which of the others you
@@ -444,6 +452,18 @@ Viewer](image-viewer.md) puts the recipe that made a picture on the bench:
 its prompt, LoRAs, option chips, swapped capsules and per-recipe words, with
 the count of the recipe being built. The prompt is found by its scene in the
 Book, and by name when the number has changed.
+Its LoRAs are matched to the shelf by name, and by file name alone when the
+shelf keeps the same file under another folder. A LoRA the shelf does not hold
+at all stays in the recipe in red: it still renders, as the Lab loads every
+LoRA from its file in the loras folder, not from the shelf. A click on it
+swaps it for one on the shelf.
+
+**A LoRA whose file is gone.** Red, struck through and dashed: there is no
+file of that name in the loras folder. **RUN ALL** does not start while one is
+in the queue box, and says which; and should one reach a render all the same,
+the render stops with *LoRA file not found* rather than going on without it -
+a picture made without a LoRA the recipe asked for would look like one made
+with it, and nothing would say so.
 
 That makes a queue a template rather than a backup. A setup that compares five
 LoRAs at four images each can be exported once, and the next series only needs

@@ -348,6 +348,10 @@ const CSS = `
 /* a trigger word riding along with the render on the way out */
 .vsl-chip.c-text.live{border-color:#ffd479;background:#3a3320;color:#ffe9a3;}
 .vsl-chip.c-lora{border-color:#7b6ce0;background:#2f2b45;color:#b9aef5;}
+/* a LoRA the shelf does not hold - sent from a picture made with another loader */
+.vsl-chip.c-lora.nogo{border-color:#c05f6a;background:#361d21;color:#eda9b1;cursor:pointer;}
+/* its file is not in the loras folder at all: the recipe will not run */
+.vsl-chip.c-lora.nofile{text-decoration:line-through;text-decoration-color:#eda9b1;border-style:dashed;}
 .vsl-chip.c-sampler{border-color:#4a92c8;background:#1e2c3a;color:#a7d2ef;}
 .vsl-chip.c-model{border-color:#48a882;background:#1c3029;color:#93d9bd;}
 .vsl-chip.c-text{border-color:#c06a9c;background:#361f2d;color:#ddd;}
@@ -924,8 +928,26 @@ const CSS = `
    same way the sweep's heading is set off below */
 .vsl-pod.rowpod .gt{display:flex;align-items:center;gap:5px;margin:-6px -10px 8px;
   padding:6px 10px;background:#00000059;border-radius:15px 15px 0 0;}
-.vsl-pod.rowpod .gt .n{font-size:9px;opacity:.55;width:14px;}
-.vsl-pod.rowpod .gt .prog{font-size:9px;font-weight:700;letter-spacing:.4px;
+/* the recipe's number: what it is called by, so it is large enough to read */
+.vsl-pod.rowpod .gt .n{flex:0 0 auto;min-width:22px;height:20px;padding:0 6px;box-sizing:border-box;
+  display:inline-flex;align-items:center;justify-content:center;border-radius:6px;
+  font-size:12px;font-weight:800;letter-spacing:.2px;font-variant-numeric:tabular-nums;
+  color:#f2c97a;background:#3a2d17;border:1px solid #8a6a30;cursor:pointer;}
+.vsl-pod.rowpod.now .gt .n{color:#1b1209;background:#ff8c47;border-color:#ff8c47;}
+/* fold: a recipe shut to its title row - its number, what it renders, its count */
+.vsl-pod.rowpod .gt .tw{flex:0 0 auto;width:18px;font-size:15px;line-height:1;color:#d9bf8a;cursor:pointer;
+  text-align:center;user-select:none;}
+.vsl-pod.rowpod .gt .tw:hover,.vsl-pod.rowpod .gt .n:hover{filter:brightness(1.2);}
+.vsl-pod.rowpod .gt .sum{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;
+  text-overflow:ellipsis;font-size:11px;color:#d8cdb8;}
+.vsl-pod.rowpod .gt .sum b{color:#f0c27a;font-weight:600;}
+.vsl-pod.rowpod .gt .sum i{font-style:normal;color:#a99bd8;}
+.vsl-pod.rowpod.shut .body,.vsl-pod.rowpod.shut .vsl-sw{display:none!important;}
+.vsl-pod.rowpod.shut .gt{margin-bottom:-6px;border-radius:15px;}
+.vsl-sub .vsl-foldall{font:inherit;font-size:9px;letter-spacing:.5px;font-weight:700;cursor:pointer;
+  background:transparent;color:inherit;border:1px solid #ffffff2e;border-radius:6px;padding:1px 7px;}
+.vsl-sub .vsl-foldall:hover{border-color:#ffffff66;}
+.vsl-pod.rowpod .gt .prog{flex:0 0 auto;white-space:nowrap;font-size:9px;font-weight:700;letter-spacing:.4px;
   color:#ffd479;border:1px solid #8a7a3f;border-radius:9px;padding:1px 7px;
   background:#332b16;}
 .vsl-pod.rowpod .gt .prog.done{color:#1b1b1b;border-color:#f2f0ea;
@@ -2813,12 +2835,14 @@ app.registerExtension({
               <div class="vsl-sub">BENCH
                 <span class="hint">made, waiting - drag one down to run it</span>
                 <span class="sp" style="flex:1"></span>
-                <span class="benchct"></span></div>
+                <span class="benchct"></span>
+                <button class="vsl-foldall" data-fold="bench" title="Fold every recipe on the bench to its title row - or open them all">Fold all</button></div>
               <div class="vsl-list bench"></div>
               <div class="vsl-sub box">        QUEUE BOX
                 <span class="hint">only what is in here renders</span>
                 <span class="sp" style="flex:1"></span>
-                <span class="boxct"></span></div>
+                <span class="boxct"></span>
+                <button class="vsl-foldall" data-fold="box" title="Fold every recipe in the queue box to its title row - or open them all">Fold all</button></div>
               <div class="vsl-list box"></div>
             </div>
           </div>
@@ -2862,6 +2886,17 @@ app.registerExtension({
       const elPrompts = $(".prompts");
       const elBench = $(".bench"), elBox = $(".box.vsl-list") || $(".vsl-list.box");
       const elBenchCt = $(".benchct"), elBoxCt = $(".boxct");
+      for (const b of root.querySelectorAll(".vsl-foldall")) {
+        b.addEventListener("pointerdown", (e) => e.stopPropagation());
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const rows = (state.queue || []).filter((r) => (b.dataset.fold === "box") === isStaged(r));
+          const shut = !rows.every((r) => r.shut);
+          for (const r of rows) r.shut = shut;
+          writeStore();
+          paint();
+        });
+      }
       const elWarn = $(".warn");
       const elFname = $(".fname");
       const elOptQ = $(".optq"), elOptView = $(".optview");
@@ -2903,6 +2938,37 @@ app.registerExtension({
         '<rect x="2.5" y="1.8" width="2.8" height="8.4" rx="0.7"/>' +
         '<rect x="6.7" y="1.8" width="2.8" height="8.4" rx="0.7"/></svg>';
 
+      /* ---- the LoRA files there are ----
+         Kept from the list the server gives, so a recipe naming a LoRA whose
+         file is not in the loras folder is marked before it is run. Matched
+         the way the server finds a file: the path as given, or the file name
+         alone. Until the list has come, every LoRA counts as there. */
+      const normLora = (n) => String(n || "").replace(/\\/g, "/").trim().toLowerCase();
+      function rememberFiles(list) {
+        const full = new Set(), bare = new Set();
+        for (const it of list || []) {
+          if (!it || !it.full_name) continue;
+          full.add(normLora(it.full_name));
+          bare.add(shortName(it.full_name).toLowerCase());
+        }
+        state.loraFiles = { full, bare };
+      }
+      function loraFileThere(name) {
+        const f = state.loraFiles;
+        if (!f) return true;
+        const n = normLora(name);
+        return f.full.has(n) || f.full.has(n + ".safetensors") || f.bare.has(shortName(name).toLowerCase());
+      }
+      function missingFiles(rows) {
+        const out = [];
+        for (const r of rows || []) {
+          for (const l of rowLoras(r)) {
+            if (!loraFileThere(l.name) && !out.includes(shortName(l.name))) out.push(shortName(l.name));
+          }
+        }
+        return out;
+      }
+
       /* ---- thumbnails ---- */
       const loadThumbs = async () => {
         /* api.fetchApi puts /api in front, and the route is registered
@@ -2919,6 +2985,7 @@ app.registerExtension({
             if (!r || !r.ok) { last = "HTTP " + (r && r.status); continue; }
             const list = await r.json();
             if (!Array.isArray(list)) { last = "unexpected reply"; continue; }
+            rememberFiles(list);
             let hits = 0;
             for (const it of list) {
               if (it.thumbnail) {
@@ -3647,6 +3714,18 @@ app.registerExtension({
         const opts = scanWorkflowOptions(node);
         const book = seriesBook();
         let lostPrompt = 0, lostOpts = 0;
+        /* a LoRA is matched to the shelf by its name, and failing that by its
+           file name alone - the same file kept in another folder, or named
+           with or without its extension - so the recipe uses the shelf's own
+           entry. One the shelf does not have at all stays as it came. */
+        const bare = (n) => shortName(n).toLowerCase();
+        const offShelf = new Set();
+        const toShelf = (name) => {
+          const shelf = state.loras || [];
+          const hit = shelf.find((x) => x.name === name) || shelf.find((x) => bare(x.name) === bare(name));
+          if (!hit) offShelf.add(shortName(name));
+          return hit ? hit.name : name;
+        };
         for (const r of detail.recipes || []) {
           /* the prompt: by its slot, and failing that by its name */
           let pn = Number(r.prompt_slot) || 0;
@@ -3660,7 +3739,7 @@ app.registerExtension({
             id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
             no: nextNumber(),
             loras: (r.loras || []).filter((l) => l && l.name)
-              .map((l) => ({ name: l.name, strength: Number(l.strength) })),
+              .map((l) => ({ name: toShelf(l.name), strength: Number(l.strength) })),
             opts: [],
             repeat: Math.max(1, state.draft.repeat || 1),
             prompt: pn,
@@ -3692,12 +3771,13 @@ app.registerExtension({
           detail.added += 1;
         }
         if (lostPrompt) detail.notes.push(`${lostPrompt} left out: its prompt is not in this Lab's Book or shelf`);
+        if (offShelf.size) detail.notes.push(`not on the LoRA shelf: ${[...offShelf].join(", ")} - marked red; it renders if its file is in the loras folder, or click it to swap`);
         if (lostOpts) detail.notes.push(`${lostOpts} ${lostOpts === 1 ? "setting" : "settings"} left out: the node is no longer in this workflow`);
         state.live.status = `${detail.added} from the Image Viewer`;
         writeStore();
         paint();
       }
-      node._vslTakeFromViewer = takeFromViewer;
+      node._vslTakeFromViewer = (d) => { takeFromViewer(d); loadThumbs(); };
 
       /* Fetch the words for a recipe as it is queued. Collecting them at
          render time is too late: that runs synchronously, and a LoRA nobody
@@ -5799,6 +5879,17 @@ app.registerExtension({
                have shown a preview on hover since they were built, and this
                one - the one actually being read all day - was the only place
                a LoRA was just a name. */
+            /* a LoRA the shelf does not hold - one sent from a picture made
+               with another loader - says so, and a click swaps it */
+            if (!loraFileThere(l.name)) {
+              qchip.classList.add("nogo", "nofile");
+              qchip.title = l.name + "\nits file is not in the loras folder - this recipe will not run" +
+                "\nclick to swap it for one on the shelf - the strength stays";
+            } else if (!(state.loras || []).some((x) => x.name === l.name)) {
+              qchip.classList.add("nogo");
+              qchip.title = l.name + "\nnot on the LoRA shelf - its file is there, so it renders" +
+                "\nclick to swap it for one on the shelf - the strength stays";
+            }
             attachHoverPreview(qchip, l.name);
             makeSortable(qchip, row.loras, l);
             makeSwDraggable(qchip, row, "lora", l, "body");
@@ -5932,7 +6023,40 @@ app.registerExtension({
           makeRowDraggable(el, row);
           makePodTakeBack(el, row);
           if (swOn(row)) el.classList.add("swon");
+          /* folded: only the title row, with what the recipe renders written
+             in it, so a box of several recipes fits without a scroll bar */
+          if (row.shut) el.classList.add("shut");
+          const fold = () => { row.shut = !row.shut; writeStore(); paint(); };
+          const tw = document.createElement("span");
+          tw.className = "tw";
+          tw.textContent = row.shut ? "\u25B8" : "\u25BE";
+          tw.title = row.shut ? "Open this recipe" : "Fold this recipe to its title row";
+          for (const x of [tw, idx]) {
+            x.addEventListener("click", (e) => { e.stopPropagation(); fold(); });
+            x.addEventListener("pointerdown", (e) => e.stopPropagation());
+          }
+          idx.title = "Recipe " + idx.textContent + " - click to " + (row.shut ? "open it" : "fold it");
+          head.appendChild(tw);
           head.appendChild(idx);
+          if (row.shut) {
+            const sum = document.createElement("span");
+            sum.className = "sum";
+            const pn = Number(row.prompt) > 0 ? promptName(row.prompt) : "no prompt";
+            const ls = rowLoras(row).map((l) => shortName(l.name));
+            const swn = swOn(row) ? swCount(row) : 0;
+            const sb = document.createElement("b");
+            sb.textContent = pn;
+            sum.appendChild(sb);
+            if (ls.length) {
+              sum.appendChild(document.createTextNode(" \u00B7 "));
+              const si = document.createElement("i");
+              si.textContent = ls.join(" \u00B7 ");
+              sum.appendChild(si);
+            }
+            if (swn) sum.appendChild(document.createTextNode(" \u00B7 sweep " + swn));
+            sum.title = pn + (ls.length ? "\n" + ls.join(", ") : "");
+            head.appendChild(sum);
+          }
           if (isNow || finished || doneHere > 0) {
             const prog = document.createElement("span");
             prog.className = "prog" + (finished ? " done" : "");
@@ -5952,7 +6076,7 @@ app.registerExtension({
           const sp = document.createElement("span");
           sp.className = "sp";
           sp.style.flex = "1";
-          head.appendChild(sp);
+          if (!row.shut) head.appendChild(sp);       // folded, the summary takes the room
           head.appendChild(less);
           head.appendChild(ct);
           head.appendChild(more);
@@ -5971,6 +6095,11 @@ app.registerExtension({
           el.appendChild(sweepArea(row));
           (staged ? elBox : elBench).appendChild(el);
         });
+        for (const b of root.querySelectorAll(".vsl-foldall")) {
+          const rows = (state.queue || []).filter((r) => (b.dataset.fold === "box") === isStaged(r));
+          b.style.display = rows.length ? "" : "none";
+          b.textContent = rows.length && rows.every((r) => r.shut) ? "Open all" : "Fold all";
+        }
         elBenchCt.textContent = (() => {
           const rows = (state.queue || []).filter((r) => !isStaged(r));
           return rows.length ? rows.length + " waiting" : "";
@@ -7053,9 +7182,11 @@ app.registerExtension({
         if (state.running && !state.paused) stepRun();
       };
 
-      node._vslOnFailure = () => {
+      node._vslOnFailure = (d) => {
         state.running = false;
-        state.live.status = "stopped - the last render did not finish";
+        const msg = String((d && (d.exception_message || d.message)) || "");
+        const m = msg.match(/LoRA file not found:[^\n]*/);
+        state.live.status = m ? "stopped - " + m[0] : "stopped - the last render did not finish";
         paint();
       };
 
@@ -7084,6 +7215,16 @@ app.registerExtension({
           state.live.status = "the queue has finished - press Reset";
           paint();
           return;
+        }
+        /* a LoRA whose file is not there: nothing runs until it is swapped */
+        {
+          const gone = missingFiles(stagedRows());
+          if (gone.length) {
+            state.live.status = "not run - no file in the loras folder for " + gone.join(", ") +
+              " - swap the struck-through LoRA, or put its file back";
+            paint();
+            return;
+          }
         }
         /* the same option twice in a sweep is one pass: the copies go now */
         for (const r of stagedRows()) {
@@ -7776,10 +7917,10 @@ api.addEventListener("status", (e) => {
 });
 
 for (const ev of ["execution_error", "execution_interrupted"]) {
-  api.addEventListener(ev, () => {
+  api.addEventListener(ev, (e) => {
     for (const n of (app.graph && app.graph._nodes) || []) {
       if (n && typeof n._vslOnFailure === "function") {
-        try { n._vslOnFailure(); } catch (err) { console.error(err); }
+        try { n._vslOnFailure(e && e.detail); } catch (err) { console.error(err); }
       }
     }
   });

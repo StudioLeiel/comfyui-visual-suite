@@ -55,7 +55,9 @@ frame of a film, a line someone says — and a week later they are gone. Here
 keeping one asks nothing: drag a picture from the browser onto the node, paste
 a screenshot with Ctrl+V, write a thought into the jot box, or let a screenshot
 tool save into the box's inbox folder. Pictures, films, YouTube and Vimeo
-links, sounds, PDFs and plain words are all kept the same way.
+links, sounds, PDFs and plain words are all kept the same way, and the address
+of a magazine story brings the whole story as one idea — every picture in the
+page's order, its credits as the notes.
 
 The new ones wait at the top until there is a minute, then go by one at a
 time — a few words on what caught the eye (the first line is the title), a
@@ -254,7 +256,8 @@ by frame in the browser to MP4, in every size at once.
 
 **Music player.** The music kept for the films, played while you work: dropped
 in from the computer, gathered in folders and favourites, heard once, through
-the list or round and round, in a display set in the series' colour. **Start here** makes the moment you are hearing the start of
+the list or round and round, with its spectrum in a display set in the
+series' colour. **Start here** makes the moment you are hearing the start of
 the film's music. One button turns the node into the player alone.
 
 **Out of the graph.** A PDF, pages as JPEG or PNG, a print package with every

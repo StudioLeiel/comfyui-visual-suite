@@ -29,7 +29,7 @@ Four ways in, none of which asks a question:
 | A picture on a web page | Drag it from the browser onto the node | The picture, the words the page wrote for it (its alt text) as the notes, and the article it links to — or its own address — as where it came from |
 | A frame, a part of the screen | Win+Shift+S, then Ctrl+V on the node | The screenshot |
 | A line of text | Copy it, then Ctrl+V on the node | The line |
-| A web page | Copy its address, then Ctrl+V on the node — or drag the link onto it | The address, as a link |
+| A web page | Copy its address, then Ctrl+V on the node — or drag the link onto it | The page's picture, title and description, and its address |
 | A film (mp4, mov, webm) | Drag the file onto the node, or save it into the inbox folder | The film |
 | A sound (mp3, wav, m4a, ogg, flac) | The same | The sound, and its file name |
 | A PDF — a lookbook, a scan | The same | The PDF, and its file name |
@@ -39,15 +39,60 @@ Four ways in, none of which asks a question:
 
 ![Every kind of idea - pictures, films, YouTube, PDFs and words](images/idea-box/02-media.png)
 
-Web addresses are not read by the server. A picture dragged from a page is
-kept when the site lets the browser read it; one that does not is kept as its
-address - save the picture and drop the file, or copy the picture itself and
-press Ctrl+V. An address of a page is kept as a link.
+A web address is read by the server. An address of a picture is kept as the
+picture. An address of a page is kept as its card — the picture the page offers
+for sharing (the one a link preview shows), with the page's title and
+description as the notes and the page itself as where it came from. A page with
+no such picture is kept as its title; one that cannot be read at all, as its
+address.
+
+**Which way brings words.** A page's own title and description come when the
+page is kept — its address pasted, or its link dragged. A picture dragged on
+its own brings only the words the page wrote for it, its alt text, when it has
+any worth keeping. To keep a page's words with several of its pictures: paste
+the page's address, then open the idea and drop the other pictures into it
+(More pictures in one idea, below).
 
 **AVIF and HEIF.** Many magazines send their pictures as AVIF. They are kept
 as pictures — not taken for films, as they once were — and, where the server's
 Pillow reads them (11.3 and later), as a JPEG, so the Series Book can read
 them too. One kept as a film before is made a picture again by itself.
+
+### A whole story at once
+
+Paste the address of a story page — a magazine editorial on
+fashioneditorials.com, a runway look on a show site — or drop the link on the
+box, and the whole story is kept as **one idea**: every large picture of the
+story in the page's order, as the idea's pictures (the strip under it), and the
+story's words — its title, and the credits line by line — as the notes. The
+photographer, stylist, model and magazine then turn up as keywords on their own.
+
+![A whole story from one address](images/idea-box/03-story.png)
+
+- The picture the page offers for sharing comes first: on many sites it is the
+  story's opening picture, set above the story itself.
+- Only the story is looked through when the page marks it out, so the site's
+  logo, the advertising and the other stories' thumbnails stay out. Pictures
+  smaller than 400 px on their short side are left out too.
+- A picture is fetched at its full size where the site keeps one — a WordPress
+  size such as `-1024x1536` is tried without it first.
+- Up to 40 pictures from one page. The box says how many came: *kept - one
+  idea, 12 pictures*.
+- A page with fewer than two large pictures is kept as its card, as below.
+- A site that only loads its pictures as the page is scrolled may give fewer
+  pictures than it shows; drag the missing ones onto the open idea.
+
+### The page itself
+
+The share picture is quick, but it is not the page. **Capture the page**, under
+*Where it came from*, opens the page unseen in Edge or Chrome — whichever is on
+the computer; every Windows has Edge — waits a few seconds for it to draw, and
+keeps a picture of it as it opens on a wide screen, in place of the share
+picture. The share picture goes to `trash/`.
+
+The browser runs in a profile of its own, so it never touches the one in use —
+and so it is signed in nowhere: a page that needs a login is captured as its
+login page, and a cookie notice may be in the picture.
 
 ### Sounds and PDFs
 
@@ -544,7 +589,7 @@ the words become capsules. Dropped back on the box, a picture is not kept twice.
 
 ![Into the Series Book](images/idea-box/08-read-in-book.png)
 
-Or with one press: **Read in Book**, under *Where it came from*, puts the picture
+Or with one press: **Read in Book**, beside Capture the page, puts the picture
 into the Reader of the prompt open in the Series Book — the panel opened, the
 picture in it — and leaves the rest to you: tick the anchors and press
 **Read**. The Reader's square lights up for a moment. While an idea is open,
@@ -576,7 +621,7 @@ pack for Paste All and a scene-by-scene summary, then the references numbered
 and its address. **Copy brief** puts it on the clipboard. **Save pictures**
 writes the chosen pictures — a PDF by its first page — into
 `output/Idea Box/Briefs/<title>/` as `01 <title>.jpg`, `02 …`, numbered as in the
-brief, and says where the folder is, so they can be dragged into the chat
+brief, and opens the folder on Windows, so they can be dragged into the chat
 with it. What is typed is kept with the node for the next brief.
 
 ## Starting a series

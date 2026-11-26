@@ -1873,10 +1873,19 @@ async function encodeFilm(G, book, shots, pics, buf, mu, mbit, progress, stopped
   if (fail) throw fail;
   if (buf) {
     progress(1, cv, total, "Mixing the music…");
-    const mix = mixMusic(buf, mu, total);
+    const len = Math.ceil(total * AUDIO_RATE);
+    const oac = new OfflineAudioContext(2, len, AUDIO_RATE);
+    const src = oac.createBufferSource();
+    src.buffer = buf;
+    setLoop(src, buf, mu);
+    const gain = oac.createGain();
+    src.connect(gain).connect(oac.destination);
+    musicEnvelope(gain, oac, 0, 0, total, mu);
+    src.start(0, musicOffset(buf, mu, 0));
+    const mix = await oac.startRendering();
     const ae = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => { fail = e; } });
     ae.configure(acfg.cfg);
-    const L = mix.L, R = mix.R;
+    const L = mix.getChannelData(0), R = mix.getChannelData(1);
     const block = 4096;
     for (let off = 0; off < mix.length; off += block) {
       const m = Math.min(block, mix.length - off);
@@ -1904,31 +1913,6 @@ function setLoop(src, buf, mu) {
   src.loop = true;
   src.loopStart = mu.start;
   src.loopEnd = buf.duration;
-}
-/* The loudness of the music at t seconds into the film. */
-function musicLevel(mu, t, total) {
-  const vol = mu.vol, fade = Math.min(mu.fade, Math.max(0.5, total - 0.5));
-  return vol * Math.min(mu.start > 0 ? Math.min(1, t / 0.4) : 1, t > total - fade ? Math.max(0, (total - t) / fade) : 1);
-}
-/* The film's music as two channels at AUDIO_RATE: START AT, Loop, the volume
-   and its fades, worked out sample by sample. */
-function mixMusic(buf, mu, total) {
-  const n = Math.ceil(total * AUDIO_RATE);
-  const L = new Float32Array(n), R = new Float32Array(n);
-  const sr = buf.sampleRate, dur = buf.duration;
-  const c0 = buf.getChannelData(0), c1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : c0;
-  const last = c0.length - 1;
-  const loop = mu.loop && mu.start < dur - 0.5, span = dur - mu.start;
-  for (let i = 0; i < n; i++) {
-    const t = i / AUDIO_RATE;
-    let at = mu.start + t;
-    if (at >= dur) { if (!loop) break; at = mu.start + (t % span); }
-    const g = musicLevel(mu, t, total);
-    const x = at * sr, j = Math.min(last, Math.floor(x)), f = x - j, j1 = Math.min(last, j + 1);
-    L[i] = (c0[j] * (1 - f) + c0[j1] * f) * g;
-    R[i] = (c1[j] * (1 - f) + c1[j1] * f) * g;
-  }
-  return { L, R, length: n };
 }
 function musicOffset(buf, mu, t) {
   const at = mu.start + t;
@@ -2317,8 +2301,7 @@ const CSS = `
 .vly-music .mp-film:hover:not(:disabled){background:#e8c977;color:#241703}
 .vly-music .mp-film.on{background:#2a2418;border-color:#6a5a33;color:var(--gold);cursor:default}
 .vly-music .mp-film:disabled:not(.on){border-color:#2c2f34;color:#5f646c;cursor:default}
-.vly-music .mp-eqb{display:none!important}
-.vly-music .mp-eqb-x{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:7px;border:1px solid #2c2f34;
+.vly-music .mp-eqb{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:7px;border:1px solid #2c2f34;
   background:#121315;color:#8a8e95;font:inherit;font-size:10.5px;letter-spacing:.06em;cursor:pointer}
 .vly-music .mp-eqb svg{width:12px;height:12px}
 .vly-music .mp-eqb:hover{color:var(--ink);border-color:#3a3d43}
@@ -5351,11 +5334,22 @@ function buildLayout(node) {
   const EQ_BARS = 56;
   function eqHook(a) {
     try {
-      EQ.src = null;
+      if (!EQ.ac || EQ.ac.state === "closed") {
+        EQ.ac = new (window.AudioContext || window.webkitAudioContext)();
+        EQ.an = EQ.ac.createAnalyser();
+        EQ.an.fftSize = 2048;
+        EQ.an.smoothingTimeConstant = 0.78;
+        EQ.an.connect(EQ.ac.destination);
+        EQ.bins = new Uint8Array(EQ.an.frequencyBinCount);
+      }
+      EQ.ac.resume().catch(() => {});
+      EQ.src = EQ.ac.createMediaElementSource(a);
+      EQ.src.connect(EQ.an);
     } catch (e) { EQ.src = null; /* plays on without the spectrum */ }
     eqRun();
   }
   function eqUnhook() {
+    if (EQ.src) { try { EQ.src.disconnect(); } catch (e) { /* gone */ } }
     EQ.src = null;
   }
   function eqRun() {
@@ -5408,7 +5402,7 @@ function buildLayout(node) {
     const v = Number(P.vly_pvvol);
     return Math.max(0, Math.min(1, isFinite(v) && P.vly_pvvol != null ? v : (Number(mstate().music.vol) || 1)));
   }
-  const eqOn = () => false;
+  const eqOn = () => P.vly_eq !== false;
   /* One sound at a time across the canvas: a piece or a film starting in
      one Layout node pauses whatever plays in the others. */
   function hushOthers() {
@@ -5924,22 +5918,19 @@ function buildLayout(node) {
     const at = ac.currentTime + 0.06;
     MZ.t0 = at - MZ.t;
     if (buf) {
-      const a = new Audio(`${api.apiURL(MUSIC_URL)}?name=${encodeURIComponent(mu.name)}`);
-      a.preload = "auto";
-      a.currentTime = musicOffset(buf, mu, MZ.t);
-      a.volume = Math.max(0, Math.min(1, musicLevel(mu, MZ.t, total)));
-      const loops = mu.loop && mu.start < buf.duration - 0.5;
-      a.addEventListener("ended", () => {
-        if (loops && MZ.src && MZ.src.a === a) { a.currentTime = mu.start; a.play().catch(() => {}); }
-      });
-      a.play().catch(() => {});
-      MZ.src = { a, total, mu, stop() { try { a.pause(); } catch (e) { /* gone */ } a.src = ""; } };
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      const gain = ac.createGain();
+      src.connect(gain).connect(ac.destination);
+      musicEnvelope(gain, ac, at, MZ.t, total, mu);
+      setLoop(src, buf, mu);
+      src.start(at, musicOffset(buf, mu, MZ.t));
+      MZ.src = src;
     }
     paintTime();
     const tick = () => {
       if (!MZ.playing || S.dead) return;
       MZ.t = Math.max(0, ac.currentTime - MZ.t0);
-      if (MZ.src && MZ.src.a) MZ.src.a.volume = Math.max(0, Math.min(1, musicLevel(MZ.src.mu, MZ.t, MZ.src.total)));
       if (MZ.t >= total) { MZ.t = total; mstop(); }
       const i = shotAt(MZ.t);
       if (i !== MZ.cur) {
@@ -6647,7 +6638,16 @@ function buildLayout(node) {
         drawMotion(ctx, k, G, book, shots, 0, pics);
         const stream = cv.captureStream(MOTION_FPS);
         const ac = new (window.AudioContext || window.webkitAudioContext)();
-        const src = null;     // recorded as it plays: the picture only
+        let src = null;
+        if (buf) {
+          const dest = ac.createMediaStreamDestination();
+          src = ac.createBufferSource();
+          src.buffer = buf;
+          const gain = ac.createGain();
+          src.connect(gain).connect(dest);
+          stream.addTrack(dest.stream.getAudioTracks()[0]);
+          src._gain = gain;
+        }
         const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
         let part = 0, sending = Promise.resolve(), failed = null;
         const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: rate * 1e6, audioBitsPerSecond: 192000 });
@@ -6667,6 +6667,11 @@ function buildLayout(node) {
         await ac.resume();
         rec.start(2000);
         const at = ac.currentTime + 0.25;
+        if (src) {
+          musicEnvelope(src._gain, ac, at, 0, total, mu);
+          setLoop(src, buf, mu);
+          src.start(at, musicOffset(buf, mu, 0));
+        }
         await new Promise((resolve) => {
           const tick = () => {
             const T = ac.currentTime - at;

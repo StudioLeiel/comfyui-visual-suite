@@ -965,8 +965,11 @@ class VisualSeriesLabSetup:
         import comfy.utils
         path = self._resolve(name)
         if path is None:
-            print(f"[Visual Series Lab] LoRA not found, skipped: {name}")
-            return model, clip
+            # Stopped, not skipped: a picture made without a LoRA the recipe
+            # asked for looks like a picture made with it, and nothing says so.
+            raise RuntimeError(
+                f"LoRA file not found: {name} - put the file back in the loras "
+                f"folder, or swap it in the Series Lab recipe")
         weights = comfy.utils.load_torch_file(path, safe_load=True)
         return comfy.sd.load_lora_for_models(
             model, clip, weights, float(strength), float(strength))
